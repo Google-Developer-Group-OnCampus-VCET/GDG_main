@@ -8,15 +8,20 @@ Tracks build phases for the GDG on Campus VCET site. See `design-brief.md` and `
 3. **Shared layout (header/footer/mobile nav) + homepage** — done.
 4. **Remaining routes** (`/events`, `/events/[slug]`, `/team`, `/about`, `/join`, 404) — done.
 5. **Metadata, tests, verification** — done; see "Checks actually run" below.
+6. **Real content pass** (6 historical events, 6 organizers, logo) — done. See `content-needed.md` for provenance and what's still outstanding.
 
 ## Routes shipped
-- `/` — hero, events teaser (empty state), learning areas, community story, team preview, FAQ, join CTA.
-- `/events` — tabs (upcoming/past) + search/topic/format filters reflected in the URL via `useSearchParams`; wrapped in `<Suspense>` as required by `cacheComponents`.
-- `/events/[slug]` — detail/recap page; unknown slugs hit `notFound()`.
-- `/team` — grid with empty state (no roster supplied yet).
+- `/` — hero, upcoming-events teaser (genuine empty state — none scheduled), "Recently at GDG VCET" recap of the 3 most recent past events, learning areas, community story, organizer preview (links to `/team`), FAQ, join CTA.
+- `/events` — tabs (upcoming/past) + search/topic/format filters reflected in the URL via `useSearchParams`; filter chips only render for topics/formats actually present in the data (`availableTopics`/`availableFormats` in `src/lib/events.ts`); wrapped in `<Suspense>` as required by `cacheComponents`.
+- `/events/[slug]` — detail/recap page for all 6 real slugs; the only time-dependent pieces (upcoming/past eyebrow, registration button) are isolated into `src/components/event-status-section.tsx` and individually wrapped in `<Suspense>` so `connection()` doesn't block prerendering of the rest of the page; unknown slugs hit `notFound()` → real 404.
+- `/team` — grid of all 6 organizers, responsive 1→2→3→4 columns.
 - `/about`, `/join` — static content pages.
 - `/ui-preview` — dev reference, `robots: noindex`, not in nav.
 - `not-found.tsx` — styled 404.
+
+## Events/team data model notes
+- `ChapterEvent.startsAt` accepts either a date-only string (`"YYYY-MM-DD"`) or a full ISO instant; `location`/`format`/`summary`/`timezone` are now optional since several historical records only had a date and title. `formatEventDateRange` renders date-only events with no time suffix. All 6 current events are date-only by deliberate choice (see `content-needed.md` — the live source's time data was internally inconsistent).
+- `priceNote` holds the screenshot's "Free registration" as transcribed historical text (e.g. "Free event") — never rendered as an active CTA; no `registrationUrl` is set on any past event.
 
 ## Checks actually run
 - `npm run lint`
