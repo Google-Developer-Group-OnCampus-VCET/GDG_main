@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  /* Neutrals — observed GDG community portal values, see docs/design-reference.md */
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f4;
+  --foreground: #202124;
+  --foreground-muted: #5f6368;
+  --border: #dadce0;
+
+  /* Action blue (accessible) and decorative brand blue */
+  --primary: #1a73e8;
+  --primary-hover: #1558b0;
+  --on-primary: #ffffff;
+  --primary-decorative: #4285f4;
+
+  /* Semantic status colors (not a verified logo palette) */
+  --status-error: #e3000f;
+  --status-success: #008a00;
+  --status-warning: #f3be02;
+
+  --focus-ring: #1a73e8;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  --container-max: 1200px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-primary-decorative: var(--primary-decorative);
+  --color-status-error: var(--status-error);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --font-sans: var(--font-google-sans);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-google-sans), "Google Sans", -apple-system, "Segoe UI",
+    Roboto, Arial, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--primary);
+  color: var(--on-primary);
+  padding: 0.75rem 1.25rem;
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
