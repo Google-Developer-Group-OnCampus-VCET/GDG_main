@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { chapter } from "@/content/chapter";
 import { MobileNav } from "@/components/mobile-nav";
@@ -41,7 +42,9 @@ export function SiteHeader() {
           </a>
         </div>
 
-        <MobileNav nav={chapter.nav} joinUrl={chapter.joinUrl} />
+        <Suspense fallback={<div className="md:hidden h-11 w-11" />}>
+          <MobileNav nav={chapter.nav} joinUrl={chapter.joinUrl} />
+        </Suspense>
       </div>
     </header>
   );

@@ -20,6 +20,7 @@ export const chapter: ChapterConfig = {
     { label: "Events", href: "/events" },
     { label: "Team", href: "/team" },
     { label: "About", href: "/about" },
+    { label: "Admin", href: "/admin" },
   ],
   sourceUrl:
     "https://gdg.community.dev/gdg-on-campus-vidyavardhinis-college-of-engineering-and-technology-vasai-india/",

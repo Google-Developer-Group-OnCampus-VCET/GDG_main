@@ -1,4 +1,5 @@
 import type { ChapterEvent } from "@/types";
+import { devcraftWorkshopData } from "./devcraft-workshop";
 
 /**
  * Event titles and dates were transcribed from a screenshot the user
@@ -21,6 +22,23 @@ const TRANSCRIBED_AT = "2026-10-29";
 const VERIFIED_AT = "2026-10-29";
 
 export const events: ChapterEvent[] = [
+  {
+    id: "devcraft-2025",
+    slug: "devcraft-2025",
+    title: "DevCraft: Architecting Scale with Modern Web, Cloud & AI",
+    startsAt: "2026-11-20T09:00:00+05:30",
+    endsAt: "2026-11-21T17:30:00+05:30",
+    timezone: "Asia/Kolkata",
+    format: "in-person",
+    location: "Vidyavardhini's College of Engineering and Technology, Vasai (Auditorium & Labs 402)",
+    topics: ["web", "cloud", "ai-ml"],
+    summary:
+      "A two-day intensive, project-driven developer workshop organized by GDG on Campus VCET. Build production-grade cloud apps, master modern web performance, and network with tech leaders.",
+    priceNote: "Free event (Registration required)",
+    registrationUrl: "/events/devcraft-2025/register",
+    workshop: devcraftWorkshopData,
+    lastVerifiedAt: VERIFIED_AT,
+  },
   {
     id: "pathway-to-global-opportunities-studying-abroad-seminar",
     slug: "pathway-to-global-opportunities-studying-abroad-seminar",

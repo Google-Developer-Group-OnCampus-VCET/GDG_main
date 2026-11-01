@@ -3,7 +3,7 @@
 :root {
   /* Neutrals — observed GDG community portal values, see docs/design-reference.md */
   --background: #ffffff;
-  --surface: #ffffff;
+  --surface: #faf9fd;
   --surface-muted: #f1f3f4;
   --foreground: #202124;
   --foreground-muted: #5f6368;
@@ -14,6 +14,26 @@
   --primary-hover: #1558b0;
   --on-primary: #ffffff;
   --primary-decorative: #4285f4;
+  --primary-fixed: #d8e2ff;
+  --on-primary-fixed-variant: #004494;
+
+  /* Google Palette tokens from Stitch */
+  --secondary: #006e2c;
+  --secondary-fixed: #89fa9b;
+  --on-secondary-fixed: #002108;
+  --tertiary: #b51b15;
+  --tertiary-container: #d9372b;
+  --tertiary-fixed: #ffdad5;
+  --google-yellow: #fbbc04;
+
+  /* Material Design surface levels */
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f4f3f7;
+  --surface-container: #efedf1;
+  --surface-container-high: #e9e7eb;
+  --surface-variant: #e3e2e6;
+  --on-surface: #1a1b1e;
+  --on-surface-variant: #424753;
 
   /* Semantic status colors (not a verified logo palette) */
   --status-error: #e3000f;
@@ -40,6 +60,22 @@
   --color-primary-hover: var(--primary-hover);
   --color-on-primary: var(--on-primary);
   --color-primary-decorative: var(--primary-decorative);
+  --color-primary-fixed: var(--primary-fixed);
+  --color-on-primary-fixed-variant: var(--on-primary-fixed-variant);
+  --color-secondary: var(--secondary);
+  --color-secondary-fixed: var(--secondary-fixed);
+  --color-on-secondary-fixed: var(--on-secondary-fixed);
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-container: var(--tertiary-container);
+  --color-tertiary-fixed: var(--tertiary-fixed);
+  --color-google-yellow: var(--google-yellow);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-variant: var(--surface-variant);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
   --color-status-error: var(--status-error);
   --color-status-success: var(--status-success);
   --color-status-warning: var(--status-warning);

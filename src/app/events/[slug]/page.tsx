@@ -4,13 +4,13 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
 import { formatEventDateRange } from "@/lib/events";
+import { getEventStats } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
+import { EventSubNav } from "@/components/event-sub-nav";
+import { EventDetailsView } from "@/components/workshop/event-details-view";
 
 export function generateStaticParams() {
-  // Cache Components requires at least one static param to validate against.
-  // Fall back to a placeholder if the fixture is ever empty; it correctly
-  // 404s via findEvent() below.
   if (events.length === 0) return [{ slug: "__placeholder__" }];
   return events.map((event) => ({ slug: event.slug }));
 }
@@ -45,6 +45,24 @@ export default async function EventDetailPage({
   const event = findEvent(slug);
   if (!event) notFound();
 
+  // If this event has rich workshop data, render the full Stitch-based workshop experience
+  if (event.workshop) {
+    let stats;
+    try {
+      stats = getEventStats(slug);
+    } catch {
+      // Fallback to static numbers if db is initializing
+    }
+
+    return (
+      <div className="w-full flex flex-col">
+        <EventSubNav event={event} />
+        <EventDetailsView event={event} workshop={event.workshop} stats={stats} />
+      </div>
+    );
+  }
+
+  // Otherwise, render the clean, verified historical event detail layout
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
       <Suspense fallback={<p className="h-5" />}>
@@ -57,7 +75,13 @@ export default async function EventDetailPage({
 
       {event.image ? (
         <div className="relative mt-6 aspect-[16/9] overflow-hidden rounded-(--radius-md)">
-          <Image src={event.image} alt="" fill sizes="(min-width: 768px) 768px, 100vw" className="object-cover" />
+          <Image
+            src={event.image}
+            alt=""
+            fill
+            sizes="(min-width: 768px) 768px, 100vw"
+            className="object-cover"
+          />
         </div>
       ) : null}
 

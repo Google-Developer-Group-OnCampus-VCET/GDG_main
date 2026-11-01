@@ -41,6 +41,11 @@ export function EventCard({
       ) : null}
 
       <div className="flex flex-wrap gap-2">
+        {event.workshop ? (
+          <span className="rounded-full bg-primary-fixed px-3 py-1 text-xs font-bold text-on-primary-fixed-variant">
+            Flagship Workshop
+          </span>
+        ) : null}
         {status === "past" ? (
           <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-foreground-muted">
             Past event
@@ -82,12 +87,22 @@ export function EventCard({
         </p>
       ) : null}
 
-      <Link
-        href={`/events/${event.slug}`}
-        className="text-sm font-medium text-primary hover:underline"
-      >
-        {event.cancelled ? "View details" : "View details →"}
-      </Link>
+      <div className="flex items-center gap-3 pt-1">
+        <Link
+          href={`/events/${event.slug}`}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          {event.workshop ? "Explore Workshop →" : event.cancelled ? "View details" : "View details →"}
+        </Link>
+        {event.workshop && status !== "past" ? (
+          <Link
+            href={`/events/${event.slug}/register`}
+            className="text-xs font-semibold text-on-primary bg-primary hover:bg-primary-hover px-3.5 py-1 rounded-full transition-all"
+          >
+            Register Now
+          </Link>
+        ) : null}
+      </div>
     </Card>
   );
 }
