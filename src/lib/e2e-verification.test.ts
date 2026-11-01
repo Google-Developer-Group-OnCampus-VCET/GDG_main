@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   checkInAttendee,
+  cleanupTestRegistrations,
   createRegistration,
   getEventStats,
   getRegistrationByReference,
@@ -11,6 +12,14 @@ import { formatEventDateRange, isUpcoming } from "./events";
 
 describe("Comprehensive System Verification", () => {
   const TEST_SLUG = "devcraft-2025";
+
+  beforeAll(() => {
+    cleanupTestRegistrations();
+  });
+
+  afterAll(() => {
+    cleanupTestRegistrations();
+  });
 
   describe("1. Public Event Navigation & Data Integrity", () => {
     it("preserves all 6 historical events and integrates flagship DevCraft 2025", () => {
