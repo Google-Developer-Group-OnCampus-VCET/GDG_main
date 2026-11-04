@@ -1,10 +1,20 @@
+"use client";
+
 import { Suspense } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { chapter } from "@/content/chapter";
 import { MobileNav } from "@/components/mobile-nav";
 import { GdgLogo } from "@/components/gdg-logo";
 
 export function SiteHeader() {
+  const pathname = usePathname();
+
+  // Do not render the public chapter navigation on admin workspace routes
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-(--container-max) items-center justify-between px-5 sm:px-8 lg:h-[72px] lg:px-10">

@@ -1,12 +1,20 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { chapter } from "@/content/chapter";
 import { GdgLogo } from "@/components/gdg-logo";
 
-// Computed once at build time rather than per-render, since Cache Components
-// treats `new Date()` inside a component body as an unstable prerender value.
 const copyrightYear = new Date().getFullYear();
 
 export function SiteFooter() {
+  const pathname = usePathname();
+
+  // Do not render the public chapter footer on admin workspace routes
+  if (pathname.startsWith("/admin")) {
+    return null;
+  }
+
   return (
     <footer className="border-t border-border bg-surface-muted">
       <div className="mx-auto flex max-w-(--container-max) flex-col gap-8 px-5 py-12 sm:px-8 lg:px-10">
@@ -54,10 +62,17 @@ export function SiteFooter() {
           </ul>
         ) : null}
 
-        <p className="text-xs text-foreground-muted">
-          © {copyrightYear} {chapter.name}. An independent, community-run student group — not an official
-          Google product or representative.
-        </p>
+        <div className="flex flex-col gap-2 border-t border-border pt-6 text-xs text-foreground-muted sm:flex-row sm:items-center sm:justify-between">
+          <p>© {copyrightYear} {chapter.name}. Community-run, not an official Google entity.</p>
+          <a
+            href={chapter.chapterPageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-primary"
+          >
+            Official chapter page ↗
+          </a>
+        </div>
       </div>
     </footer>
   );
