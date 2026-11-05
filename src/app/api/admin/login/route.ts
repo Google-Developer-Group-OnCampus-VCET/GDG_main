@@ -2,20 +2,26 @@ import { NextResponse } from "next/server";
 import {
   createAdminSessionToken,
   getAdminCookieOptions,
+  verifyAdminEmailPassword,
   verifyAdminPassword,
 } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { password?: string; idToken?: string };
+    const body = (await request.json()) as {
+      email?: string;
+      password?: string;
+      idToken?: string;
+    };
+    const email = body?.email?.trim() ?? "";
     const password = body?.password?.trim() ?? "";
     const idToken = body?.idToken?.trim() ?? "";
 
     let authenticated = false;
     let authMethod = "passcode";
 
-    // 1. Verify Firebase ID Token if provided (Google Sign-in or Email/Password)
+    // 1. Verify Firebase ID Token if provided (Firebase Authentication)
     if (idToken) {
       try {
         const auth = getAdminAuth();
@@ -37,8 +43,19 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
+    } else if (email && password) {
+      // 2. Direct Email & Password verification (env configuration: ADMIN_EMAIL & ADMIN_PASSWORD)
+      if (verifyAdminEmailPassword(email, password)) {
+        authenticated = true;
+        authMethod = "email";
+      } else {
+        return NextResponse.json(
+          { error: "INVALID_CREDENTIALS", message: "Invalid email or password." },
+          { status: 401 }
+        );
+      }
     } else if (password) {
-      // 2. Fallback to Admin Passcode verification
+      // 3. Fallback to Admin Passcode verification
       if (verifyAdminPassword(password)) {
         authenticated = true;
         authMethod = "passcode";
@@ -50,7 +67,7 @@ export async function POST(request: Request) {
       }
     } else {
       return NextResponse.json(
-        { error: "MISSING_CREDENTIALS", message: "Passcode or Firebase ID token is required." },
+        { error: "MISSING_CREDENTIALS", message: "Email and password or passcode is required." },
         { status: 400 }
       );
     }

@@ -17,6 +17,10 @@ export function getAdminPasscode(): string {
   return process.env.ADMIN_SECRET || process.env.ADMIN_PASSWORD || DEFAULT_DEV_ADMIN_PASSCODE;
 }
 
+export function getAdminEmail(): string {
+  return process.env.ADMIN_EMAIL || "lead@vcet.edu.in";
+}
+
 export function getSessionSigningSecret(): string {
   return (
     process.env.ADMIN_SESSION_SECRET ||
@@ -146,6 +150,19 @@ export function verifyAdminPassword(input: string): boolean {
   if (!input) return false;
   const target = getAdminPasscode();
   return constantTimeEqual(input.trim(), target.trim());
+}
+
+/**
+ * Verifies an entered email and password against configured admin credentials.
+ */
+export function verifyAdminEmailPassword(emailInput: string, passwordInput: string): boolean {
+  if (!emailInput || !passwordInput) return false;
+  const configuredEmail = getAdminEmail().toLowerCase();
+  const configuredPassword = process.env.ADMIN_PASSWORD || getAdminPasscode();
+  return (
+    constantTimeEqual(emailInput.trim().toLowerCase(), configuredEmail) &&
+    constantTimeEqual(passwordInput.trim(), configuredPassword.trim())
+  );
 }
 
 /**

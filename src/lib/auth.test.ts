@@ -3,7 +3,9 @@ import {
   ADMIN_COOKIE_NAME,
   createAdminSessionToken,
   getAdminCookieOptions,
+  getAdminEmail,
   getAdminPasscode,
+  verifyAdminEmailPassword,
   verifyAdminPassword,
   verifyAdminSessionToken,
 } from "./auth";
@@ -14,6 +16,15 @@ describe("Admin Authentication Layer", () => {
     expect(verifyAdminPassword(currentPass)).toBe(true);
     expect(verifyAdminPassword("wrong-password")).toBe(false);
     expect(verifyAdminPassword("")).toBe(false);
+  });
+
+  it("verifies the configured admin email and password", () => {
+    const email = getAdminEmail();
+    const pass = getAdminPasscode();
+    expect(verifyAdminEmailPassword(email, pass)).toBe(true);
+    expect(verifyAdminEmailPassword(email.toUpperCase(), pass)).toBe(true);
+    expect(verifyAdminEmailPassword(email, "wrong-pass")).toBe(false);
+    expect(verifyAdminEmailPassword("unknown@vcet.edu.in", pass)).toBe(false);
   });
 
   it("generates a signed session token and successfully verifies it", async () => {
