@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRegistration } from "@/lib/db";
+import { createRegistrationAsync } from "@/lib/db";
 import type { RegistrationInput } from "@/types";
 
 export async function POST(
@@ -10,7 +10,7 @@ export async function POST(
     const { slug } = await params;
     const body = (await request.json()) as RegistrationInput;
 
-    const result = createRegistration(slug, body);
+    const result = await createRegistrationAsync(slug, body);
 
     if (!result.success) {
       const statusMap = {

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { events } from "@/content/events";
-import { getEventStats } from "@/lib/db";
+import { getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { CheckInTerminal } from "@/components/admin/check-in-terminal";
 
@@ -30,7 +30,7 @@ export default async function AdminCheckInPage({
 
   let checkedInCount = 0;
   try {
-    const stats = getEventStats(slug);
+    const stats = await getEventStatsAsync(slug);
     checkedInCount = stats.checkedInCount;
   } catch {
     // fallback

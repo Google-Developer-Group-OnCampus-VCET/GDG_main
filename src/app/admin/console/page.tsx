@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { events } from "@/content/events";
-import { getEventStats } from "@/lib/db";
+import { getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
+import { ConsoleOverviewExport } from "@/components/admin/console-overview-export";
 
 export const metadata = {
   title: "Admin Console · GDG on Campus VCET",
 };
 
-export default function AdminConsolePage() {
+export default async function AdminConsolePage() {
   let devcraftStats;
   try {
-    devcraftStats = getEventStats("devcraft-2025");
+    devcraftStats = await getEventStatsAsync("devcraft-2025");
   } catch {
     devcraftStats = {
       totalRegistered: 124,
@@ -43,10 +44,11 @@ export default function AdminConsolePage() {
               Centralized administrative workspace for GDG on Campus VCET organizers.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 bg-status-success/10 text-status-success px-3 py-1 rounded-full text-xs font-semibold">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <ConsoleOverviewExport events={events} devcraftStats={devcraftStats} />
+            <span className="inline-flex items-center gap-1.5 bg-status-success/10 text-status-success px-3 py-1.5 rounded-xl text-xs font-semibold border border-status-success/20">
               <span className="w-2 h-2 rounded-full bg-status-success animate-pulse"></span>
-              <span>Database Sync Active</span>
+              <span>Sync Active</span>
             </span>
           </div>
         </div>

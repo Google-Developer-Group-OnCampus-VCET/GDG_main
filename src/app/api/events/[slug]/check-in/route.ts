@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkInAttendee } from "@/lib/db";
+import { checkInAttendeeAsync } from "@/lib/db";
 
 export async function POST(
   request: Request,
@@ -16,7 +16,7 @@ export async function POST(
       );
     }
 
-    const result = checkInAttendee(slug, body.referenceId.trim());
+    const result = await checkInAttendeeAsync(slug, body.referenceId.trim());
 
     if (!result.success) {
       const isAlreadyCheckedIn = result.message.includes("ALREADY checked in");

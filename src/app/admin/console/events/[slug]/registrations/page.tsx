@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { events } from "@/content/events";
-import { getRegistrations, getEventStats } from "@/lib/db";
+import { getRegistrationsAsync, getEventStatsAsync } from "@/lib/db";
 import type { RegistrationRecord } from "@/types";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
@@ -32,8 +32,8 @@ export default async function AdminRegistrationsPage({
   let registrations: RegistrationRecord[] = [];
   let stats;
   try {
-    registrations = getRegistrations(slug);
-    stats = getEventStats(slug);
+    registrations = await getRegistrationsAsync(slug);
+    stats = await getEventStatsAsync(slug);
   } catch {
     // fallback
   }

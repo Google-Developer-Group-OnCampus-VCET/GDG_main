@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { RegistrationInput, RegistrationRecord } from "@/types";
+import {
+  getFirestoreEventStats,
+  getFirestoreRegistrations,
+  createFirestoreRegistration,
+  checkInFirestoreAttendee,
+} from "./firestore";
 
 // Ensure data directory exists
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -75,7 +81,7 @@ export function getDatabase(): DatabaseSync {
     `).run(
       "devcraft-2025",
       "devcraft-2025",
-      "DevCraft: Architecting Scale with Modern Web, Cloud & AI",
+      "DevCraft 2025",
       "2026-11-20T09:00:00+05:30",
       "2026-11-21T17:30:00+05:30",
       "Asia/Kolkata",
@@ -389,16 +395,13 @@ export function createRegistration(
 ): CreateRegistrationResult {
   const db = getDatabase();
 
-  // Basic validation
+  // Required fields: fullName, email, phone, college, track
   if (
     !input.fullName?.trim() ||
     !input.email?.trim() ||
     !input.phone?.trim() ||
     !input.college?.trim() ||
-    !input.department?.trim() ||
-    !input.yearOfStudy?.trim() ||
-    !input.track?.trim() ||
-    !input.experienceLevel?.trim()
+    !input.track?.trim()
   ) {
     return { success: false, error: "INVALID_INPUT", message: "All required fields must be provided." };
   }
@@ -406,6 +409,10 @@ export function createRegistration(
   if (!input.agreedToCoc) {
     return { success: false, error: "INVALID_INPUT", message: "You must agree to the Code of Conduct and guidelines." };
   }
+
+  const department = input.department?.trim() || "Computer Engg";
+  const yearOfStudy = input.yearOfStudy?.trim() || "3rd Year";
+  const experienceLevel = input.experienceLevel?.trim() || "Intermediate";
 
   const emailNormalized = input.email.trim().toLowerCase();
 
@@ -452,10 +459,10 @@ export function createRegistration(
     emailNormalized,
     input.phone.trim(),
     input.college.trim(),
-    input.department.trim(),
-    input.yearOfStudy.trim(),
+    department,
+    yearOfStudy,
     input.track.trim(),
-    input.experienceLevel.trim(),
+    experienceLevel,
     input.portfolioUrl?.trim() || null,
     input.notes?.trim() || null,
     "confirmed",
@@ -473,10 +480,10 @@ export function createRegistration(
       email: emailNormalized,
       phone: input.phone.trim(),
       college: input.college.trim(),
-      department: input.department.trim(),
-      yearOfStudy: input.yearOfStudy.trim(),
+      department,
+      yearOfStudy,
       track: input.track.trim(),
-      experienceLevel: input.experienceLevel.trim(),
+      experienceLevel,
       portfolioUrl: input.portfolioUrl?.trim() || undefined,
       notes: input.notes?.trim() || undefined,
       status: "confirmed",
@@ -533,5 +540,105 @@ export function cleanupTestRegistrations(): void {
        OR email LIKE '%noconsent%'
   `).run();
 }
+
+/**
+ * Cloud Firestore primary with seamless SQLite local fallback.
+ */
+export async function getEventStatsAsync(slug: string): Promise<EventStats> {
+  try {
+    const firestoreStats = await getFirestoreEventStats(slug);
+    if (firestoreStats) return firestoreStats;
+  } catch (err) {
+    console.warn("Firestore stats query failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getEventStats(slug);
+}
+
+export async function getRegistrationsAsync(
+  eventSlug: string,
+  options?: { search?: string; track?: string; status?: string; checkedIn?: string }
+): Promise<RegistrationRecord[]> {
+  try {
+    const firestoreRegs = await getFirestoreRegistrations(eventSlug, options);
+    if (firestoreRegs && firestoreRegs.length > 0) return firestoreRegs;
+  } catch (err) {
+    console.warn("Firestore registrations query failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getRegistrations(eventSlug, options);
+}
+
+export async function createRegistrationAsync(
+  eventSlug: string,
+  input: RegistrationInput
+): Promise<CreateRegistrationResult> {
+  try {
+    const firestoreResult = await createFirestoreRegistration(eventSlug, input);
+    if (firestoreResult) {
+      if (firestoreResult.success) {
+        try {
+          const db = getDatabase();
+          const r = firestoreResult.registration;
+          db.prepare(`
+            INSERT OR REPLACE INTO registrations (
+              id, event_slug, reference_id, full_name, email, phone, college,
+              department, year_of_study, track, experience_level, portfolio_url,
+              notes, status, checked_in, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            r.id,
+            r.eventSlug,
+            r.referenceId,
+            r.fullName,
+            r.email,
+            r.phone,
+            r.college,
+            r.department,
+            r.yearOfStudy,
+            r.track,
+            r.experienceLevel,
+            r.portfolioUrl ?? null,
+            r.notes ?? null,
+            r.status,
+            r.checkedIn ? 1 : 0,
+            r.createdAt
+          );
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return firestoreResult;
+    }
+  } catch (err) {
+    console.warn("Firestore registration failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return createRegistration(eventSlug, input);
+}
+
+export async function checkInAttendeeAsync(
+  eventSlug: string,
+  referenceId: string
+): Promise<{ success: boolean; message: string; registration?: RegistrationRecord }> {
+  try {
+    const firestoreResult = await checkInFirestoreAttendee(eventSlug, referenceId);
+    if (firestoreResult) {
+      if (firestoreResult.success && firestoreResult.registration) {
+        try {
+          const db = getDatabase();
+          db.prepare("UPDATE registrations SET checked_in = 1, checked_in_at = ? WHERE reference_id = ?").run(
+            firestoreResult.registration.checkedInAt ?? new Date().toISOString(),
+            referenceId.trim().toUpperCase()
+          );
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return firestoreResult;
+    }
+  } catch (err) {
+    console.warn("Firestore check-in failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return checkInAttendee(eventSlug, referenceId);
+}
+
 
 

@@ -25,7 +25,7 @@ export const events: ChapterEvent[] = [
   {
     id: "devcraft-2025",
     slug: "devcraft-2025",
-    title: "DevCraft: Architecting Scale with Modern Web, Cloud & AI",
+    title: "DevCraft 2025",
     startsAt: "2026-11-20T09:00:00+05:30",
     endsAt: "2026-11-21T17:30:00+05:30",
     timezone: "Asia/Kolkata",

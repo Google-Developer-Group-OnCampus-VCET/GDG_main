@@ -23,20 +23,22 @@ export function EventRegistrationView({
   const initialRemaining = stats?.remaining ?? 26;
   const isRegistrationOpen = stats?.isOpen ?? workshop.registrationConfig.isOpen;
 
-  // Form State
+  // Form State — Streamlined & Mobile-Native
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [college, setCollege] = useState(
-    "Vidyavardhini's College of Engineering & Technology"
+    "Vidyavardhini's College of Engineering & Technology (VCET)"
   );
-  const [department, setDepartment] = useState("");
+  const [department, setDepartment] = useState(
+    workshop.registrationConfig.departments[0] ?? "Computer Engineering"
+  );
   const [yearOfStudy, setYearOfStudy] = useState("3rd Year");
-  const [track, setTrack] = useState(workshop.registrationConfig.tracks[0]?.name ?? "Track A: Modern Web & Gemini AI");
-  const [experienceLevel, setExperienceLevel] = useState("Intermediate");
+  const [track, setTrack] = useState(
+    workshop.registrationConfig.tracks[0]?.name ?? "Track A: Modern Web & Gemini AI"
+  );
   const [portfolioUrl, setPortfolioUrl] = useState("");
-  const [notes, setNotes] = useState("");
-  const [agreedToCoc, setAgreedToCoc] = useState(false);
+  const [agreedToCoc, setAgreedToCoc] = useState(true);
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -46,20 +48,6 @@ export function EventRegistrationView({
   const [previewPassMode, setPreviewPassMode] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [walletSuccess, setWalletSuccess] = useState(false);
-
-  // Calculate live progress percentage
-  let filledCount = 0;
-  if (fullName.trim()) filledCount++;
-  if (email.trim()) filledCount++;
-  if (phone.trim()) filledCount++;
-  if (college.trim()) filledCount++;
-  if (department) filledCount++;
-  if (yearOfStudy) filledCount++;
-  if (track) filledCount++;
-  if (experienceLevel) filledCount++;
-  if (agreedToCoc) filledCount += 2;
-
-  const progressPercent = Math.min(100, Math.round((filledCount / 10) * 100));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,16 +65,15 @@ export function EventRegistrationView({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName,
-          email,
-          phone,
-          college,
+          fullName: fullName.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          college: college.trim(),
           department,
           yearOfStudy,
           track,
-          experienceLevel,
-          portfolioUrl,
-          notes,
+          experienceLevel: "Intermediate",
+          portfolioUrl: portfolioUrl.trim() || undefined,
           agreedToCoc,
         }),
       });
@@ -131,11 +118,11 @@ export function EventRegistrationView({
     fullName: fullName.trim() || "Atharva Joshi",
     email: email.trim() || "atharva.joshi@vcet.edu.in",
     phone: phone.trim() || "+91 98765 43210",
-    college: college.trim() || "Vidyavardhini's College of Engineering & Technology",
-    department: department || "Computer Engg",
+    college: college.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)",
+    department: department || "Computer Engineering",
     yearOfStudy: yearOfStudy || "3rd Year",
     track: track || "Track A: Modern Web & Gemini AI",
-    experienceLevel: experienceLevel || "Intermediate",
+    experienceLevel: "Intermediate",
     status: "confirmed" as const,
     checkedIn: false,
     createdAt: "2026-11-20T09:00:00.000Z",
@@ -144,180 +131,118 @@ export function EventRegistrationView({
   return (
     <div className="flex flex-col w-full bg-surface">
       {/* SECTION 1: HERO */}
-      <section className="relative w-full overflow-hidden border-b border-border bg-gradient-to-b from-white via-surface-container-low to-surface py-12 lg:py-20">
+      <section className="relative w-full overflow-hidden border-b border-border bg-gradient-to-b from-white via-surface-container-low to-surface py-12 lg:py-16">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary/10 blur-3xl pointer-events-none"></div>
         <div className="absolute top-1/2 -right-32 w-96 h-96 rounded-full bg-secondary/10 blur-3xl pointer-events-none"></div>
 
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left Content */}
-            <div className="lg:col-span-7 flex flex-col gap-6 text-left">
+            <div className="lg:col-span-7 flex flex-col gap-5 text-left">
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 bg-white px-4 py-1.5 rounded-full border border-border shadow-xs w-fit">
+              <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-border shadow-2xs w-fit">
                 <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#4285f4]"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#ea4335]"></span>
                   <span className="w-2.5 h-2.5 rounded-full bg-[#fbbc04]"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#34a853]"></span>
                 </span>
                 <span className="text-xs sm:text-sm font-semibold text-foreground tracking-wide">
-                  ⚡ {workshop.badgeText}
+                  {workshop.badgeText}
                 </span>
               </div>
 
               {/* Main Headline */}
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
-                DevCraft: Architecting Scale with{" "}
-                <span className="text-primary">Modern Web</span>,{" "}
-                <span className="text-secondary">Cloud</span> &amp;{" "}
-                <span className="text-tertiary">AI</span>
+                DevCraft 2025
               </h1>
 
               {/* Subheading */}
-              <p className="text-base sm:text-lg text-foreground-muted max-w-2xl leading-relaxed">
+              <p className="text-sm sm:text-base text-foreground-muted max-w-2xl leading-relaxed">
                 {workshop.subheading}
               </p>
 
               {/* Metadata Bar */}
               <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-foreground-muted font-medium">
                 <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
-                  <span className="material-symbols-outlined text-[18px] text-primary">calendar_month</span>
+                  <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
                   <span>{workshop.datesText}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
-                  <span className="material-symbols-outlined text-[18px] text-tertiary">location_on</span>
+                  <svg className="w-4 h-4 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
                   <span>{workshop.venueText}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
-                  <span className="material-symbols-outlined text-[18px] text-[#fbbc04]">confirmation_number</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   <span className="text-foreground font-semibold">{workshop.seatsText}</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
-                  <span className="material-symbols-outlined text-[18px] text-secondary">devices</span>
-                  <span>Offline Labs</span>
                 </div>
               </div>
 
               {/* CTAs */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-3 pt-1">
                 <a
                   href="#registration-form"
-                  className="inline-flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover transition-all"
+                  className="inline-flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover active:scale-95 transition-all cursor-pointer"
                 >
                   <span>Register for Workshop</span>
-                  <span className="material-symbols-outlined text-[18px]">arrow_downward</span>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <polyline points="19 12 12 19 5 12" />
+                  </svg>
                 </a>
                 <button
                   type="button"
                   onClick={handleOpenPreviewPass}
-                  className="inline-flex items-center gap-2 bg-white text-foreground px-5 py-3 rounded-full text-sm font-semibold border border-border hover:bg-surface-container transition-all"
+                  className="inline-flex items-center gap-2 bg-white text-foreground px-5 py-3 rounded-full text-sm font-semibold border border-border hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[18px] text-secondary">badge</span>
+                  <svg className="w-4 h-4 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 4h16v16H4z" />
+                    <circle cx="12" cy="10" r="3" />
+                    <path d="M6 18c0-3 3-4 6-4s6 1 6 4" />
+                  </svg>
                   <span>Preview Attendee Pass</span>
                 </button>
               </div>
-
-              {/* Live stats micro-bar */}
-              <div className="flex items-center gap-3 pt-2">
-                <div className="flex -space-x-2 overflow-hidden">
-                  <div className="h-8 w-8 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    AK
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    PS
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-tertiary-fixed text-on-tertiary text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    RT
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-surface-container-high text-foreground text-[10px] flex items-center justify-center font-bold border-2 border-white">
-                    +120
-                  </div>
-                </div>
-                <p className="text-xs sm:text-sm text-foreground-muted">
-                  <strong className="text-foreground font-semibold">124 developers</strong> already registered for 2025 cohort
-                </p>
-              </div>
             </div>
 
-            {/* Right Visual / Stylized Isometric Graphic */}
+            {/* Right Visual composition */}
             <div className="lg:col-span-5 relative flex justify-center">
-              <div className="relative w-full max-w-md aspect-square bg-white rounded-3xl border border-border shadow-lg p-6 flex flex-col justify-between overflow-hidden">
+              <div className="relative w-full max-w-sm aspect-4/3 bg-white rounded-3xl border border-border shadow-md p-5 flex flex-col justify-between overflow-hidden">
                 <div className="flex items-center justify-between border-b border-border/60 pb-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full bg-tertiary"></span>
-                    <span className="w-3 h-3 rounded-full bg-[#fbbc04]"></span>
-                    <span className="w-3 h-3 rounded-full bg-secondary"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#ea4335]"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#fbbc04]"></span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#34a853]"></span>
                   </div>
-                  <span className="text-xs font-mono bg-surface-container px-2.5 py-1 rounded-full text-foreground-muted">
-                    {workshop.heroGraphic?.terminalLabel ?? "devcraft_2025.sh"}
+                  <span className="text-xs font-mono bg-surface-container px-2.5 py-0.5 rounded-full text-foreground-muted">
+                    devcraft_2025.sh
                   </span>
                 </div>
 
-                {/* Vector Architecture composition */}
-                <div className="my-auto flex flex-col items-center justify-center py-4 relative">
-                  <svg
-                    className="w-full max-w-[280px] h-auto drop-shadow-sm"
-                    fill="none"
-                    viewBox="0 0 400 320"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path d="M200 40 L360 130 L200 220 L40 130 Z" fill="#EEF2F6" stroke="#D8E2FF" strokeWidth="2" />
-                    <path d="M200 40 L200 220" stroke="#E2E8F0" strokeDasharray="4 4" strokeWidth="1.5" />
-                    <path d="M40 130 L360 130" stroke="#E2E8F0" strokeDasharray="4 4" strokeWidth="1.5" />
-
-                    <g transform="translate(130, 70)">
-                      <rect className="drop-shadow-md" fill="#1A73E8" height="90" rx="16" width="140" x="0" y="0" />
-                      <text fill="#FFFFFF" fontFamily="system-ui, sans-serif" fontSize="13" fontWeight="700" textAnchor="middle" x="70" y="38">
-                        CLOUD &amp; WEB
-                      </text>
-                      <text fill="#ADC6FF" fontFamily="system-ui, sans-serif" fontSize="11" textAnchor="middle" x="70" y="60">
-                        React 19 • Cloud Run
-                      </text>
-                      <circle cx="70" cy="78" fill="#89FA9B" r="4" />
-                    </g>
-
-                    <g transform="translate(50, 160)">
-                      <path d="M40 0 L80 20 L40 40 L0 20 Z" fill="#D9372B" />
-                      <path d="M0 20 L40 40 L40 70 L0 50 Z" fill="#B51B15" />
-                      <path d="M80 20 L40 40 L40 70 L80 50 Z" fill="#930004" />
-                      <text fill="#FFFFFF" fontFamily="system-ui, sans-serif" fontSize="9" fontWeight="700" textAnchor="middle" x="40" y="32">
-                        GEMINI
-                      </text>
-                    </g>
-
-                    <g transform="translate(250, 150)">
-                      <path d="M40 0 L80 20 L40 40 L0 20 Z" fill="#86F898" />
-                      <path d="M0 20 L40 40 L40 70 L0 50 Z" fill="#006E2C" />
-                      <path d="M80 20 L40 40 L40 70 L80 50 Z" fill="#005320" />
-                      <text fill="#002108" fontFamily="system-ui, sans-serif" fontSize="9" fontWeight="700" textAnchor="middle" x="40" y="32">
-                        GCP CI/CD
-                      </text>
-                    </g>
-
-                    <g transform="translate(170, 195)">
-                      <rect className="drop-shadow-xs" fill="#FBBC04" height="50" rx="10" width="60" x="0" y="0" />
-                      <text fill="#3D2900" fontFamily="system-ui, sans-serif" fontSize="10" fontWeight="700" textAnchor="middle" x="30" y="24">
-                        K8s
-                      </text>
-                      <text fill="#5E4200" fontFamily="system-ui, sans-serif" fontSize="9" textAnchor="middle" x="30" y="38">
-                        Docker
-                      </text>
-                    </g>
-
-                    <path d="M90 180 Q200 130 290 170" fill="none" stroke="#1A73E8" strokeDasharray="6 4" strokeWidth="2.5" />
-                  </svg>
+                <div className="my-auto flex flex-col gap-2 py-3 text-center">
+                  <div className="text-xs font-bold text-primary uppercase tracking-wider">
+                    Hands-On Collegiate Workshop
+                  </div>
+                  <div className="text-xl font-bold text-foreground">
+                    Modern Web &bull; Cloud &bull; Gemini AI
+                  </div>
+                  <div className="text-xs text-foreground-muted">
+                    2 Days &bull; 2 Intensive Learning Tracks &bull; Verified Badge
+                  </div>
                 </div>
 
-                <div className="bg-surface-container px-4 py-2.5 rounded-2xl flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-secondary text-[22px]">verified</span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-foreground">100% Free For Students</span>
-                      <span className="text-[11px] text-foreground-muted">Verified GDG Certificate Included</span>
-                    </div>
-                  </div>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed text-xs px-2.5 py-0.5 rounded-full font-bold">
-                    {workshop.heroGraphic?.versionBadge ?? "BATCH '25"}
+                <div className="bg-surface-container px-3.5 py-2 rounded-xl flex items-center justify-between text-xs">
+                  <span className="font-semibold text-emerald-800">100% Free For Students</span>
+                  <span className="bg-secondary-fixed text-on-secondary-fixed text-[11px] px-2 py-0.5 rounded-full font-bold">
+                    BATCH &apos;25
                   </span>
                 </div>
               </div>
@@ -326,332 +251,177 @@ export function EventRegistrationView({
         </div>
       </section>
 
-      {/* SECTION 2: WORKSHOP REGISTRATION FORM */}
-      <section className="w-full py-16 bg-surface-container-low border-b border-border scroll-mt-28" id="registration-form">
-        <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Form Left: Progress Summary & Live Counters */}
-            <div className="lg:col-span-4 flex flex-col gap-5">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                  Fast Registration
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-                  Claim Your DevCraft Seat
-                </h2>
-                <p className="text-sm text-foreground-muted leading-relaxed">
-                  Workshop registration is completely free. Seating is capped at {workshop.capacity} developers to guarantee dedicated mentor ratios in lab sessions.
-                </p>
+      {/* SECTION 2: FAST MOBILE-NATIVE REGISTRATION FORM */}
+      <section
+        className="w-full py-12 sm:py-16 bg-surface-container-low border-b border-border scroll-mt-20"
+        id="registration-form"
+      >
+        <div className="max-w-xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col gap-6">
+            {/* Header with live seat counter */}
+            <div className="text-center flex flex-col items-center gap-2">
+              <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                <span>Fast Registration &bull; Only {initialRemaining} Seats Left</span>
               </div>
-
-              {/* Progress Indicator Card */}
-              <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-semibold text-foreground">Form Completion</span>
-                  <span className="font-bold text-primary">{progressPercent}%</span>
-                </div>
-                <div className="w-full bg-surface-container h-2 rounded-full overflow-hidden">
-                  <div
-                    className="bg-primary h-full rounded-full transition-all duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
-                </div>
-                <div className="flex flex-col gap-2 pt-1 text-xs text-foreground-muted">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`material-symbols-outlined text-[18px] ${
-                        fullName && email && phone ? "text-secondary" : "text-border"
-                      }`}
-                    >
-                      check_circle
-                    </span>
-                    <span>Personal details</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`material-symbols-outlined text-[18px] ${
-                        department && yearOfStudy ? "text-secondary" : "text-border"
-                      }`}
-                    >
-                      check_circle
-                    </span>
-                    <span>Academic background</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`material-symbols-outlined text-[18px] ${
-                        track && experienceLevel ? "text-secondary" : "text-border"
-                      }`}
-                    >
-                      check_circle
-                    </span>
-                    <span>Track preference</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`material-symbols-outlined text-[18px] ${
-                        agreedToCoc ? "text-secondary" : "text-border"
-                      }`}
-                    >
-                      check_circle
-                    </span>
-                    <span>Instant QR pass confirmation</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Live Seats Counter Banner */}
-              <div className="bg-white p-4 rounded-2xl border border-border shadow-xs flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-tertiary-fixed flex items-center justify-center text-tertiary shrink-0">
-                  <span className="material-symbols-outlined text-[20px]">timer</span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-bold text-foreground">
-                    Only {initialRemaining} Lab Seats Remaining
-                  </span>
-                  <span className="text-xs text-foreground-muted">
-                    Direct entry pass issued immediately upon submission
-                  </span>
-                </div>
-              </div>
-
-              {/* College Priority Card */}
-              <div className="p-4 rounded-2xl bg-surface-container border border-border/60 text-xs text-foreground-muted flex items-start gap-2.5">
-                <span className="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">school</span>
-                <span>
-                  Priority access is guaranteed for VCET students. Cross-college engineering students from Mumbai University are also welcomed.
-                </span>
-              </div>
-
-              {/* Digital Pass Preview Card Button */}
-              <button
-                type="button"
-                onClick={handleOpenPreviewPass}
-                className="p-4 rounded-2xl bg-white border border-border shadow-xs flex flex-col gap-2 text-left hover:border-primary transition-all group cursor-pointer"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-primary"></span>
-                    <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                    <span className="text-xs font-bold text-foreground ml-1">Digital Pass Preview</span>
-                  </div>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed text-[10px] px-2 py-0.5 rounded-full font-bold">
-                    SAMPLE
-                  </span>
-                </div>
-                <p className="text-xs text-foreground-muted">
-                  Click to inspect the verifiable digital attendee badge with QR check-in code.
-                </p>
-              </button>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+                Claim Your Workshop Pass
+              </h2>
+              <p className="text-xs sm:text-sm text-foreground-muted max-w-md">
+                Quick 30-second sign-up. Direct QR admission pass generated instantly upon submission.
+              </p>
             </div>
 
-            {/* Form Right: Form Fields */}
-            <div className="lg:col-span-8 bg-white p-6 sm:p-8 rounded-3xl border border-border shadow-sm">
+            {/* Mobile Native Registration Card */}
+            <div className="bg-white p-5 sm:p-8 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/50 flex flex-col gap-5">
               {!isRegistrationOpen ? (
-                <div className="text-center py-12 flex flex-col items-center gap-3">
-                  <span className="material-symbols-outlined text-[48px] text-tertiary">lock</span>
-                  <h3 className="text-xl font-bold text-foreground">Registration is Closed</h3>
-                  <p className="text-sm text-foreground-muted max-w-md">
-                    Seating for this cohort is currently at maximum capacity. Please check back for updates or join our community discord for waitlist announcements.
+                <div className="text-center py-10 flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
+                    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-bold text-foreground">Registration is Closed</h3>
+                  <p className="text-xs text-foreground-muted max-w-sm">
+                    Workshop seating is at full capacity (150/150). Reach out on Discord for waitlist announcements.
                   </p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-5">
                   {/* Error Notification */}
                   {submitError ? (
-                    <div className="p-4 rounded-xl bg-status-error/10 border border-status-error/30 text-status-error text-sm flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[20px] shrink-0">error</span>
+                    <div
+                      role="alert"
+                      className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-center gap-2.5"
+                    >
+                      <svg className="w-4 h-4 shrink-0 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
                       <span>{submitError}</span>
                     </div>
                   ) : null}
 
-                  {/* Section 1: Basic Information */}
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-                      <span className="w-2 h-2 rounded-full bg-primary"></span>
-                      <h3 className="text-base font-bold text-foreground">
-                        1. Personal &amp; Contact Details
-                      </h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Full Name */}
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="fullName" className="text-xs font-bold text-foreground">
-                          Full Name <span className="text-tertiary">*</span>
-                        </label>
-                        <input
-                          id="fullName"
-                          type="text"
-                          required
-                          value={fullName}
-                          onChange={(e) => setFullName(e.target.value)}
-                          placeholder="e.g. Atharva Joshi"
-                          className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                        />
-                      </div>
-
-                      {/* Email */}
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="email" className="text-xs font-bold text-foreground">
-                          College / Professional Email <span className="text-tertiary">*</span>
-                        </label>
-                        <input
-                          id="email"
-                          type="email"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="name@vcet.edu.in"
-                          className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                        />
-                      </div>
-
-                      {/* Phone */}
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="phone" className="text-xs font-bold text-foreground">
-                          WhatsApp / Contact Number <span className="text-tertiary">*</span>
-                        </label>
-                        <input
-                          id="phone"
-                          type="tel"
-                          required
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="+91 98765 43210"
-                          className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                        />
-                      </div>
-
-                      {/* College Name */}
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="college" className="text-xs font-bold text-foreground">
-                          College / University <span className="text-tertiary">*</span>
-                        </label>
-                        <input
-                          id="college"
-                          type="text"
-                          required
-                          value={college}
-                          onChange={(e) => setCollege(e.target.value)}
-                          className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                        />
-                      </div>
-                    </div>
+                  {/* 1. Full Name */}
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <label htmlFor="fullName" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Full Name <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      id="fullName"
+                      type="text"
+                      required
+                      autoComplete="name"
+                      enterKeyHint="next"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Atharva Joshi"
+                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                    />
                   </div>
 
-                  {/* Section 2: Academic Standing */}
-                  <div className="flex flex-col gap-4 pt-2">
-                    <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-                      <span className="w-2 h-2 rounded-full bg-secondary"></span>
-                      <h3 className="text-base font-bold text-foreground">
-                        2. Academic Standing
-                      </h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Department */}
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="department" className="text-xs font-bold text-foreground">
-                          Department / Branch <span className="text-tertiary">*</span>
-                        </label>
-                        <select
-                          id="department"
-                          required
-                          value={department}
-                          onChange={(e) => setDepartment(e.target.value)}
-                          className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                        >
-                          <option value="" disabled>Select Department</option>
-                          {workshop.registrationConfig.departments.map((d) => (
-                            <option key={d} value={d}>{d}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Year of Study Pills */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-foreground">
-                          Current Year of Study <span className="text-tertiary">*</span>
-                        </label>
-                        <div className="grid grid-cols-4 gap-1.5 h-11">
-                          {workshop.registrationConfig.yearsOfStudy.map((yr) => (
-                            <label key={yr} className="cursor-pointer">
-                              <input
-                                type="radio"
-                                name="yearOfStudy"
-                                value={yr}
-                                checked={yearOfStudy === yr}
-                                onChange={(e) => setYearOfStudy(e.target.value)}
-                                className="sr-only peer"
-                              />
-                              <span className="h-full flex items-center justify-center rounded-lg border border-border text-xs font-medium text-foreground-muted peer-checked:bg-primary peer-checked:text-on-primary peer-checked:border-primary transition-all">
-                                {yr.replace(" Year", "")}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 3: Workshop Track & Experience */}
-                  <div className="flex flex-col gap-4 pt-2">
-                    <div className="flex items-center gap-2 pb-1 border-b border-border/40">
-                      <span className="w-2 h-2 rounded-full bg-[#fbbc04]"></span>
-                      <h3 className="text-base font-bold text-foreground">
-                        3. Workshop Track Preference
-                      </h3>
-                    </div>
-
-                    {/* Track Radio Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {workshop.registrationConfig.tracks.map((t) => (
-                        <label key={t.id} className="cursor-pointer relative">
-                          <input
-                            type="radio"
-                            name="track"
-                            value={t.name}
-                            checked={track === t.name}
-                            onChange={(e) => setTrack(e.target.value)}
-                            className="sr-only peer"
-                          />
-                          <div className="p-4 rounded-2xl border border-border bg-surface-container-low/50 peer-checked:bg-primary-fixed/40 peer-checked:border-primary transition-all flex flex-col gap-2 h-full">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                {t.badge}
-                              </span>
-                              <span className="material-symbols-outlined text-[20px] text-primary">
-                                {t.icon}
-                              </span>
-                            </div>
-                            <span className="text-sm font-bold text-foreground">{t.name}</span>
-                            <p className="text-xs text-foreground-muted leading-relaxed">
-                              {t.description}
-                            </p>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Experience Level */}
-                    <div className="flex flex-col gap-2 pt-1">
-                      <label className="text-xs font-bold text-foreground">
-                        Technical Experience Level <span className="text-tertiary">*</span>
+                  {/* 2. Contact Details (Email & Phone in Responsive Grid) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label htmlFor="email" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Email Address <span className="text-rose-500">*</span>
                       </label>
-                      <div className="flex flex-wrap gap-2">
-                        {workshop.registrationConfig.experienceLevels.map((lvl) => (
-                          <label key={lvl} className="cursor-pointer">
+                      <input
+                        id="email"
+                        type="email"
+                        required
+                        inputMode="email"
+                        autoComplete="email"
+                        enterKeyHint="next"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@vcet.edu.in"
+                        className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label htmlFor="phone" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        WhatsApp / Phone <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        id="phone"
+                        type="tel"
+                        required
+                        inputMode="tel"
+                        autoComplete="tel"
+                        enterKeyHint="next"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="+91 98765 43210"
+                        className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3. College / Institution (Pre-filled for VCET, fully editable) */}
+                  <div className="flex flex-col gap-1 text-left">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="college" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        College / University <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[11px] text-primary font-medium">Editable</span>
+                    </div>
+                    <input
+                      id="college"
+                      type="text"
+                      required
+                      autoComplete="organization"
+                      enterKeyHint="next"
+                      value={college}
+                      onChange={(e) => setCollege(e.target.value)}
+                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                    />
+                    <span className="text-[11px] text-slate-500">
+                      Defaulted for VCET. You can edit if attending from another college.
+                    </span>
+                  </div>
+
+                  {/* 4. Academic Standing (Department & Year in 2-Column Grid) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label htmlFor="department" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Department / Branch <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id="department"
+                        required
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="h-12 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      >
+                        {workshop.registrationConfig.departments.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Year of Study <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5 h-12">
+                        {workshop.registrationConfig.yearsOfStudy.map((yr) => (
+                          <label key={yr} className="cursor-pointer">
                             <input
                               type="radio"
-                              name="experienceLevel"
-                              value={lvl.split(" ")[0]}
-                              checked={experienceLevel === lvl.split(" ")[0]}
-                              onChange={(e) => setExperienceLevel(e.target.value)}
+                              name="yearOfStudy"
+                              value={yr}
+                              checked={yearOfStudy === yr}
+                              onChange={(e) => setYearOfStudy(e.target.value)}
                               className="sr-only peer"
                             />
-                            <span className="inline-block px-3.5 py-1.5 rounded-full border border-border bg-surface-container text-foreground-muted text-xs font-medium peer-checked:bg-foreground peer-checked:text-white peer-checked:border-foreground transition-all">
-                              {lvl}
+                            <span className="h-full flex items-center justify-center rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary active:scale-95 transition-all">
+                              {yr.replace(" Year", "")}
                             </span>
                           </label>
                         ))}
@@ -659,74 +429,127 @@ export function EventRegistrationView({
                     </div>
                   </div>
 
-                  {/* Section 4: Supplementary Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="portfolioUrl" className="text-xs font-bold text-foreground">
-                        GitHub or LinkedIn Profile <span className="text-foreground-muted font-normal">(Optional)</span>
-                      </label>
-                      <input
-                        id="portfolioUrl"
-                        type="url"
-                        value={portfolioUrl}
-                        onChange={(e) => setPortfolioUrl(e.target.value)}
-                        placeholder="https://github.com/username"
-                        className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="notes" className="text-xs font-bold text-foreground">
-                        Dietary / Accessibility Needs <span className="text-foreground-muted font-normal">(Optional)</span>
-                      </label>
-                      <input
-                        id="notes"
-                        type="text"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Any questions or special requests"
-                        className="h-11 px-3.5 rounded-lg border border-border bg-surface-container-low text-sm text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all"
-                      />
+                  {/* 5. Workshop Track Selection (Mobile-Friendly Tactile Cards) */}
+                  <div className="flex flex-col gap-2 text-left pt-1">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Select Workshop Track <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {workshop.registrationConfig.tracks.map((t) => {
+                        const isSelected = track === t.name;
+                        return (
+                          <label
+                            key={t.id}
+                            className={`cursor-pointer rounded-2xl border p-4 transition-all active:scale-[0.99] flex flex-col gap-2 ${
+                              isSelected
+                                ? "border-primary bg-primary/5 shadow-xs ring-2 ring-primary/20"
+                                : "border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="track"
+                              value={t.name}
+                              checked={isSelected}
+                              onChange={(e) => setTrack(e.target.value)}
+                              className="sr-only"
+                            />
+                            <div className="flex items-center justify-between">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  isSelected
+                                    ? "bg-primary text-white"
+                                    : "bg-slate-200 text-slate-700"
+                                }`}
+                              >
+                                {t.badge}
+                              </span>
+                              <span
+                                className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                  isSelected
+                                    ? "border-primary bg-primary text-white"
+                                    : "border-slate-300 bg-white"
+                                }`}
+                              >
+                                {isSelected ? (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                ) : null}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold text-slate-900 leading-snug">
+                              {t.name}
+                            </span>
+                            <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
+                              {t.description}
+                            </p>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Agreement Checkbox */}
-                  <div className="flex items-start gap-2.5 pt-2">
+                  {/* 6. GitHub or LinkedIn Profile (Optional) */}
+                  <div className="flex flex-col gap-1.5 text-left pt-1">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="portfolioUrl" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        GitHub / LinkedIn Profile
+                      </label>
+                      <span className="text-[11px] text-slate-400">Optional</span>
+                    </div>
+                    <input
+                      id="portfolioUrl"
+                      type="url"
+                      inputMode="url"
+                      autoComplete="url"
+                      value={portfolioUrl}
+                      onChange={(e) => setPortfolioUrl(e.target.value)}
+                      placeholder="https://github.com/username or linkedin.com/in/username"
+                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                    />
+                  </div>
+
+                  {/* 7. Agreement Checkbox */}
+                  <div className="flex items-start gap-3 pt-2 text-left">
                     <input
                       id="coc-agree"
                       type="checkbox"
                       required
                       checked={agreedToCoc}
                       onChange={(e) => setAgreedToCoc(e.target.checked)}
-                      className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-0 cursor-pointer"
+                      className="mt-0.5 h-5 w-5 rounded-md border-slate-300 text-primary focus:ring-0 cursor-pointer shrink-0"
                     />
-                    <label htmlFor="coc-agree" className="text-xs text-foreground-muted leading-relaxed cursor-pointer">
-                      I agree to adhere to the{" "}
-                      <span className="text-primary font-semibold">GDG Community Guidelines</span> and
-                      Code of Conduct. I understand that workshop seats are strictly limited and promise to notify the organizers if I cannot attend.
+                    <label htmlFor="coc-agree" className="text-xs text-slate-600 leading-relaxed cursor-pointer">
+                      I agree to the <span className="text-primary font-semibold">GDG Code of Conduct</span>. I understand workshop seats are strictly limited to {workshop.capacity}.
                     </label>
                   </div>
 
-                  {/* Submit Button */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/40">
-                    <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
-                      <span className="material-symbols-outlined text-[16px] text-secondary">lock</span>
-                      <span>Protected by GDG on Campus VCET Privacy Standards</span>
-                    </div>
+                  {/* 8. Full-Width Mobile-Native Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full h-13 mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-white text-base font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+                  >
+                    {submitting ? (
+                      <>
+                        <svg className="w-5 h-5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                        </svg>
+                        <span>Issuing Pass &amp; QR Code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Claim Free Workshop Pass</span>
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                          <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
 
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-8 py-3.5 rounded-full font-semibold text-sm shadow-md hover:bg-primary-hover transition-all disabled:opacity-50"
-                    >
-                      {submitting ? (
-                        <span>Processing Registration...</span>
-                      ) : (
-                        <>
-                          <span>Complete Free Registration</span>
-                          <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
-                        </>
-                      )}
-                    </button>
+                  <div className="text-center text-[11px] text-slate-400 pt-1">
+                    100% Free &bull; Verified GDG Certificate &bull; Instant QR Pass
                   </div>
                 </form>
               )}
@@ -744,70 +567,77 @@ export function EventRegistrationView({
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white w-full max-w-xl rounded-3xl border border-border shadow-2xl overflow-hidden relative my-auto"
+            className="bg-white w-full max-w-lg rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Google Colors Stripe */}
-            <div className="h-2 w-full bg-gradient-to-r from-primary via-tertiary to-secondary"></div>
+            <div className="h-1.5 w-full grid grid-cols-4">
+              <div className="bg-[#4285f4]"></div>
+              <div className="bg-[#ea4335]"></div>
+              <div className="bg-[#fbbc04]"></div>
+              <div className="bg-[#34a853]"></div>
+            </div>
 
-            <div className="p-6 sm:p-8 flex flex-col gap-6">
-              {/* Header */}
+            <div className="p-5 sm:p-7 flex flex-col gap-5">
+              {/* Modal Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-primary"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-tertiary"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#fbbc04]"></span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-secondary"></span>
-                  <span className="text-xs font-bold text-foreground ml-1 uppercase tracking-wider">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                     {previewPassMode ? "Sample Pass Preview" : "Official GDG VCET Attendee Pass"}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high text-foreground-muted flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
 
               {/* Success Notification if live submitted */}
               {!previewPassMode && confirmedRegistration ? (
-                <div className="p-3.5 rounded-xl bg-status-success/10 border border-status-success/30 text-status-success text-xs sm:text-sm font-semibold flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-2.5">
+                  <svg className="w-5 h-5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                   <span>Registration Confirmed! Your official seat is reserved.</span>
                 </div>
               ) : null}
 
               {/* Pass Card */}
-              <div className="rounded-2xl border border-border bg-surface-container-low p-5 sm:p-6 shadow-xs flex flex-col gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-xs flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
-                      DevCraft &apos;25 Technical Summit
+                      GDG on Campus VCET
                     </span>
-                    <h3 className="text-lg font-bold text-foreground">
-                      DevCraft: Architecting Scale
+                    <h3 className="text-lg font-bold text-slate-900">
+                      DevCraft 2025
                     </h3>
-                    <span className="text-xs text-foreground-muted">
-                      Modern Web • Cloud Architecture • Multimodal AI
+                    <span className="text-xs text-slate-500">
+                      In-Person Technical Workshop &bull; Vasai
                     </span>
                   </div>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed text-[11px] px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
                     ALL-ACCESS PASS
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-b border-border/60 py-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-b border-slate-200/80 py-4">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       Attendee
                     </span>
-                    <span className="text-base font-bold text-foreground">
+                    <span className="text-base font-bold text-slate-900">
                       {activePass.fullName}
                     </span>
-                    <span className="text-xs text-foreground-muted">
-                      {activePass.department} · {activePass.yearOfStudy}
+                    <span className="text-xs text-slate-500">
+                      {activePass.department} &bull; {activePass.yearOfStudy}
                     </span>
                     <span className="text-xs text-primary font-medium mt-0.5 truncate">
                       {activePass.college}
@@ -815,16 +645,16 @@ export function EventRegistrationView({
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       Assigned Track
                     </span>
-                    <span className="text-sm font-bold text-secondary">
+                    <span className="text-xs font-bold text-slate-900">
                       {activePass.track}
                     </span>
-                    <span className="text-[10px] font-bold text-foreground-muted uppercase tracking-wider mt-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">
                       Pass Ref ID
                     </span>
-                    <span className="font-mono font-bold text-sm text-foreground bg-white px-2 py-0.5 rounded border border-border inline-block self-start">
+                    <span className="font-mono font-bold text-sm text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block self-start">
                       #{activePass.referenceId}
                     </span>
                   </div>
@@ -832,24 +662,28 @@ export function EventRegistrationView({
 
                 {/* Footer details + QR Code */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
-                  <div className="flex flex-col gap-1.5 text-xs text-foreground-muted">
+                  <div className="flex flex-col gap-1.5 text-xs text-slate-500">
                     <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-tertiary">calendar_month</span>
+                      <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
                       <span>Oct 18–19, 2025</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
-                      <span>VCET Vasai · Labs 402 &amp; Auditorium</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-secondary">qr_code_scanner</span>
-                      <span>Fast Entrance Check-in Enabled</span>
+                      <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      <span>VCET Vasai &bull; Labs &amp; Auditorium</span>
                     </div>
                   </div>
 
                   {/* Scannable SVG QR Code */}
-                  <div className="bg-white p-2 rounded-xl border border-border shadow-xs flex flex-col items-center shrink-0">
-                    <svg className="w-24 h-24" fill="none" viewBox="0 0 120 120">
+                  <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs flex flex-col items-center shrink-0">
+                    <svg className="w-20 h-20" fill="none" viewBox="0 0 120 120">
                       <rect fill="#FFFFFF" height="120" width="120" />
                       <rect fill="#1A1B1E" height="30" width="30" x="10" y="10" />
                       <rect fill="#FFFFFF" height="20" width="20" x="15" y="15" />
@@ -870,7 +704,7 @@ export function EventRegistrationView({
                       <rect fill="#1A1B1E" height="10" width="20" x="50" y="90" />
                       <rect fill="#1A1B1E" height="15" width="20" x="15" y="55" />
                     </svg>
-                    <span className="font-mono text-[9px] text-foreground-muted font-bold mt-1">
+                    <span className="font-mono text-[9px] text-slate-400 font-bold mt-1">
                       SCAN AT ENTRANCE
                     </span>
                   </div>
@@ -882,17 +716,24 @@ export function EventRegistrationView({
                 <button
                   type="button"
                   onClick={handleDownloadPass}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary py-2.5 px-4 rounded-full text-xs font-semibold hover:bg-primary-hover transition-all"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-white py-2.5 px-4 rounded-xl text-xs font-semibold hover:bg-primary-hover active:scale-95 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">download</span>
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
                   <span>{downloadSuccess ? "Pass Saved to Device!" : "Download Pass (PDF)"}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleAddToWallet}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-surface-container text-foreground py-2.5 px-4 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-800 py-2.5 px-4 rounded-xl text-xs font-semibold hover:bg-slate-200 active:scale-95 transition-all border border-slate-200 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px] text-primary">account_balance_wallet</span>
+                  <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <line x1="2" y1="10" x2="22" y2="10" />
+                  </svg>
                   <span>{walletSuccess ? "Added to Google Wallet!" : "Add to Google Wallet"}</span>
                 </button>
               </div>
@@ -903,4 +744,3 @@ export function EventRegistrationView({
     </div>
   );
 }
-

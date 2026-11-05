@@ -175,10 +175,10 @@ export interface RegistrationInput {
   email: string;
   phone: string;
   college: string;
-  department: string;
-  yearOfStudy: string;
+  department?: string;
+  yearOfStudy?: string;
   track: string;
-  experienceLevel: string;
+  experienceLevel?: string;
   portfolioUrl?: string;
   notes?: string;
   agreedToCoc: boolean;

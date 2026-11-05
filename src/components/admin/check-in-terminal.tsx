@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 import type { RegistrationRecord } from "@/types";
+import { downloadForGoogleSheets, copyForGoogleSheets } from "@/lib/sheets-export";
 
 interface CheckInTerminalProps {
   eventSlug: string;
   initialCheckedInCount: number;
+}
+
+interface CheckInLogEntry {
+  time: string;
+  name: string;
+  ref: string;
+  track: string;
+  email?: string;
+  college?: string;
 }
 
 export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTerminalProps) {
@@ -17,7 +27,8 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
     message: string;
     registration?: RegistrationRecord;
   } | null>(null);
-  const [recentLog, setRecentLog] = useState<{ time: string; name: string; ref: string; track: string }[]>([]);
+  const [recentLog, setRecentLog] = useState<CheckInLogEntry[]>([]);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   async function handleCheckIn(e: React.FormEvent) {
     e.preventDefault();
@@ -48,8 +59,10 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
             name: data.registration.fullName,
             ref: data.registration.referenceId,
             track: data.registration.track,
+            email: data.registration.email,
+            college: data.registration.college,
           },
-          ...prev.slice(0, 9),
+          ...prev,
         ]);
         setRefInput("");
       } else if (res.status === 409) {
@@ -74,89 +87,137 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
     }
   }
 
+  function handleExportAttendanceSheets() {
+    if (recentLog.length === 0) {
+      alert("No attendance entries in session log yet.");
+      return;
+    }
+
+    downloadForGoogleSheets(
+      `gdg_vcet_${eventSlug}_attendance_${new Date().toISOString().slice(0, 10)}`,
+      recentLog,
+      [
+        { key: "time", label: "Check-in Time" },
+        { key: "ref", label: "Pass Reference ID" },
+        { key: "name", label: "Attendee Name" },
+        { key: "track", label: "Track" },
+        { key: "email", label: "Email Address" },
+        { key: "college", label: "College" },
+      ]
+    );
+  }
+
+  async function handleCopyAttendanceSheets() {
+    if (recentLog.length === 0) return;
+    const ok = await copyForGoogleSheets(recentLog, [
+      { key: "time", label: "Check-in Time" },
+      { key: "ref", label: "Pass Reference ID" },
+      { key: "name", label: "Attendee Name" },
+      { key: "track", label: "Track" },
+      { key: "email", label: "Email Address" },
+      { key: "college", label: "College" },
+    ]);
+    if (ok) {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2500);
+    }
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* Scanner & Input Column */}
-      <div className="lg:col-span-7 flex flex-col gap-6">
-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-border shadow-xs flex flex-col gap-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
-              <h2 className="text-lg font-bold text-foreground">
-                Entrance Check-in Scanner
+      <div className="lg:col-span-7 flex flex-col gap-5">
+        <div className="bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-5">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                Live Attendance Scanner
               </h2>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Scan attendee badge QR code or type reference ID to verify admission.
+              </p>
             </div>
-            <span className="bg-secondary-fixed text-on-secondary-fixed text-xs px-3 py-1 rounded-full font-bold">
-              {checkedCount} Check-ins Recorded
-            </span>
+            <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+              <strong className="text-emerald-900">{checkedCount}</strong> Checked In
+            </div>
           </div>
 
           <form onSubmit={handleCheckIn} className="flex flex-col gap-3">
-            <label htmlFor="refInput" className="text-xs font-bold text-foreground">
-              Scan QR or Enter Pass Reference ID
-            </label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  id="refInput"
-                  type="text"
-                  autoFocus
-                  required
-                  value={refInput}
-                  onChange={(e) => setRefInput(e.target.value.toUpperCase())}
-                  placeholder="e.g. GDG-VCET-2025-0842"
-                  className="w-full h-12 pl-10 pr-4 rounded-xl border border-border bg-surface-container-low text-base font-mono font-bold text-foreground focus:outline-hidden focus:border-primary focus:bg-white transition-all uppercase"
-                />
-                <span className="material-symbols-outlined text-[20px] text-foreground-muted absolute left-3 top-3">
-                  qr_code_scanner
-                </span>
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-6 h-12 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:bg-primary-hover transition-all shrink-0 cursor-pointer disabled:opacity-50"
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="ref-input"
+                className="text-xs font-bold text-foreground uppercase tracking-wider"
               >
-                {submitting ? "Verifying..." : "Verify Pass"}
-              </button>
+                Pass Reference ID / QR Code Payload
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="ref-input"
+                  type="text"
+                  value={refInput}
+                  onChange={(e) => setRefInput(e.target.value)}
+                  placeholder="GDG-VCET-2025-XXXX"
+                  disabled={submitting}
+                  autoFocus
+                  className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
+                />
+                <button
+                  type="submit"
+                  disabled={submitting || !refInput.trim()}
+                  className="h-11 px-5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? "Checking..." : "Verify & Admit"}
+                </button>
+              </div>
             </div>
-            <p className="text-[11px] text-foreground-muted">
-              Use your USB barcode/QR scanner or manually key in the 4-digit reference code on the student&apos;s digital badge.
-            </p>
           </form>
 
-          {/* Result Alert Box */}
+          {/* Instant Verification Status Result */}
           {lastResult ? (
             <div
-              className={`p-5 rounded-2xl border flex flex-col gap-2 animate-fade-in ${
+              className={`p-4 rounded-xl border flex flex-col gap-2 ${
                 lastResult.status === "success"
-                  ? "bg-status-success/10 border-status-success/40 text-status-success"
+                  ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
                   : lastResult.status === "duplicate"
-                  ? "bg-status-warning/15 border-status-warning/40 text-[#8a5d00]"
-                  : "bg-status-error/10 border-status-error/40 text-status-error"
+                  ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                  : "bg-rose-50/80 border-rose-200 text-rose-900"
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <span className="material-symbols-outlined text-[22px]">
-                  {lastResult.status === "success"
-                    ? "check_circle"
-                    : lastResult.status === "duplicate"
-                    ? "warning"
-                    : "cancel"}
-                </span>
-                <span>{lastResult.message}</span>
+              <div className="flex items-center gap-2">
+                {lastResult.status === "success" ? (
+                  <svg className="w-5 h-5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="9 12 11 14 15 10" />
+                  </svg>
+                ) : lastResult.status === "duplicate" ? (
+                  <svg className="w-5 h-5 text-amber-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-rose-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
+                  </svg>
+                )}
+                <span className="font-bold text-sm">{lastResult.message}</span>
               </div>
 
               {lastResult.registration ? (
-                <div className="mt-2 pt-2 border-t border-current/20 grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-current/20 text-xs">
                   <div>
-                    <span className="opacity-75 block text-[10px] uppercase font-bold">Attendee</span>
-                    <strong className="text-sm font-bold">{lastResult.registration.fullName}</strong>
-                    <div className="opacity-80">{lastResult.registration.college}</div>
+                    <span className="opacity-70">Attendee:</span>{" "}
+                    <strong>{lastResult.registration.fullName}</strong>
                   </div>
                   <div>
-                    <span className="opacity-75 block text-[10px] uppercase font-bold">Assigned Track</span>
-                    <strong className="font-semibold">{lastResult.registration.track}</strong>
-                    <div className="opacity-80 font-mono">#{lastResult.registration.referenceId}</div>
+                    <span className="opacity-70">College:</span>{" "}
+                    <strong>{lastResult.registration.college}</strong>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="opacity-70">Track:</span>{" "}
+                    <strong className="underline decoration-current/30">{lastResult.registration.track}</strong>
                   </div>
                 </div>
               ) : null}
@@ -165,35 +226,59 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
         </div>
       </div>
 
-      {/* Recent Activity Log Column */}
-      <div className="lg:col-span-5 bg-white p-6 rounded-3xl border border-border shadow-xs flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-2 border-b border-border/50">
-          <h3 className="text-sm font-bold text-foreground">Live Terminal Stream</h3>
-          <span className="text-[11px] text-foreground-muted">Recent verifications</span>
-        </div>
+      {/* Live Log Column with Export to Sheets */}
+      <div className="lg:col-span-5 flex flex-col gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-4">
+          <div className="flex items-center justify-between pb-3 border-b border-border">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
+              Recent Check-in Feed ({recentLog.length})
+            </h3>
 
-        {recentLog.length === 0 ? (
-          <div className="py-12 text-center text-xs text-foreground-muted">
-            Terminal ready. Scan or enter a pass reference to begin check-in.
-          </div>
-        ) : (
-          <div className="flex flex-col divide-y divide-border/40">
-            {recentLog.map((log, idx) => (
-              <div key={idx} className="py-2.5 flex items-center justify-between gap-2 text-xs">
-                <div className="flex flex-col">
-                  <span className="font-bold text-foreground">{log.name}</span>
-                  <span className="text-[11px] text-foreground-muted font-mono">{log.ref}</span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="font-mono text-[10px] text-foreground-muted">{log.time}</span>
-                  <span className="text-[10px] font-semibold text-secondary">{log.track.slice(0, 15)}...</span>
-                </div>
+            {/* Export Attendance to Sheets */}
+            {recentLog.length > 0 ? (
+              <div className="inline-flex rounded-lg border border-emerald-300 bg-emerald-50/70 p-0.5">
+                <button
+                  type="button"
+                  onClick={handleExportAttendanceSheets}
+                  title="Download Attendance CSV for Google Sheets"
+                  className="px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 rounded cursor-pointer"
+                >
+                  Sheets (.csv)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyAttendanceSheets}
+                  title="Copy attendance TSV to clipboard"
+                  className="px-1.5 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 rounded border-l border-emerald-200 cursor-pointer"
+                >
+                  {copySuccess ? "Copied!" : "Copy"}
+                </button>
               </div>
-            ))}
+            ) : null}
           </div>
-        )}
+
+          {recentLog.length === 0 ? (
+            <p className="text-xs text-foreground-muted py-8 text-center">
+              No attendees verified yet in this session.
+            </p>
+          ) : (
+            <div className="flex flex-col divide-y divide-border/50 max-h-96 overflow-y-auto">
+              {recentLog.map((entry, idx) => (
+                <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-foreground">{entry.name}</span>
+                    <span className="text-[11px] text-foreground-muted font-mono">{entry.ref}</span>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="font-mono text-emerald-700 font-bold">{entry.time}</span>
+                    <span className="text-[10px] text-foreground-muted truncate max-w-[120px]">{entry.track.split(":")[0]}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

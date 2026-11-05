@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Events: readable by anyone, writable only by authenticated admin
+    match /events/{eventSlug} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Registrations: created through public form or admin, readable & updatable by admin
+    match /registrations/{registrationId} {
+      allow read: if request.auth != null;
+      allow create: if request.resource.data.email is string
+                    && request.resource.data.fullName is string
+                    && request.resource.data.referenceId is string;
+      allow update, delete: if request.auth != null;
+    }
+  }
+}
+
