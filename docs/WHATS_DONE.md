@@ -100,11 +100,27 @@ The registration form (`src/components/workshop/event-registration-view.tsx`) wa
 
 ---
 
-## 6. Verification & Test Evidence
+## 6. Official Chapter Branding, Favicon & Site Loader
+
+- **Favicon & App Icons**:
+  - Extracted and generated high-resolution crisp icons for the browser tab bar:
+    - `src/app/favicon.ico` & `public/favicon.ico`: 32x32 / 48x48 multi-resolution icons.
+    - `src/app/icon.png` & `public/icon.png`: 128x128 square icon featuring the official Google Developer Groups `<>` brackets emblem.
+    - `src/app/apple-icon.png`: Apple touch icon for mobile home screens and bookmarks.
+    - `src/app/layout.tsx`: Explicit `icons` metadata declaration with fallback cascade.
+- **Site Loader & Splash Animation**:
+  - `src/components/site-loader.tsx`: Smooth initial site load splash featuring the official GDG on Campus VCET badge with an animated Google 4-color indeterminate loading bar. Gracefully fades out once the DOM has loaded.
+  - `src/app/loading.tsx`: Server Suspense fallback displaying the branded chapter loader during route streaming and page transitions.
+  - `src/app/globals.css`: Added `@keyframes loader-slide` animation for smooth, hardware-accelerated rendering.
+
+---
+
+## 7. Verification & Test Evidence
 
 All checks run against the updated codebase:
 
 - **Vitest Test Suite**: 48/48 tests passed (`npm test`).
 - **TypeScript**: 0 type errors (`npx tsc --noEmit`).
 - **ESLint**: 0 warnings or errors (`npm run lint`).
-- **Next.js Turbopack Production Build**: 39/39 routes compiled successfully (`npm run build`).
+- **Next.js Turbopack Production Build**: 41/41 routes and icon assets compiled successfully (`npm run build`).
+
