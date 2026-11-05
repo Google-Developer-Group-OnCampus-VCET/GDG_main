@@ -12,14 +12,15 @@ export const chapter: ChapterConfig = {
     "https://gdg.community.dev/gdg-on-campus-vidyavardhinis-college-of-engineering-and-technology-vasai-india/",
   chapterPageUrl:
     "https://gdg.community.dev/gdg-on-campus-vidyavardhinis-college-of-engineering-and-technology-vasai-india/",
-  // No verified chapter email or social URLs were supplied — omit rather than guess.
-  // See docs/content-needed.md.
   socials: [],
   nav: [
     { label: "Home", href: "/" },
     { label: "Events", href: "/events" },
     { label: "Team", href: "/team" },
+    { label: "Resources", href: "/resources" },
+    { label: "Certificates", href: "/certificates" },
     { label: "About", href: "/about" },
+    { label: "Contact", href: "/contact" },
     { label: "Admin", href: "/admin" },
   ],
   sourceUrl:

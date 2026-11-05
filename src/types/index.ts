@@ -2,18 +2,83 @@ export type EventFormat = "in-person" | "online" | "hybrid";
 
 export type EventTopic = "web" | "ai-ml" | "cloud" | "android" | "general";
 
+export type EventCategory =
+  | "workshop"
+  | "meetup"
+  | "conference"
+  | "hackathon"
+  | "bootcamp"
+  | "webinar"
+  | "community-session"
+  | "competition"
+  | "other";
+
+export type EventVisibility = "public" | "unlisted" | "draft" | "archived";
+
+export type RegistrationStatus =
+  | "submitted"
+  | "pending"
+  | "confirmed"
+  | "waitlisted"
+  | "rejected"
+  | "cancelled";
+
+export type PaymentStatus =
+  | "not-required"
+  | "pending"
+  | "submitted"
+  | "verified"
+  | "rejected"
+  | "refunded";
+
+export type AdminRole =
+  | "super-admin"
+  | "chapter-admin"
+  | "core-team"
+  | "event-manager"
+  | "registration-manager"
+  | "check-in-volunteer"
+  | "content-manager"
+  | "analytics-viewer";
+
+export interface AdminUser {
+  id: string;
+  chapterId: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  avatar?: string;
+  status: "active" | "invited" | "suspended";
+  createdAt: string;
+}
+
+export interface ChapterTenant {
+  id: string;
+  slug: string;
+  name: string;
+  shortName: string;
+  tagline: string;
+  description: string;
+  institution: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  contactEmail?: string;
+  createdAt: string;
+}
+
 export interface AgendaSession {
   id: string;
+  eventSlug?: string;
   title: string;
   description?: string;
   time: string; // e.g. "10:00 AM – 11:30 AM"
-  track: "all" | "tech" | "lab" | "keynote" | "break";
+  track: "all" | "tech" | "lab" | "keynote" | "break" | "track-a" | "track-b" | string;
   trackLabel?: string;
   speaker?: string;
   speakerRole?: string;
   location?: string;
   tags?: string[];
-  day: 1 | 2;
+  day: number;
 }
 
 export interface WorkshopSpeaker {
@@ -26,24 +91,34 @@ export interface WorkshopSpeaker {
   topicTitle?: string;
   topicDescription?: string;
   tags: string[];
+  expertise?: string[];
   photo?: string;
   socials?: {
     github?: string;
     linkedin?: string;
     twitter?: string;
+    website?: string;
   };
+  github?: string;
+  linkedin?: string;
+  website?: string;
+  email?: string;
+  bio?: string;
 }
 
 export interface WorkshopSponsor {
   id: string;
   name: string;
-  tier: "title" | "gold" | "platform" | "ecosystem";
+  tier: "title" | "gold" | "silver" | "platform" | "ecosystem" | "media";
   logo?: string;
   description?: string;
   url?: string;
+  website?: string;
   perks?: string[];
   badge?: string;
   contribution?: string;
+  contactEmail?: string;
+  status?: "approved" | "pending";
 }
 
 export interface WorkshopPillar {
@@ -126,15 +201,17 @@ export interface ChapterEvent {
   id: string;
   slug: string;
   title: string;
-  /**
-   * Either a date-only string ("YYYY-MM-DD") when only a date is known, or a
-   * full ISO 8601 instant with offset when a precise time is verified.
-   */
+  chapterId?: string;
+  category?: EventCategory;
+  visibility?: EventVisibility;
   startsAt: string;
   endsAt?: string;
   timezone?: string;
   format?: EventFormat;
   location?: string;
+  capacity?: number;
+  isRegistrationOpen?: boolean;
+  registrationDeadline?: string;
   topics: EventTopic[];
   summary?: string;
   image?: string;
@@ -142,16 +219,20 @@ export interface ChapterEvent {
   registrationUrl?: string;
   cancelled?: boolean;
   priceNote?: string;
+  price?: number;
+  currency?: string;
   sourceUrl?: string;
   lastVerifiedAt?: string;
   transcribedFrom?: string;
   transcribedAt?: string;
-  /** When present, enables the rich multi-page workshop experience */
+  tags?: string[];
   workshop?: WorkshopDetails;
+  createdAt?: string;
 }
 
 export interface RegistrationRecord {
   id: string;
+  chapterId?: string;
   eventSlug: string;
   referenceId: string; // e.g. "GDG-VCET-2025-0842"
   fullName: string;
@@ -164,9 +245,13 @@ export interface RegistrationRecord {
   experienceLevel: string;
   portfolioUrl?: string;
   notes?: string;
-  status: "confirmed" | "waitlisted" | "cancelled";
+  internalNotes?: string;
+  status: RegistrationStatus;
+  paymentStatus?: PaymentStatus;
+  paymentReference?: string;
   checkedIn: boolean;
   checkedInAt?: string;
+  checkInOperator?: string;
   createdAt: string;
 }
 
@@ -182,6 +267,64 @@ export interface RegistrationInput {
   portfolioUrl?: string;
   notes?: string;
   agreedToCoc: boolean;
+}
+
+export interface Announcement {
+  id: string;
+  chapterId: string;
+  eventSlug?: string;
+  title: string;
+  message: string;
+  targetAudience: "all" | "registered" | "checked-in" | "waitlisted";
+  channel: "email" | "web" | "banner";
+  status: "draft" | "scheduled" | "published";
+  sentCount: number;
+  scheduledAt?: string;
+  createdAt: string;
+}
+
+export interface CertificateRecord {
+  id: string;
+  chapterId: string;
+  certificateId: string; // e.g. "CERT-VCET-2025-0842"
+  eventSlug: string;
+  eventTitle: string;
+  recipientName: string;
+  recipientEmail: string;
+  referenceId: string;
+  issueDate: string;
+  status: "issued" | "revoked";
+  track?: string;
+  issuerName?: string;
+  issuerRole?: string;
+  createdAt: string;
+}
+
+export interface CommunityResource {
+  id: string;
+  chapterId: string;
+  eventSlug?: string;
+  title: string;
+  description: string;
+  category: "slides" | "code" | "video" | "notes" | "document" | "docs" | "tools";
+  url: string;
+  fileSize?: string;
+  tags: string[];
+  isPublic: boolean;
+  author?: string;
+  createdAt: string;
+}
+
+export interface AuditLogRecord {
+  id: string;
+  chapterId: string;
+  userId: string;
+  userEmail: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  details?: string;
+  createdAt: string;
 }
 
 export interface TeamMember {
