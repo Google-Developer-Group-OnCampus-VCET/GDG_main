@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { events } from "@/content/events";
-import { getEventStatsAsync } from "@/lib/db";
+import { getAllEventsAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { ConsoleOverviewExport } from "@/components/admin/console-overview-export";
 
@@ -26,8 +25,9 @@ export default async function AdminConsolePage() {
     };
   }
 
-  const flagshipWorkshop = events.find((e) => e.slug === "devcraft-2025");
-  const pastEventsList = events.filter((e) => e.slug !== "devcraft-2025");
+  const allEvents = await getAllEventsAsync();
+  const flagshipWorkshop = allEvents.find((e) => e.slug === "devcraft-2025");
+  const otherEventsList = allEvents.filter((e) => e.slug !== "devcraft-2025");
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
@@ -45,7 +45,17 @@ export default async function AdminConsolePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <ConsoleOverviewExport events={events} devcraftStats={devcraftStats} />
+            <Link
+              href="/admin/console/events/new"
+              className="inline-flex items-center gap-2 bg-[#1a73e8] text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold hover:bg-[#1557b0] shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Create Event</span>
+            </Link>
+            <ConsoleOverviewExport events={allEvents} devcraftStats={devcraftStats} />
             <span className="inline-flex items-center gap-1.5 bg-status-success/10 text-status-success px-3 py-1.5 rounded-xl text-xs font-semibold border border-status-success/20">
               <span className="w-2 h-2 rounded-full bg-status-success animate-pulse"></span>
               <span>Sync Active</span>
@@ -96,10 +106,10 @@ export default async function AdminConsolePage() {
               Total Chapter Events
             </span>
             <span className="text-3xl font-bold text-foreground">
-              {events.length}
+              {allEvents.length}
             </span>
             <span className="text-xs text-foreground-muted mt-1">
-              1 flagship · 6 historical
+              Active &amp; chapter archives
             </span>
           </div>
         </div>
@@ -179,13 +189,13 @@ export default async function AdminConsolePage() {
           </div>
         ) : null}
 
-        {/* Historical Events Archive */}
+        {/* Chapter Events Archive & New Events */}
         <div className="bg-white rounded-3xl border border-border shadow-xs p-6 sm:p-8 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-foreground">
-              Chapter Historical Events ({pastEventsList.length})
+              Chapter Events Directory ({otherEventsList.length})
             </h2>
-            <span className="text-xs text-foreground-muted">Verified chapter archive</span>
+            <span className="text-xs text-foreground-muted">Live sync from Firestore &amp; archive</span>
           </div>
 
           <div className="overflow-x-auto">
@@ -200,7 +210,7 @@ export default async function AdminConsolePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
-                {pastEventsList.map((e) => (
+                {otherEventsList.map((e) => (
                   <tr key={e.id} className="hover:bg-surface-container-low/30 transition-colors">
                     <td className="py-3.5 px-4 font-semibold text-foreground">
                       {e.title}

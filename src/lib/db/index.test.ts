@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   checkInAttendee,
   cleanupTestRegistrations,
+  createEvent,
+  createEventAsync,
   createRegistration,
+  getAllEvents,
+  getAllEventsAsync,
   getEventStats,
   getRegistrationByReference,
   getRegistrations,
@@ -158,5 +162,43 @@ describe("Database & Registration Engine", () => {
     const list = getRegistrations("devcraft-2025", { search: "Atharva" });
     expect(list.length).toBeGreaterThanOrEqual(1);
     expect(list[0].fullName).toBe("Atharva Joshi");
+  });
+
+  it("creates a new event and retrieves it in the events directory", async () => {
+    const testSlug = `test-hackathon-${Date.now()}`;
+    const result = await createEventAsync({
+      title: "VCET AI Hackathon 2026",
+      slug: testSlug,
+      startsAt: "2026-12-15T09:00:00+05:30",
+      format: "in-person",
+      location: "VCET Vasai Labs",
+      capacity: 100,
+      topics: ["ai-ml", "web"],
+      summary: "Annual flagship AI hackathon",
+      isRegistrationOpen: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.event).toBeDefined();
+    expect(result.event?.slug).toBe(testSlug);
+    expect(result.event?.title).toBe("VCET AI Hackathon 2026");
+
+    // Verify it appears in getAllEventsAsync & getAllEvents
+    const all = await getAllEventsAsync();
+    const found = all.find((e) => e.slug === testSlug);
+    expect(found).toBeDefined();
+    expect(found?.location).toBe("VCET Vasai Labs");
+
+    const syncAll = getAllEvents();
+    expect(syncAll.length).toBeGreaterThan(0);
+
+    // Duplicate slug must be rejected
+    const dupResult = createEvent({
+      title: "Duplicate Event",
+      slug: testSlug,
+      startsAt: "2026-12-16T09:00:00+05:30",
+    });
+    expect(dupResult.success).toBe(false);
+    expect(dupResult.error).toContain("already exists");
   });
 });

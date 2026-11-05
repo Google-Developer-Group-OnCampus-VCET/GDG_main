@@ -184,6 +184,20 @@ export interface RegistrationInput {
   agreedToCoc: boolean;
 }
 
+export interface EventInput {
+  title: string;
+  slug?: string;
+  startsAt: string;
+  endsAt?: string;
+  timezone?: string;
+  format?: EventFormat;
+  location?: string;
+  topics?: EventTopic[];
+  summary?: string;
+  capacity?: number;
+  isRegistrationOpen?: boolean;
+}
+
 export interface TeamMember {
   id: string;
   name: string;

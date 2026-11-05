@@ -1,10 +1,174 @@
 import { getAdminDb } from "@/lib/firebase/admin";
-import type { RegistrationInput, RegistrationRecord } from "@/types";
+import type { ChapterEvent, EventInput, RegistrationInput, RegistrationRecord } from "@/types";
 import type { CreateRegistrationResult, EventStats } from "./index";
 
 /**
  * Cloud Firestore Database Adapter for GDG on Campus VCET
  */
+
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export async function createFirestoreEvent(
+  input: EventInput
+): Promise<{ success: boolean; event?: ChapterEvent; error?: string }> {
+  const db = getAdminDb();
+  if (!db) return { success: false, error: "FIRESTORE_UNAVAILABLE" };
+
+  if (!input.title?.trim() || !input.startsAt?.trim()) {
+    return { success: false, error: "Title and start date are required." };
+  }
+
+  const slug = (input.slug?.trim() || slugify(input.title));
+  if (!slug) {
+    return { success: false, error: "Invalid title or slug." };
+  }
+
+  try {
+    const docRef = db.collection("events").doc(slug);
+    const existing = await docRef.get();
+    if (existing.exists) {
+      return { success: false, error: `An event with slug "${slug}" already exists.` };
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const eventRecord: ChapterEvent = {
+      id,
+      slug,
+      title: input.title.trim(),
+      startsAt: input.startsAt.trim(),
+      endsAt: input.endsAt?.trim() || undefined,
+      timezone: input.timezone?.trim() || "Asia/Kolkata",
+      format: input.format || "in-person",
+      location: input.location?.trim() || "Vidyavardhini's College of Engineering and Technology, Vasai",
+      topics: input.topics && input.topics.length > 0 ? input.topics : ["general"],
+      summary: input.summary?.trim() || undefined,
+      registrationUrl: `/events/${slug}/register`,
+    };
+
+    const docPayload = {
+      ...eventRecord,
+      capacity: input.capacity ?? 150,
+      isRegistrationOpen: input.isRegistrationOpen ?? true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await docRef.set(docPayload);
+
+    return { success: true, event: eventRecord };
+  } catch (err) {
+    console.warn("Firestore createEvent failed:", (err as Error).message);
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const snapshot = await db.collection("events").get();
+    if (snapshot.empty) return [];
+
+    const list: ChapterEvent[] = [];
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      list.push({
+        id: d.id || doc.id,
+        slug: d.slug || doc.id,
+        title: d.title,
+        startsAt: d.startsAt,
+        endsAt: d.endsAt || undefined,
+        timezone: d.timezone || "Asia/Kolkata",
+        format: d.format || "in-person",
+        location: d.location,
+        topics: d.topics || ["general"],
+        summary: d.summary || undefined,
+        registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
+        workshop: d.workshop || undefined,
+      });
+    });
+
+    return list;
+  } catch (err) {
+    console.warn("Firestore getEvents failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const doc = await db.collection("events").doc(slug).get();
+    if (!doc.exists) return null;
+
+    const d = doc.data();
+    if (!d) return null;
+
+    return {
+      id: d.id || doc.id,
+      slug: d.slug || doc.id,
+      title: d.title,
+      startsAt: d.startsAt,
+      endsAt: d.endsAt || undefined,
+      timezone: d.timezone || "Asia/Kolkata",
+      format: d.format || "in-person",
+      location: d.location,
+      topics: d.topics || ["general"],
+      summary: d.summary || undefined,
+      registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
+      workshop: d.workshop || undefined,
+    };
+  } catch (err) {
+    console.warn("Firestore getEvent failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function seedFirestoreInitialEvents(initialEvents: ChapterEvent[]): Promise<void> {
+  const db = getAdminDb();
+  if (!db) return;
+
+  try {
+    const snapshot = await db.collection("events").limit(1).get();
+    if (!snapshot.empty) return; // Already seeded
+
+    const batch = db.batch();
+    for (const event of initialEvents) {
+      const docRef = db.collection("events").doc(event.slug);
+      batch.set(docRef, {
+        id: event.id,
+        slug: event.slug,
+        title: event.title,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt || null,
+        timezone: event.timezone || "Asia/Kolkata",
+        format: event.format || "in-person",
+        location: event.location || "Vidyavardhini's College of Engineering and Technology, Vasai",
+        topics: event.topics || ["general"],
+        summary: event.summary || "",
+        capacity: event.workshop?.capacity ?? 150,
+        isRegistrationOpen: event.workshop?.registrationConfig?.isOpen ?? false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn("Firestore seedInitialEvents failed:", (err as Error).message);
+  }
+}
 
 export async function getFirestoreEventStats(slug: string): Promise<EventStats | null> {
   const db = getAdminDb();
