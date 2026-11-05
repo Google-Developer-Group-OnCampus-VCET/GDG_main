@@ -63,6 +63,24 @@ describe("Database & Registration Engine", () => {
     }
   });
 
+  it("defaults college to VCET when omitted or empty", () => {
+    const uniqueEmail = `test.default.college.${Date.now()}@vcet.edu.in`;
+    const result = createRegistration("devcraft-2025", {
+      fullName: "Default College Tester",
+      email: uniqueEmail,
+      phone: "+91 98765 22222",
+      track: "Track A: Modern Web & Gemini AI",
+      agreedToCoc: true,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.registration.college).toBe(
+        "Vidyavardhini's College of Engineering & Technology (VCET)"
+      );
+    }
+  });
+
   it("rejects duplicate email submissions for the same event", () => {
     const duplicateEmail = "atharva.joshi@vcet.edu.in"; // Seeded email
     const result = createRegistration("devcraft-2025", {

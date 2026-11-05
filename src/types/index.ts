@@ -174,7 +174,7 @@ export interface RegistrationInput {
   fullName: string;
   email: string;
   phone: string;
-  college: string;
+  college?: string;
   department?: string;
   yearOfStudy?: string;
   track: string;

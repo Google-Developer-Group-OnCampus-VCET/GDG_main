@@ -27,9 +27,7 @@ export function EventRegistrationView({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [college, setCollege] = useState(
-    "Vidyavardhini's College of Engineering & Technology (VCET)"
-  );
+  const [college, setCollege] = useState("");
   const [department, setDepartment] = useState(
     workshop.registrationConfig.departments[0] ?? "Computer Engineering"
   );
@@ -60,6 +58,8 @@ export function EventRegistrationView({
 
     setSubmitting(true);
 
+    const resolvedCollege = college.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)";
+
     try {
       const res = await fetch(`/api/events/${event.slug}/register`, {
         method: "POST",
@@ -68,7 +68,7 @@ export function EventRegistrationView({
           fullName: fullName.trim(),
           email: email.trim(),
           phone: phone.trim(),
-          college: college.trim(),
+          college: resolvedCollege,
           department,
           yearOfStudy,
           track,
@@ -361,26 +361,26 @@ export function EventRegistrationView({
                     </div>
                   </div>
 
-                  {/* 3. College / Institution (Pre-filled for VCET, fully editable) */}
-                  <div className="flex flex-col gap-1 text-left">
+                  {/* 3. College / Institution (Placeholder hint for VCET, editable) */}
+                  <div className="flex flex-col gap-1.5 text-left">
                     <div className="flex items-center justify-between">
                       <label htmlFor="college" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                        College / University <span className="text-rose-500">*</span>
+                        College / University
                       </label>
-                      <span className="text-[11px] text-primary font-medium">Editable</span>
+                      <span className="text-[11px] text-slate-400 font-medium">Defaults to VCET</span>
                     </div>
                     <input
                       id="college"
                       type="text"
-                      required
                       autoComplete="organization"
                       enterKeyHint="next"
                       value={college}
                       onChange={(e) => setCollege(e.target.value)}
-                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      placeholder="Vidyavardhini's College of Engineering & Technology (VCET)"
+                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                     <span className="text-[11px] text-slate-500">
-                      Defaulted for VCET. You can edit if attending from another college.
+                      Leave blank for VCET, or enter your college name if attending from another institute.
                     </span>
                   </div>
 

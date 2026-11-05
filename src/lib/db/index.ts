@@ -395,12 +395,11 @@ export function createRegistration(
 ): CreateRegistrationResult {
   const db = getDatabase();
 
-  // Required fields: fullName, email, phone, college, track
+  // Required fields: fullName, email, phone, track
   if (
     !input.fullName?.trim() ||
     !input.email?.trim() ||
     !input.phone?.trim() ||
-    !input.college?.trim() ||
     !input.track?.trim()
   ) {
     return { success: false, error: "INVALID_INPUT", message: "All required fields must be provided." };
@@ -410,6 +409,7 @@ export function createRegistration(
     return { success: false, error: "INVALID_INPUT", message: "You must agree to the Code of Conduct and guidelines." };
   }
 
+  const college = input.college?.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)";
   const department = input.department?.trim() || "Computer Engg";
   const yearOfStudy = input.yearOfStudy?.trim() || "3rd Year";
   const experienceLevel = input.experienceLevel?.trim() || "Intermediate";
@@ -458,7 +458,7 @@ export function createRegistration(
     input.fullName.trim(),
     emailNormalized,
     input.phone.trim(),
-    input.college.trim(),
+    college,
     department,
     yearOfStudy,
     input.track.trim(),
@@ -479,7 +479,7 @@ export function createRegistration(
       fullName: input.fullName.trim(),
       email: emailNormalized,
       phone: input.phone.trim(),
-      college: input.college.trim(),
+      college,
       department,
       yearOfStudy,
       track: input.track.trim(),
