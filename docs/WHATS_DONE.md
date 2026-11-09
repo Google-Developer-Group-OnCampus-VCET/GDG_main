@@ -103,14 +103,15 @@ The registration form (`src/components/workshop/event-registration-view.tsx`) wa
 ## 6. Official Chapter Branding, Favicon & Site Loader
 
 - **Favicon & App Icons**:
-  - Extracted and generated high-resolution crisp icons for the browser tab bar:
+  - Crisp, isolated square white-background icons for the browser tab bar and mobile bookmarks (no rectangular banner text):
+    - `src/app/icon.svg` & `public/icon.svg`: Vector SVG icon with the official Google 4-color brackets (`#4285F4`, `#EA4335`, `#34A853`, `#FBBC04`) on a pure white 1:1 square canvas.
     - `src/app/favicon.ico` & `public/favicon.ico`: 32x32 / 48x48 multi-resolution icons.
-    - `src/app/icon.png` & `public/icon.png`: 128x128 square icon featuring the official Google Developer Groups `<>` brackets emblem.
+    - `src/app/icon.png` & `public/icon.png`: 128x128 square icon with white background.
     - `src/app/apple-icon.png`: Apple touch icon for mobile home screens and bookmarks.
-    - `src/app/layout.tsx`: Explicit `icons` metadata declaration with fallback cascade.
+    - `src/app/layout.tsx`: Explicit `icons` metadata declaration (`/favicon.ico`, `/icon.svg`, `/icon.png`, `/apple-icon.png`).
 - **Site Loader & Splash Animation**:
-  - `src/components/site-loader.tsx`: Smooth initial site load splash featuring the official GDG on Campus VCET badge with an animated Google 4-color indeterminate loading bar. Gracefully fades out once the DOM has loaded.
-  - `src/app/loading.tsx`: Server Suspense fallback displaying the branded chapter loader during route streaming and page transitions.
+  - `src/components/site-loader.tsx`: Smooth initial splash screen featuring a white squared card (`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white border border-slate-200/90 shadow-md`) isolating the official Google Developer Groups `<>` emblem (`/images/gdg-logo-square.svg`), with the animated Google 4-color indeterminate loading bar beneath it. Fades out gracefully once the DOM is loaded.
+  - `src/app/loading.tsx`: Server Suspense fallback displaying the identical white-squared logo loader during route streaming and page transitions.
   - `src/app/globals.css`: Added `@keyframes loader-slide` animation for smooth, hardware-accelerated rendering.
 
 ---
