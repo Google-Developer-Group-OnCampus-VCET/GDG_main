@@ -37,31 +37,24 @@ export function EventSpeakersView({ event, workshop }: EventSpeakersViewProps) {
             <div className="flex flex-col gap-2 max-w-2xl">
               <div className="inline-flex items-center gap-2 text-primary font-semibold text-xs uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-                <span>Faculty &amp; Industry Lineup · DevCraft &apos;25</span>
+                <span>Speakers &amp; Organizing Team</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
-                Meet Our Instructors &amp; Mentors
+                Meet the Team Behind {event.title}
               </h1>
               <p className="text-base sm:text-lg text-foreground-muted pt-1">
-                Learn directly from Google Developer Experts, industry engineering leads, and experienced VCET alumni building world-class distributed systems.
+                The GDG on Campus VCET organizing leads running this event. Keynote speakers and hands-on
+                instructors will be announced as they&apos;re confirmed.
               </p>
             </div>
 
-            {/* Micro Stats Badge */}
+            {/* Speaker count — the only number here that's real, not a marketing claim */}
             <div className="flex items-center gap-4 bg-surface-container-low p-4 rounded-2xl border border-border shrink-0 self-start lg:self-auto">
               <div className="flex flex-col">
-                <span className="text-xl font-bold text-primary">12+</span>
-                <span className="text-xs text-foreground-muted">Active Mentors</span>
-              </div>
-              <div className="w-px h-8 bg-border"></div>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold text-secondary">4 : 1</span>
-                <span className="text-xs text-foreground-muted">Student Ratio</span>
-              </div>
-              <div className="w-px h-8 bg-border"></div>
-              <div className="flex flex-col">
-                <span className="text-xl font-bold text-tertiary">100%</span>
-                <span className="text-xs text-foreground-muted">Hands-on Labs</span>
+                <span className="text-xl font-bold text-primary">{workshop.speakers.length}</span>
+                <span className="text-xs text-foreground-muted">
+                  {workshop.speakers.length === 1 ? "Confirmed Speaker" : "Confirmed Speakers"}
+                </span>
               </div>
             </div>
           </div>
@@ -95,6 +88,11 @@ export function EventSpeakersView({ event, workshop }: EventSpeakersViewProps) {
       {/* Speakers Grid */}
       <section className="w-full py-16 bg-surface-container-low border-b border-border">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8">
+          {filteredSpeakers.length === 0 ? (
+            <div className="text-center py-12 text-foreground-muted text-sm">
+              No speakers announced in this category yet — check back soon.
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {filteredSpeakers.map((speaker, index) => {
               const borderAccent = categoryBorderColors[index % categoryBorderColors.length];
@@ -206,6 +204,7 @@ export function EventSpeakersView({ event, workshop }: EventSpeakersViewProps) {
               );
             })}
           </div>
+          )}
         </div>
       </section>
 

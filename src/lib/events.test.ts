@@ -4,6 +4,7 @@ import {
   availableFormats,
   availableTopics,
   defaultEventFilters,
+  eventSlugExists,
   filterEvents,
   formatEventDateRange,
   isUpcoming,
@@ -181,5 +182,22 @@ describe("availableTopics / availableFormats", () => {
   it("returns an empty array when nothing is present", () => {
     expect(availableTopics([])).toEqual([]);
     expect(availableFormats([])).toEqual([]);
+  });
+});
+
+describe("eventSlugExists", () => {
+  const staticEvents = [makeEvent({ id: "static-1", slug: "devcraft-2025" })];
+
+  it("recognizes a static workshop event even with no admin-DB row", () => {
+    expect(eventSlugExists("devcraft-2025", staticEvents, null)).toBe(true);
+  });
+
+  it("recognizes an admin-created event by its DB row", () => {
+    const dbEvent = makeEvent({ id: "db-1", slug: "admin-only-event" });
+    expect(eventSlugExists("admin-only-event", staticEvents, dbEvent)).toBe(true);
+  });
+
+  it("rejects a slug present in neither source", () => {
+    expect(eventSlugExists("does-not-exist", staticEvents, null)).toBe(false);
   });
 });

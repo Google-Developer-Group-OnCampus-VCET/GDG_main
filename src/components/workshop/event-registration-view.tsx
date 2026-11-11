@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ChapterEvent, RegistrationRecord, WorkshopDetails } from "@/types";
+import { formatEventDateRange } from "@/lib/events";
 
 interface EventRegistrationViewProps {
   event: ChapterEvent;
@@ -42,10 +43,9 @@ export function EventRegistrationView({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmedRegistration, setConfirmedRegistration] = useState<RegistrationRecord | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [previewPassMode, setPreviewPassMode] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [walletSuccess, setWalletSuccess] = useState(false);
 
   // Calculate live progress percentage
   let filledCount = 0;
@@ -100,6 +100,7 @@ export function EventRegistrationView({
       }
 
       setConfirmedRegistration(data.registration);
+      setQrDataUrl(typeof data.qrDataUrl === "string" ? data.qrDataUrl : null);
       setPreviewPassMode(false);
       setIsModalOpen(true);
       setSubmitting(false);
@@ -112,16 +113,6 @@ export function EventRegistrationView({
   function handleOpenPreviewPass() {
     setPreviewPassMode(true);
     setIsModalOpen(true);
-  }
-
-  function handleDownloadPass() {
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 3000);
-  }
-
-  function handleAddToWallet() {
-    setWalletSuccess(true);
-    setTimeout(() => setWalletSuccess(false), 3000);
   }
 
   const activePass = confirmedRegistration ?? {
@@ -217,26 +208,16 @@ export function EventRegistrationView({
                 </button>
               </div>
 
-              {/* Live stats micro-bar */}
-              <div className="flex items-center gap-3 pt-2">
-                <div className="flex -space-x-2 overflow-hidden">
-                  <div className="h-8 w-8 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    AK
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    PS
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-tertiary-fixed text-on-tertiary text-[11px] flex items-center justify-center font-bold border-2 border-white">
-                    RT
-                  </div>
-                  <div className="h-8 w-8 rounded-full bg-surface-container-high text-foreground text-[10px] flex items-center justify-center font-bold border-2 border-white">
-                    +120
-                  </div>
+              {/* Live stats micro-bar — only shown when we have a real count, never a placeholder number */}
+              {stats ? (
+                <div className="flex items-center gap-3 pt-2">
+                  <span className="material-symbols-outlined text-[20px] text-secondary">group</span>
+                  <p className="text-xs sm:text-sm text-foreground-muted">
+                    <strong className="text-foreground font-semibold">{stats.totalRegistered}</strong>{" "}
+                    {stats.totalRegistered === 1 ? "developer" : "developers"} registered so far
+                  </p>
                 </div>
-                <p className="text-xs sm:text-sm text-foreground-muted">
-                  <strong className="text-foreground font-semibold">124 developers</strong> already registered for 2025 cohort
-                </p>
-              </div>
+              ) : null}
             </div>
 
             {/* Right Visual / Stylized Isometric Graphic */}
@@ -784,14 +765,11 @@ export function EventRegistrationView({
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
-                      DevCraft &apos;25 Technical Summit
+                      GDG on Campus VCET
                     </span>
                     <h3 className="text-lg font-bold text-foreground">
-                      DevCraft: Architecting Scale
+                      {event.title}
                     </h3>
-                    <span className="text-xs text-foreground-muted">
-                      Modern Web • Cloud Architecture • Multimodal AI
-                    </span>
                   </div>
                   <span className="bg-secondary-fixed text-on-secondary-fixed text-[11px] px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
                     ALL-ACCESS PASS
@@ -835,41 +813,34 @@ export function EventRegistrationView({
                   <div className="flex flex-col gap-1.5 text-xs text-foreground-muted">
                     <div className="flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-[16px] text-tertiary">calendar_month</span>
-                      <span>Oct 18–19, 2025</span>
+                      <span>{formatEventDateRange(event)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
-                      <span>VCET Vasai · Labs 402 &amp; Auditorium</span>
-                    </div>
+                    {event.location ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-primary">location_on</span>
+                        <span>{event.location}</span>
+                      </div>
+                    ) : null}
                     <div className="flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-[16px] text-secondary">qr_code_scanner</span>
                       <span>Fast Entrance Check-in Enabled</span>
                     </div>
                   </div>
 
-                  {/* Scannable SVG QR Code */}
+                  {/* QR code: a real encoding of this pass's reference ID once registration is
+                      confirmed (generated server-side); a clearly-labeled sample placeholder
+                      while only previewing. */}
                   <div className="bg-white p-2 rounded-xl border border-border shadow-xs flex flex-col items-center shrink-0">
-                    <svg className="w-24 h-24" fill="none" viewBox="0 0 120 120">
-                      <rect fill="#FFFFFF" height="120" width="120" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="10" y="10" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="15" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="20" y="20" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="80" y="10" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="85" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="90" y="20" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="10" y="80" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="15" y="85" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="20" y="90" />
-                      <rect fill="#1A1B1E" height="15" width="10" x="45" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="15" x="60" y="10" />
-                      <rect fill="#1A73E8" height="30" width="30" x="45" y="45" />
-                      <circle cx="60" cy="60" fill="#FFFFFF" r="7" />
-                      <rect fill="#1A1B1E" height="10" width="25" x="85" y="50" />
-                      <rect fill="#1A1B1E" height="20" width="15" x="80" y="80" />
-                      <rect fill="#1A1B1E" height="20" width="10" x="100" y="90" />
-                      <rect fill="#1A1B1E" height="10" width="20" x="50" y="90" />
-                      <rect fill="#1A1B1E" height="15" width="20" x="15" y="55" />
-                    </svg>
+                    {!previewPassMode && qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- data: URL, not an optimizable remote image
+                      <img src={qrDataUrl} alt={`QR code for pass ${activePass.referenceId}`} className="w-24 h-24" />
+                    ) : (
+                      <div className="w-24 h-24 rounded-lg border border-dashed border-border flex items-center justify-center text-center p-2">
+                        <span className="text-[10px] text-foreground-muted">
+                          Sample only — a real QR code is issued after you register
+                        </span>
+                      </div>
+                    )}
                     <span className="font-mono text-[9px] text-foreground-muted font-bold mt-1">
                       SCAN AT ENTRANCE
                     </span>
@@ -879,22 +850,21 @@ export function EventRegistrationView({
 
               {/* Pass Actions */}
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleDownloadPass}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary py-2.5 px-4 rounded-full text-xs font-semibold hover:bg-primary-hover transition-all"
-                >
-                  <span className="material-symbols-outlined text-[16px]">download</span>
-                  <span>{downloadSuccess ? "Pass Saved to Device!" : "Download Pass (PDF)"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddToWallet}
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-surface-container text-foreground py-2.5 px-4 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-primary">account_balance_wallet</span>
-                  <span>{walletSuccess ? "Added to Google Wallet!" : "Add to Google Wallet"}</span>
-                </button>
+                {!previewPassMode && confirmedRegistration ? (
+                  <a
+                    href={`/api/events/${event.slug}/register/pass?referenceId=${encodeURIComponent(confirmedRegistration.referenceId)}`}
+                    download
+                    className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-on-primary py-2.5 px-4 rounded-full text-xs font-semibold hover:bg-primary-hover transition-all"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    <span>Download Pass (PDF)</span>
+                  </a>
+                ) : (
+                  <span className="flex-1 inline-flex items-center justify-center gap-2 bg-surface-container text-foreground-muted py-2.5 px-4 rounded-full text-xs font-semibold border border-border cursor-not-allowed">
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    <span>Download available after registering</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>

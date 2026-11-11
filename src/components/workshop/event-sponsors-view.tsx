@@ -16,22 +16,53 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
   const [partnerTier, setPartnerTier] = useState("Gold Tier ($1,500)");
   const [partnerMessage, setPartnerMessage] = useState("");
   const [partnerSubmitted, setPartnerSubmitted] = useState(false);
+  const [partnerError, setPartnerError] = useState<string | null>(null);
+  const [partnerSubmitting, setPartnerSubmitting] = useState(false);
 
   const titleSponsor = workshop.sponsors.find((s) => s.tier === "title");
   const goldSponsors = workshop.sponsors.filter((s) => s.tier === "gold");
   const platformPartners = workshop.sponsors.filter((s) => s.tier === "platform");
   const ecosystemPartners = workshop.sponsors.filter((s) => s.tier === "ecosystem");
 
-  const handleInquirySubmit = (e: React.FormEvent) => {
+  const handleInquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPartnerSubmitted(true);
-    setTimeout(() => {
-      setPartnerSubmitted(false);
-      setInquiryModalOpen(false);
-      setPartnerName("");
-      setPartnerEmail("");
-      setPartnerMessage("");
-    }, 2500);
+    setPartnerError(null);
+    setPartnerSubmitting(true);
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "sponsor",
+          fullName: partnerName,
+          email: partnerEmail,
+          organization: partnerName,
+          subject: `Sponsorship inquiry: ${partnerTier} — ${event.title}`,
+          message: partnerMessage,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPartnerError(data.message || "Failed to send your inquiry. Please try again.");
+        setPartnerSubmitting(false);
+        return;
+      }
+
+      setPartnerSubmitting(false);
+      setPartnerSubmitted(true);
+      setTimeout(() => {
+        setPartnerSubmitted(false);
+        setInquiryModalOpen(false);
+        setPartnerName("");
+        setPartnerEmail("");
+        setPartnerMessage("");
+      }, 2500);
+    } catch {
+      setPartnerError("Network connection error. Please try again.");
+      setPartnerSubmitting(false);
+    }
   };
 
   return (
@@ -48,31 +79,13 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
               <span className="uppercase tracking-wider">Allies in Tech Empowerment</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
-              Our Generous Sponsors &amp; Community Partners
+              Sponsors &amp; Community Partners
             </h1>
             <p className="text-base sm:text-lg text-foreground-muted leading-relaxed pt-1">
-              DevCraft 2025 is made possible thanks to our visionary partners supporting tech education, open student innovation, and developer growth in VCET.
+              {workshop.sponsors.length > 0
+                ? "This event is made possible thanks to our partners supporting tech education and developer growth at VCET."
+                : "No sponsors have been confirmed for this cohort yet. Interested in partnering? Reach out below."}
             </p>
-          </div>
-
-          {/* Quick Stats Metric Band */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
-            <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
-              <span className="text-2xl font-bold text-primary">150+</span>
-              <span className="text-xs text-foreground-muted font-medium">Top Student Coders</span>
-            </div>
-            <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
-              <span className="text-2xl font-bold text-secondary">$100k+</span>
-              <span className="text-xs text-foreground-muted font-medium">Cloud Perks &amp; Tooling</span>
-            </div>
-            <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
-              <span className="text-2xl font-bold text-tertiary">36 Hrs</span>
-              <span className="text-xs text-foreground-muted font-medium">Intensive Prototyping</span>
-            </div>
-            <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
-              <span className="text-2xl font-bold text-foreground">100%</span>
-              <span className="text-xs text-foreground-muted font-medium">Open Collegiate Access</span>
-            </div>
           </div>
         </div>
       </section>
@@ -130,9 +143,6 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
                 <span className="text-lg font-bold text-primary">
                   {titleSponsor.contribution}
                 </span>
-                <span className="text-xs text-foreground-muted">
-                  Empowering 150 students with Vertex AI &amp; Cloud Run runtimes
-                </span>
               </div>
             </div>
           </div>
@@ -140,6 +150,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
       ) : null}
 
       {/* TIER 2: Gold Sponsors */}
+      {goldSponsors.length > 0 ? (
       <section className="w-full py-12 bg-white border-b border-border">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
           <div className="flex items-center gap-2">
@@ -186,8 +197,10 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
           </div>
         </div>
       </section>
+      ) : null}
 
       {/* TIER 3: Platform & Tooling Partners */}
+      {platformPartners.length > 0 ? (
       <section className="w-full py-12 bg-surface-container-low border-b border-border">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-6">
           <div className="flex items-center gap-2">
@@ -218,6 +231,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
           </div>
         </div>
       </section>
+      ) : null}
 
       {/* TIER 4: Collegiate & Ecosystem Partners */}
       {ecosystemPartners.length > 0 ? (
@@ -253,44 +267,6 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
         </section>
       ) : null}
 
-      {/* Section 4: Budget Allocation Visualizer */}
-      <section className="w-full py-12 bg-white border-b border-border">
-        <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-surface-container-low p-6 sm:p-10 rounded-3xl border border-border flex flex-col lg:flex-row items-center justify-between gap-8">
-            <div className="max-w-xl flex flex-col gap-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                100% Non-Profit Community Impact
-              </span>
-              <h2 className="text-2xl font-bold text-foreground">
-                How Workshop Sponsorship Funds Are Allocated
-              </h2>
-              <p className="text-sm text-foreground-muted leading-relaxed">
-                Every sponsorship dollar goes directly into collegiate empowerment — from cloud runtime credits and mentor honorariums to hot meals and hardware prototyping components.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 w-full lg:w-96">
-              <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
-                <span className="text-2xl font-bold text-primary">45%</span>
-                <span className="text-xs text-foreground-muted font-medium">Cloud &amp; Tooling Credits</span>
-              </div>
-              <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
-                <span className="text-2xl font-bold text-secondary">25%</span>
-                <span className="text-xs text-foreground-muted font-medium">Food, Meals &amp; Logistics</span>
-              </div>
-              <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
-                <span className="text-2xl font-bold text-[#fbbc04]">15%</span>
-                <span className="text-xs text-foreground-muted font-medium">Swag Kits &amp; Hardware</span>
-              </div>
-              <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
-                <span className="text-2xl font-bold text-tertiary">15%</span>
-                <span className="text-xs text-foreground-muted font-medium">Student Hackathon Grants</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Become a Partner CTA */}
       <section className="w-full py-16 bg-surface-container-low">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center gap-4">
@@ -298,7 +274,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
             Partner With Us
           </span>
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Want to Sponsor DevCraft 2025 or Future GDG VCET Summits?
+            Want to Sponsor {event.title}?
           </h2>
           <p className="text-sm text-foreground-muted max-w-xl">
             Connect with top engineering talent across departments, showcase your developer APIs, and foster open innovation at VCET.
@@ -353,6 +329,12 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
               </div>
             ) : (
               <form onSubmit={handleInquirySubmit} className="flex flex-col gap-4">
+                {partnerError ? (
+                  <div className="p-3 rounded-xl bg-status-error/10 border border-status-error/30 text-status-error text-xs font-semibold flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px]">error</span>
+                    <span>{partnerError}</span>
+                  </div>
+                ) : null}
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-bold text-foreground">Company / Organization</label>
                   <input
@@ -400,9 +382,10 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
                 </div>
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-full bg-primary text-on-primary text-sm font-semibold hover:bg-primary-hover transition-all mt-2"
+                  disabled={partnerSubmitting}
+                  className="w-full py-3 rounded-full bg-primary text-on-primary text-sm font-semibold hover:bg-primary-hover transition-all mt-2 disabled:opacity-50"
                 >
-                  Send Partnership Inquiry
+                  {partnerSubmitting ? "Sending..." : "Send Partnership Inquiry"}
                 </button>
               </form>
             )}

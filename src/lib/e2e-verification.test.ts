@@ -28,9 +28,13 @@ describe("Comprehensive System Verification", () => {
       expect(devcraft).toBeDefined();
       expect(devcraft?.workshop).toBeDefined();
       expect(devcraft?.workshop?.capacity).toBe(150);
-      expect(devcraft?.workshop?.agenda.length).toBeGreaterThan(6);
-      expect(devcraft?.workshop?.speakers.length).toBeGreaterThan(8);
-      expect(devcraft?.workshop?.sponsors.length).toBeGreaterThan(6);
+      // Agenda/sponsors are honestly empty until confirmed (see docs/content-needed.md);
+      // speakers only lists the real, verified GDG VCET organizing leads — no fabricated
+      // keynote/mentor lineup.
+      expect(devcraft?.workshop?.agenda.length).toBe(0);
+      expect(devcraft?.workshop?.sponsors.length).toBe(0);
+      expect(devcraft?.workshop?.speakers.length).toBeGreaterThan(0);
+      expect(devcraft?.workshop?.speakers.every((s) => s.category === "leads")).toBe(true);
 
       // Verify historical events remain unchanged
       const pastSeminar = events.find(
