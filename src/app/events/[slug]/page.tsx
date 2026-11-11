@@ -2,21 +2,26 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { events } from "@/content/events";
-import { formatEventDateRange } from "@/lib/events";
-import { getEventStats } from "@/lib/db";
+import { events as staticEvents } from "@/content/events";
+import { formatEventDateRange, mergeEventSources } from "@/lib/events";
+import { getAllEventsAdmin, getEventStats } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventDetailsView } from "@/components/workshop/event-details-view";
 
+function allEvents() {
+  return mergeEventSources(staticEvents, getAllEventsAdmin());
+}
+
 export function generateStaticParams() {
+  const events = allEvents();
   if (events.length === 0) return [{ slug: "__placeholder__" }];
   return events.map((event) => ({ slug: event.slug }));
 }
 
 function findEvent(slug: string) {
-  return events.find((event) => event.slug === slug);
+  return allEvents().find((event) => event.slug === slug);
 }
 
 export async function generateMetadata({

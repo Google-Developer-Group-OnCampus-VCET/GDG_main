@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { events } from "@/content/events";
+import { events as staticEvents } from "@/content/events";
+import { getAllEventsAdmin } from "@/lib/db";
+import { mergeEventSources } from "@/lib/events";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EventsExplorer } from "@/components/events-explorer";
 
@@ -10,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 export default function EventsPage() {
+  const events = mergeEventSources(staticEvents, getAllEventsAdmin());
+
   return (
     <div className="mx-auto max-w-(--container-max) px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
       <div className="mb-10">

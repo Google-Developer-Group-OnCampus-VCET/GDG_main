@@ -1,64 +1,57 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
+import { getAdminUserByFirebaseUid } from "@/lib/db";
+import { verifyFirebaseSessionCookie } from "@/lib/firebase/auth";
+import { SESSION_COOKIE_NAME } from "@/lib/auth";
 
+/**
+ * This is the proxy/middleware the repository audit found effectively missing. A previous
+ * version at this same path (now replaced) enforced auth only for `/admin/console/**`
+ * (a dead, separate passcode-based admin surface, now deleted) and left plain `/admin/**` —
+ * the real admin panel — completely unguarded; it also checked a cookie belonging to that
+ * other auth system, so it would never have recognized a real session even where it did run.
+ * This is now the single real gate for every admin page and admin API route, backed by the
+ * one real Firebase-session system.
+ *
+ * This only proves "there is a valid, active session" (coarse-grained authentication).
+ * Fine-grained authorization (which permission a route needs) is still enforced inside each
+ * route handler via requirePermission() — this is defense in depth, not a replacement for it.
+ */
 export async function proxy(request: NextRequest) {
-  const { pathname, search } = request.nextUrl;
+  const { pathname } = request.nextUrl;
 
-  // Allow login page and login API endpoint without authentication
-  if (pathname === "/admin/console/login" || pathname === "/api/admin/login") {
-    // If user is already authenticated and visits login page, redirect to console dashboard
-    if (pathname === "/admin/console/login") {
-      const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
-      const isValid = await verifyAdminSessionToken(token);
-      if (isValid) {
-        return NextResponse.redirect(new URL("/admin/console", request.url));
-      }
-    }
+  if (pathname === "/admin/login") {
     return NextResponse.next();
   }
 
-  // Only enforce auth on admin console routes and admin API routes
-  const isConsoleRoute = pathname.startsWith("/admin/console");
-  const isAdminApiRoute = pathname.startsWith("/api/admin");
+  const isAdminPage = pathname.startsWith("/admin");
+  const isAdminApi = pathname.startsWith("/api/admin");
+  const isCheckIn = /^\/api\/events\/[^/]+\/check-in$/.test(pathname);
 
-  if (!isConsoleRoute && !isAdminApiRoute) {
-    // Non-console routes (e.g. probing plain /admin or /admin/login) pass through to Next.js 404 handler
+  if (!isAdminPage && !isAdminApi && !isCheckIn) {
     return NextResponse.next();
   }
 
-  // Check admin session token
-  const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
-  const isAuthenticated = await verifyAdminSessionToken(token);
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const verified = sessionCookie ? await verifyFirebaseSessionCookie(sessionCookie) : null;
+  const profile = verified ? getAdminUserByFirebaseUid(verified.uid) : null;
+  const authenticated = Boolean(profile && profile.status === "active");
 
-  if (!isAuthenticated) {
-    // For API requests, return 401 JSON
-    if (isAdminApiRoute) {
-      return NextResponse.json(
-        { error: "UNAUTHORIZED", message: "Admin authorization required." },
-        { status: 401 }
-      );
-    }
+  if (authenticated) {
+    return NextResponse.next();
+  }
 
-    // For console page requests, redirect to /admin/console/login with return URL
-    const loginUrl = new URL("/admin/console/login", request.url);
-    const destination = pathname + search;
-    if (destination !== "/admin/console") {
-      loginUrl.searchParams.set("next", destination);
-    }
+  if (isAdminPage) {
+    const loginUrl = new URL("/admin/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 }
 
-// Backward compatibility
+// Backward compatibility: some Next.js tooling/docs still reference the "middleware" export.
 export const middleware = proxy;
 
 export const config = {
-  matcher: [
-    "/admin",
-    "/admin/:path*",
-    "/api/admin/:path*",
-  ],
+  matcher: ["/admin/:path*", "/api/admin/:path*", "/api/events/:slug/check-in"],
 };

@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -44,3 +45,15 @@ next-env.d.ts
 data/*.db*
 data/*.db-wal
 data/*.db-shm
+
+# claude code personal/local config
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+
+# firebase emulator
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+storage-debug.log

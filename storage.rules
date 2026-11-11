@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// All real writes happen server-side through the Firebase Admin SDK (see
+// src/lib/firebase/storage.ts), which bypasses these rules entirely — Admin SDK calls are
+// privileged by design. These rules exist purely to constrain any *direct* client access to
+// the bucket, which this app does not use today but must still be denied by default.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /public-assets/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /private-assets/{allPaths=**} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
