@@ -34,7 +34,7 @@ export function buildEventReferenceId(
     : String(seq).padStart(4, "0");
 
   if (eventSlug === "devcraft-2025") {
-    return `GDG-VCET-2025-${numericPart}`;
+    return `GDG-VCET-2026-${numericPart}`;
   }
 
   const alnum = eventSlug.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -46,7 +46,7 @@ export function buildEventReferenceId(
   const hashSuffix = (hashNum % 1296).toString(36).padStart(2, "0").toUpperCase();
   const eventCode = `${slugPrefix}${hashSuffix}`;
 
-  return `GDG-${eventCode}-${numericPart}`;
+  return `GDG-${eventCode}-2026-${numericPart}`;
 }
 
 export async function createFirestoreEvent(

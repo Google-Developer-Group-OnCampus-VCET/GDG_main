@@ -74,7 +74,7 @@ describe("Comprehensive System Verification", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.registration.referenceId).toMatch(/^GDG-VCET-2025-\d{4}$/);
+        expect(result.registration.referenceId).toMatch(/^GDG-VCET-2026-\d{4}$/);
         expect(result.registration.fullName).toBe("Soham Parab");
         expect(result.registration.status).toBe("confirmed");
         expect(result.registration.checkedIn).toBe(false);

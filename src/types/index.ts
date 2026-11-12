@@ -153,7 +153,7 @@ export interface ChapterEvent {
 export interface RegistrationRecord {
   id: string;
   eventSlug: string;
-  referenceId: string; // e.g. "GDG-VCET-2025-0842"
+  referenceId: string; // e.g. "GDG-VCET-2026-0842"
   fullName: string;
   email: string;
   phone: string;

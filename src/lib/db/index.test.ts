@@ -65,7 +65,7 @@ describe("Database & Registration Engine", () => {
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.registration.referenceId).toMatch(/^GDG-VCET-2025-\d{4}$/);
+      expect(result.registration.referenceId).toMatch(/^GDG-VCET-2026-\d{4}$/);
       expect(result.registration.fullName).toBe("Test Candidate");
       expect(result.registration.email).toBe(uniqueEmail);
 
@@ -313,8 +313,8 @@ describe("Database & Registration Engine", () => {
   });
 
   it("generates distinct, event-scoped reference IDs across multiple custom events without collision", () => {
-    expect(buildEventReferenceId("devcraft-2025", 1)).toBe("GDG-VCET-2025-0001");
-    expect(buildEventReferenceId("custom-alpha-2026", 1)).toMatch(/^GDG-[A-Z0-9]{6}-0001$/);
+    expect(buildEventReferenceId("devcraft-2025", 1)).toBe("GDG-VCET-2026-0001");
+    expect(buildEventReferenceId("custom-alpha-2026", 1)).toMatch(/^GDG-[A-Z0-9]{6}-2026-0001$/);
 
     const ts = Date.now();
     const slugA = `test-alpha-${ts}`;
@@ -359,8 +359,8 @@ describe("Database & Registration Engine", () => {
     expect(regA.success).toBe(true);
     expect(regB.success).toBe(true);
     if (regA.success && regB.success) {
-      expect(regA.registration.referenceId).toMatch(/^GDG-[A-Z0-9]{6}-0001$/);
-      expect(regB.registration.referenceId).toMatch(/^GDG-[A-Z0-9]{6}-0001$/);
+      expect(regA.registration.referenceId).toMatch(/^GDG-[A-Z0-9]{6}-2026-0001$/);
+      expect(regB.registration.referenceId).toMatch(/^GDG-[A-Z0-9]{6}-2026-0001$/);
       expect(regA.registration.referenceId).not.toBe(regB.registration.referenceId);
     }
   });

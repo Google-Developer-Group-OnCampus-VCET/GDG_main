@@ -65,7 +65,7 @@ Requires an authenticated `gdg_admin_session` cookie.
 - `registrationUrl`: `/events/<slug>/register`.
 - `registeredCount`: Atomic counter maintained by `createFirestoreRegistration`.
 - `createdAt`, `updatedAt`: ISO timestamps.
-- **Pass Reference IDs:** Each non-DevCraft event automatically issues globally unique IDs in the format `GDG-<6-char-event-code>-0001` (collision-checked across all events).
+- **Pass Reference IDs:** Each non-DevCraft event automatically issues globally unique IDs in the format `GDG-<6-char-event-code>-2026-0001` (collision-checked across all events).
 
 > **Note on `devcraft-2025`:** `devcraft-2025` is currently seeded as a demo workshop in `src/content/events.ts` and `src/lib/db/index.ts`. Until removed from `src/content/events.ts`, you can close its registration in `/admin/console` (`Registration Closed`) so students cannot register for the placeholder event.
 
@@ -100,6 +100,6 @@ Set these in your host's **Environment Variables** dashboard (do **not** reuse s
 
 ## 3. Entrance QR Check-in Workflow
 
-- Every confirmed attendee pass encodes the exact `referenceId` string (e.g. `GDG-VCET-2025-0001` or `GDG-XXXXXX-0001`) inside a PNG QR code.
+- Every confirmed attendee pass encodes the exact `referenceId` string (e.g. `GDG-VCET-2026-0001` or `GDG-XXXXXX-2026-0001`) inside a PNG QR code.
 - `/admin/console/events/<slug>/check-in` supports both **Camera QR Scan** (click **Camera QR Scan** inside `Live Attendance Scanner` to use the rear camera with automatic 3-second duplicate-scan cooldown) and **manual / USB-scanner** entry of the `referenceId`.
 

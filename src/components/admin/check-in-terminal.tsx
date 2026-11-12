@@ -334,7 +334,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                   type="text"
                   value={refInput}
                   onChange={(e) => setRefInput(e.target.value)}
-                  placeholder="GDG-VCET-2025-XXXX"
+                  placeholder="GDG-VCET-2026-XXXX"
                   disabled={submitting}
                   autoFocus
                   className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
