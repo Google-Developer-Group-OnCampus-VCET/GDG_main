@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import os from "node:os";
+import path from "node:path";
 import {
   buildEventReferenceId,
   checkInAttendee,
@@ -12,6 +14,7 @@ import {
   getEventStats,
   getRegistrationByReference,
   getRegistrations,
+  resolveWritableDbPath,
   updateEvent,
   updateEventAsync,
 } from "./index";
@@ -443,5 +446,15 @@ describe("Database & Registration Engine", () => {
     const missing = await updateEventAsync(`test-missing-${ts}`, { capacity: 10 });
     expect(missing.success).toBe(false);
     expect(missing.error).toBe("EVENT_NOT_FOUND");
+  });
+
+  it("uses os.tmpdir() for SQLite on read-only Vercel serverless environments", () => {
+    vi.stubEnv("VERCEL", "1");
+    try {
+      const dbPath = resolveWritableDbPath();
+      expect(dbPath.startsWith(path.join(os.tmpdir(), "gdg-data"))).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

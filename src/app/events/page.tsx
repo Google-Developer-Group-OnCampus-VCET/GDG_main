@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import type { Metadata } from "next";
+import { events as staticEvents } from "@/content/events";
 import { getAllEventsAsync } from "@/lib/db";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EventsExplorer } from "@/components/events-explorer";
@@ -12,7 +13,12 @@ export const metadata: Metadata = {
 
 async function EventsListContent() {
   await connection();
-  const events = await getAllEventsAsync();
+  let events = staticEvents;
+  try {
+    events = await getAllEventsAsync();
+  } catch {
+    events = staticEvents;
+  }
   return <EventsExplorer events={events} />;
 }
 

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
@@ -28,20 +29,36 @@ import {
 
 export { buildEventReferenceId };
 
-// Ensure data directory exists
-const DATA_DIR = path.join(process.cwd(), "data");
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+export function resolveWritableDbPath(): string {
+  const isReadOnlyServerless =
+    process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-const DB_PATH = path.join(DATA_DIR, "gdg.db");
+  if (!isReadOnlyServerless) {
+    const localDir = path.join(process.cwd(), "data");
+    try {
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      fs.accessSync(localDir, fs.constants.W_OK);
+      return path.join(localDir, "gdg.db");
+    } catch {
+      // Fall through to writable temp directory
+    }
+  }
+
+  const tmpDir = path.join(os.tmpdir(), "gdg-data");
+  if (!fs.existsSync(tmpDir)) {
+    fs.mkdirSync(tmpDir, { recursive: true });
+  }
+  return path.join(tmpDir, "gdg.db");
+}
 
 let _db: DatabaseSync | null = null;
 
 export function getDatabase(): DatabaseSync {
   if (_db) return _db;
 
-  _db = new DatabaseSync(DB_PATH);
+  _db = new DatabaseSync(resolveWritableDbPath());
 
   // Enable WAL mode and busy timeout for high-concurrency read/write
   _db.exec(`
@@ -1026,7 +1043,12 @@ export async function getAllEventsAsync(): Promise<ChapterEvent[]> {
     console.warn("Firestore getAllEvents failed, falling back to local SQLite:", (err as Error).message);
   }
 
-  return getAllEvents();
+  try {
+    return getAllEvents();
+  } catch (err) {
+    console.warn("SQLite getAllEvents fallback failed, returning static events:", (err as Error).message);
+    return defaultEvents;
+  }
 }
 
 export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | null> {
@@ -1043,8 +1065,13 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     console.warn("Firestore getEvent failed, falling back to local SQLite:", (err as Error).message);
   }
 
-  const all = getAllEvents();
-  return all.find((e) => e.slug === slug) ?? null;
+  try {
+    const all = getAllEvents();
+    return all.find((e) => e.slug === slug) ?? null;
+  } catch (err) {
+    console.warn("SQLite getEventBySlug fallback failed, checking static events:", (err as Error).message);
+    return defaultEvents.find((e) => e.slug === slug) ?? null;
+  }
 }
 
 

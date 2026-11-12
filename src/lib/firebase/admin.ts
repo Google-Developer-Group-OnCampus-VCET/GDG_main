@@ -38,8 +38,9 @@ export function getAdminApp(): App | null {
       return adminApp;
     }
 
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.trim().replace(/^["']|["']$/g, "");
+    const privateKey = rawPrivateKey?.replace(/\\n/g, "\n");
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim().replace(/^["']|["']$/g, "");
 
     if (privateKey && clientEmail) {
       adminApp = initializeApp({
