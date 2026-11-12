@@ -9,19 +9,53 @@
 export const ADMIN_COOKIE_NAME = "gdg_admin_session";
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Default development password fallback if environment variable is unset
+// Default development fallbacks (never used when NODE_ENV === "production")
 const DEFAULT_DEV_ADMIN_PASSCODE = "devcraft-vcet-2025";
+const DEFAULT_DEV_ADMIN_EMAIL = "lead@vcet.edu.in";
 const DEFAULT_DEV_SESSION_SECRET = "gdg-vcet-super-secure-session-signing-secret-2025";
 
+function isProductionEnv(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 export function getAdminPasscode(): string {
-  return process.env.ADMIN_SECRET || process.env.ADMIN_PASSWORD || DEFAULT_DEV_ADMIN_PASSCODE;
+  return (
+    process.env.ADMIN_SECRET ||
+    process.env.ADMIN_PASSWORD ||
+    (isProductionEnv() ? "" : DEFAULT_DEV_ADMIN_PASSCODE)
+  );
+}
+
+export function getAdminEmail(): string {
+  return process.env.ADMIN_EMAIL || (isProductionEnv() ? "" : DEFAULT_DEV_ADMIN_EMAIL);
+}
+
+export function getAuthorizedAdminEmails(): string[] {
+  const rawList = [
+    process.env.ADMIN_EMAILS || "",
+    getAdminEmail(),
+  ]
+    .join(",")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  return Array.from(new Set(rawList));
+}
+
+export function isAuthorizedAdminEmail(email: string | undefined | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+  const allowlist = getAuthorizedAdminEmails();
+  return allowlist.some((allowed) => constantTimeEqual(normalized, allowed));
 }
 
 export function getSessionSigningSecret(): string {
   return (
     process.env.ADMIN_SESSION_SECRET ||
     process.env.ADMIN_SECRET ||
-    DEFAULT_DEV_SESSION_SECRET
+    (isProductionEnv() ? "" : DEFAULT_DEV_SESSION_SECRET)
   );
 }
 
@@ -93,6 +127,11 @@ function fromBase64<T>(str: string): T | null {
  * Generates an HMAC-signed session token for the admin.
  */
 export async function createAdminSessionToken(): Promise<string> {
+  const secret = getSessionSigningSecret();
+  if (!secret) {
+    throw new Error("ADMIN_SESSION_SECRET (or ADMIN_SECRET) must be configured in production.");
+  }
+
   const now = Date.now();
   const payload: AdminSessionPayload = {
     role: "admin",
@@ -101,7 +140,6 @@ export async function createAdminSessionToken(): Promise<string> {
   };
 
   const payloadEncoded = toBase64(payload);
-  const secret = getSessionSigningSecret();
   const signature = await hmacSign(payloadEncoded, secret);
 
   return `${payloadEncoded}.${signature}`;
@@ -113,13 +151,15 @@ export async function createAdminSessionToken(): Promise<string> {
 export async function verifyAdminSessionToken(token: string | undefined | null): Promise<boolean> {
   if (!token || typeof token !== "string") return false;
 
+  const secret = getSessionSigningSecret();
+  if (!secret) return false;
+
   const parts = token.split(".");
   if (parts.length !== 2) return false;
 
   const [payloadEncoded, signature] = parts;
   if (!payloadEncoded || !signature) return false;
 
-  const secret = getSessionSigningSecret();
   const expectedSignature = await hmacSign(payloadEncoded, secret);
 
   if (!constantTimeEqual(signature, expectedSignature)) {
@@ -144,8 +184,77 @@ export async function verifyAdminSessionToken(token: string | undefined | null):
  */
 export function verifyAdminPassword(input: string): boolean {
   if (!input) return false;
-  const target = getAdminPasscode();
-  return constantTimeEqual(input.trim(), target.trim());
+  const target = getAdminPasscode().trim();
+  if (!target) return false;
+  return constantTimeEqual(input.trim(), target);
+}
+
+/**
+ * Verifies an entered email and password against configured admin credentials.
+ */
+export function verifyAdminEmailPassword(emailInput: string, passwordInput: string): boolean {
+  if (!emailInput || !passwordInput) return false;
+  const configuredEmail = getAdminEmail().trim().toLowerCase();
+  const configuredPassword = (process.env.ADMIN_PASSWORD || getAdminPasscode()).trim();
+  if (!configuredEmail || !configuredPassword) return false;
+  return (
+    constantTimeEqual(emailInput.trim().toLowerCase(), configuredEmail) &&
+    constantTimeEqual(passwordInput.trim(), configuredPassword)
+  );
+}
+
+/**
+ * Restricts post-login redirect targets to internal /admin/console routes.
+ */
+export function sanitizeAdminNextUrl(rawNext: string | null | undefined): string {
+  if (!rawNext || typeof rawNext !== "string") return "/admin/console";
+  const trimmed = rawNext.trim();
+  if (
+    !trimmed.startsWith("/admin/console") ||
+    trimmed.startsWith("//") ||
+    trimmed.includes("\\") ||
+    /[\r\n\t]/.test(trimmed)
+  ) {
+    return "/admin/console";
+  }
+  const charAfterPrefix = trimmed.charAt("/admin/console".length);
+  if (
+    charAfterPrefix !== "" &&
+    charAfterPrefix !== "/" &&
+    charAfterPrefix !== "?" &&
+    charAfterPrefix !== "#"
+  ) {
+    return "/admin/console";
+  }
+  return trimmed;
+}
+
+/**
+ * Extracts and verifies the admin session cookie from a standard Request.
+ */
+export async function isAdminRequestAuthenticated(request: Request): Promise<boolean> {
+  const cookieHeader = request.headers.get("cookie") || "";
+  if (!cookieHeader) return false;
+
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex <= 0) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    if (key !== ADMIN_COOKIE_NAME) continue;
+
+    const rawVal = trimmed.slice(eqIndex + 1).trim();
+    let token: string;
+    try {
+      token = decodeURIComponent(rawVal);
+    } catch {
+      token = rawVal;
+    }
+    return verifyAdminSessionToken(token);
+  }
+
+  return false;
 }
 
 /**

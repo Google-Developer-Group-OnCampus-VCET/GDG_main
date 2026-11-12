@@ -3,6 +3,7 @@ import { Google_Sans } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteLoader } from "@/components/site-loader";
 
 const googleSans = Google_Sans({
   variable: "--font-google-sans",
@@ -17,6 +18,14 @@ export const metadata: Metadata = {
   },
   description:
     "GDG on Campus VCET is the student developer community at Vidyavardhini's College of Engineering and Technology, Vasai.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon.png", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -30,6 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <SiteLoader />
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>

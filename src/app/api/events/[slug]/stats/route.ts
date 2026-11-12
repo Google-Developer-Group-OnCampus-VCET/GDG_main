@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEventStats } from "@/lib/db";
+import { getEventStatsAsync } from "@/lib/db";
 
 export async function GET(
   _request: Request,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const stats = getEventStats(slug);
+    const stats = await getEventStatsAsync(slug);
     return NextResponse.json(stats);
   } catch (err) {
     console.error("Stats API error:", err);

@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Events: readable publicly; writes happen strictly server-side via Firebase Admin SDK
+    match /events/{eventSlug} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Registrations contain attendee PII: block all direct client SDK reads and writes
+    // (all registration, stats, and check-in operations run via server-side Admin SDK)
+    match /registrations/{registrationId} {
+      allow read, write: if false;
+    }
+
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

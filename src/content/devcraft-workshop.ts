@@ -1,7 +1,7 @@
 import type { WorkshopDetails } from "@/types";
 
 export const devcraftWorkshopData: WorkshopDetails = {
-  headline: "DevCraft: Architecting Scale with Modern Web, Cloud & AI",
+  headline: "DevCraft 2025",
   subheading:
     "A two-day intensive, project-driven developer workshop organized by Google Developer Groups on Campus VCET. Build production-grade cloud apps, master modern web performance, and network with tech leaders.",
   datesText: "Oct 18–19, 2025",

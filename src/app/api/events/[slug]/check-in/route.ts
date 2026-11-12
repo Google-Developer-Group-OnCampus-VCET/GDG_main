@@ -1,13 +1,49 @@
 import { NextResponse } from "next/server";
-import { checkInAttendee } from "@/lib/db";
+import { isAdminRequestAuthenticated } from "@/lib/auth";
+import { checkInAttendeeAsync } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const isAuthenticated = await isAdminRequestAuthenticated(request);
+    if (!isAuthenticated) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Admin authorization required for check-in." },
+        { status: 401 }
+      );
+    }
+
+    const ip = getClientIp(request);
+    const rate = checkRateLimit(`checkin:${ip}`, {
+      limit: 60,
+      windowMs: 60 * 1000,
+    });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: "RATE_LIMITED",
+          message: "Too many check-in requests. Slow down briefly.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rate.retryAfterSeconds) },
+        }
+      );
+    }
+
     const { slug } = await params;
-    const body = (await request.json()) as { referenceId?: string };
+    let body: { referenceId?: string };
+    try {
+      body = (await request.json()) as { referenceId?: string };
+    } catch {
+      return NextResponse.json(
+        { error: "INVALID_REQUEST", message: "Invalid JSON payload." },
+        { status: 400 }
+      );
+    }
 
     if (!body?.referenceId?.trim()) {
       return NextResponse.json(
@@ -16,7 +52,7 @@ export async function POST(
       );
     }
 
-    const result = checkInAttendee(slug, body.referenceId.trim());
+    const result = await checkInAttendeeAsync(slug, body.referenceId.trim());
 
     if (!result.success) {
       const isAlreadyCheckedIn = result.message.includes("ALREADY checked in");
@@ -43,4 +79,3 @@ export async function POST(
     );
   }
 }
-

@@ -1,6 +1,7 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { events } from "@/content/events";
-import { getEventStats } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { CheckInTerminal } from "@/components/admin/check-in-terminal";
 
@@ -19,18 +20,14 @@ export async function generateMetadata({
   };
 }
 
-export default async function AdminCheckInPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const event = events.find((e) => e.slug === slug);
+async function AdminCheckInContent({ slug }: { slug: string }) {
+  await connection();
+  const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
   let checkedInCount = 0;
   try {
-    const stats = getEventStats(slug);
+    const stats = await getEventStatsAsync(slug);
     checkedInCount = stats.checkedInCount;
   } catch {
     // fallback
@@ -61,3 +58,22 @@ export default async function AdminCheckInPage({
   );
 }
 
+export default async function AdminCheckInPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
+          Loading check-in terminal…
+        </div>
+      }
+    >
+      <AdminCheckInContent slug={slug} />
+    </Suspense>
+  );
+}

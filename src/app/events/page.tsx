@@ -1,6 +1,7 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import type { Metadata } from "next";
-import { events } from "@/content/events";
+import { getAllEventsAsync } from "@/lib/db";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EventsExplorer } from "@/components/events-explorer";
 
@@ -8,6 +9,12 @@ export const metadata: Metadata = {
   title: "Events",
   description: "Upcoming and past events from GDG on Campus VCET.",
 };
+
+async function EventsListContent() {
+  await connection();
+  const events = await getAllEventsAsync();
+  return <EventsExplorer events={events} />;
+}
 
 export default function EventsPage() {
   return (
@@ -21,7 +28,7 @@ export default function EventsPage() {
       </div>
 
       <Suspense fallback={<p className="text-sm text-foreground-muted">Loading events…</p>}>
-        <EventsExplorer events={events} />
+        <EventsListContent />
       </Suspense>
     </div>
   );
