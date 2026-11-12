@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 
     // 1. Verify Firebase ID Token if provided (requires server-side Firebase Admin Auth + allowlist/claim)
     if (idToken) {
-      const auth = getAdminAuth();
+      const auth = await getAdminAuth();
       if (!auth) {
         return NextResponse.json(
           {

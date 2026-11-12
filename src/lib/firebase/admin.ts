@@ -1,5 +1,5 @@
 import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
-import { getAuth, type Auth } from "firebase-admin/auth";
+import type { Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
 const globalForFirebase = globalThis as typeof globalThis & {
@@ -62,14 +62,21 @@ export function getAdminApp(): App | null {
   }
 }
 
-export function getAdminAuth(): Auth | null {
+export async function getAdminAuth(): Promise<Auth | null> {
   if (adminAuth) return adminAuth;
+  if (globalForFirebase.__gdgAdminAuth) {
+    adminAuth = globalForFirebase.__gdgAdminAuth;
+    return adminAuth;
+  }
   const app = getAdminApp();
   if (!app) return null;
   try {
+    const { getAuth } = await import("firebase-admin/auth");
     adminAuth = getAuth(app);
+    globalForFirebase.__gdgAdminAuth = adminAuth;
     return adminAuth;
-  } catch {
+  } catch (err) {
+    console.warn("Firebase Admin Auth unavailable:", (err as Error).message);
     return null;
   }
 }
