@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { GdgLogo } from "@/components/gdg-logo";
 import { loginWithEmail } from "@/lib/firebase/client";
+import { sanitizeAdminNextUrl } from "@/lib/auth";
 
 // Evaluated once at module scope to avoid Next.js 16 CacheComponents prerender instability
 const CURRENT_YEAR = new Date().getFullYear();
@@ -12,7 +13,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get("next") || "/admin/console";
+  const nextUrl = sanitizeAdminNextUrl(searchParams.get("next"));
 
   const [authMode, setAuthMode] = useState<"email" | "passcode">("email");
   const [email, setEmail] = useState("");

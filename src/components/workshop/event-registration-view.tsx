@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import QRCode from "qrcode";
+import { generatePassPdfBytes } from "@/lib/pass-pdf";
 import type { ChapterEvent, RegistrationRecord, WorkshopDetails } from "@/types";
 
 interface EventRegistrationViewProps {
@@ -20,8 +23,11 @@ export function EventRegistrationView({
   workshop,
   stats,
 }: EventRegistrationViewProps) {
-  const initialRemaining = stats?.remaining ?? 26;
-  const isRegistrationOpen = stats?.isOpen ?? workshop.registrationConfig.isOpen;
+  const capacity = stats?.capacity ?? workshop.capacity;
+  const [remainingSeats, setRemainingSeats] = useState(
+    stats?.remaining ?? Math.max(0, capacity - workshop.initialRegisteredCount)
+  );
+  const isRegistrationOpen = (stats?.isOpen ?? workshop.registrationConfig.isOpen) && remainingSeats > 0;
 
   // Form State — Streamlined & Mobile-Native
   const [fullName, setFullName] = useState("");
@@ -29,14 +35,14 @@ export function EventRegistrationView({
   const [phone, setPhone] = useState("");
   const [college, setCollege] = useState("");
   const [department, setDepartment] = useState(
-    workshop.registrationConfig.departments[0] ?? "Computer Engineering"
+    workshop.registrationConfig.departments[0] ?? "Computer Engg"
   );
   const [yearOfStudy, setYearOfStudy] = useState("3rd Year");
   const [track, setTrack] = useState(
-    workshop.registrationConfig.tracks[0]?.name ?? "Track A: Modern Web & Gemini AI"
+    workshop.registrationConfig.tracks[0]?.name ?? "General Admission"
   );
   const [portfolioUrl, setPortfolioUrl] = useState("");
-  const [agreedToCoc, setAgreedToCoc] = useState(true);
+  const [agreedToCoc, setAgreedToCoc] = useState(false);
 
   // Submission State
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +51,7 @@ export function EventRegistrationView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [previewPassMode, setPreviewPassMode] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [walletSuccess, setWalletSuccess] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,6 +93,7 @@ export function EventRegistrationView({
       }
 
       setConfirmedRegistration(data.registration);
+      setRemainingSeats((prev) => Math.max(0, prev - 1));
       setPreviewPassMode(false);
       setIsModalOpen(true);
       setSubmitting(false);
@@ -101,14 +108,28 @@ export function EventRegistrationView({
     setIsModalOpen(true);
   }
 
-  function handleDownloadPass() {
+  async function handleDownloadPass() {
+    const pdfBytes = await generatePassPdfBytes({
+      eventTitle: event.title,
+      datesText: workshop.datesText,
+      venueText: workshop.venueText,
+      registration: activePass,
+    });
+    const blob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gdg-vcet-pass-${activePass.referenceId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 3000);
   }
 
-  function handleAddToWallet() {
-    setWalletSuccess(true);
-    setTimeout(() => setWalletSuccess(false), 3000);
+  function handlePrintPass() {
+    window.print();
   }
 
   const activePass = confirmedRegistration ?? {
@@ -127,6 +148,25 @@ export function EventRegistrationView({
     checkedIn: false,
     createdAt: "2026-11-20T09:00:00.000Z",
   };
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    let cancelled = false;
+    QRCode.toDataURL(activePass.referenceId, {
+      width: 200,
+      margin: 1,
+      color: { dark: "#1A1B1E", light: "#FFFFFF" },
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isModalOpen, activePass.referenceId]);
 
   return (
     <div className="flex flex-col w-full bg-surface">
@@ -154,7 +194,7 @@ export function EventRegistrationView({
 
               {/* Main Headline */}
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
-                DevCraft 2025
+                {event.title}
               </h1>
 
               {/* Subheading */}
@@ -262,10 +302,10 @@ export function EventRegistrationView({
             <div className="text-center flex flex-col items-center gap-2">
               <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
                 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                <span>Fast Registration &bull; Only {initialRemaining} Seats Left</span>
+                <span>Fast Registration &bull; Only {remainingSeats} Seats Left</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                Claim Your Workshop Pass
+                Claim Your Event Pass
               </h2>
               <p className="text-xs sm:text-sm text-foreground-muted max-w-md">
                 Quick 30-second sign-up. Direct QR admission pass generated instantly upon submission.
@@ -284,7 +324,9 @@ export function EventRegistrationView({
                   </div>
                   <h3 className="text-lg font-bold text-foreground">Registration is Closed</h3>
                   <p className="text-xs text-foreground-muted max-w-sm">
-                    Workshop seating is at full capacity (150/150). Reach out on Discord for waitlist announcements.
+                    {remainingSeats <= 0
+                      ? `Event seating is at full capacity (${capacity}/${capacity}). Reach out to the chapter team for waitlist updates.`
+                      : "Registration for this event is currently closed by the organizers."}
                   </p>
                 </div>
               ) : (
@@ -617,10 +659,10 @@ export function EventRegistrationView({
                       GDG on Campus VCET
                     </span>
                     <h3 className="text-lg font-bold text-slate-900">
-                      DevCraft 2025
+                      {event.title}
                     </h3>
-                    <span className="text-xs text-slate-500">
-                      In-Person Technical Workshop &bull; Vasai
+                    <span className="text-xs text-slate-500 capitalize">
+                      {event.format ?? "in-person"} &bull; {workshop.venueText}
                     </span>
                   </div>
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
@@ -670,40 +712,31 @@ export function EventRegistrationView({
                         <line x1="8" y1="2" x2="8" y2="6" />
                         <line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
-                      <span>Oct 18–19, 2025</span>
+                      <span>{workshop.datesText}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                         <circle cx="12" cy="10" r="3" />
                       </svg>
-                      <span>VCET Vasai &bull; Labs &amp; Auditorium</span>
+                      <span>{workshop.venueText}</span>
                     </div>
                   </div>
 
-                  {/* Scannable SVG QR Code */}
+                  {/* Scannable Dynamic QR Code */}
                   <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-2xs flex flex-col items-center shrink-0">
-                    <svg className="w-20 h-20" fill="none" viewBox="0 0 120 120">
-                      <rect fill="#FFFFFF" height="120" width="120" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="10" y="10" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="15" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="20" y="20" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="80" y="10" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="85" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="90" y="20" />
-                      <rect fill="#1A1B1E" height="30" width="30" x="10" y="80" />
-                      <rect fill="#FFFFFF" height="20" width="20" x="15" y="85" />
-                      <rect fill="#1A1B1E" height="10" width="10" x="20" y="90" />
-                      <rect fill="#1A1B1E" height="15" width="10" x="45" y="15" />
-                      <rect fill="#1A1B1E" height="10" width="15" x="60" y="10" />
-                      <rect fill="#1A73E8" height="30" width="30" x="45" y="45" />
-                      <circle cx="60" cy="60" fill="#FFFFFF" r="7" />
-                      <rect fill="#1A1B1E" height="10" width="25" x="85" y="50" />
-                      <rect fill="#1A1B1E" height="20" width="15" x="80" y="80" />
-                      <rect fill="#1A1B1E" height="20" width="10" x="100" y="90" />
-                      <rect fill="#1A1B1E" height="10" width="20" x="50" y="90" />
-                      <rect fill="#1A1B1E" height="15" width="20" x="15" y="55" />
-                    </svg>
+                    {qrDataUrl ? (
+                      <Image
+                        src={qrDataUrl}
+                        alt={`QR code for ${activePass.referenceId}`}
+                        width={80}
+                        height={80}
+                        unoptimized
+                        className="w-20 h-20 rounded"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded bg-slate-100 animate-pulse" />
+                    )}
                     <span className="font-mono text-[9px] text-slate-400 font-bold mt-1">
                       SCAN AT ENTRANCE
                     </span>
@@ -723,18 +756,19 @@ export function EventRegistrationView({
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                  <span>{downloadSuccess ? "Pass Saved to Device!" : "Download Pass (PDF)"}</span>
+                  <span>{downloadSuccess ? "PDF Pass Downloaded!" : "Download Pass (PDF)"}</span>
                 </button>
                 <button
                   type="button"
-                  onClick={handleAddToWallet}
+                  onClick={handlePrintPass}
                   className="flex-1 inline-flex items-center justify-center gap-2 bg-slate-100 text-slate-800 py-2.5 px-4 rounded-xl text-xs font-semibold hover:bg-slate-200 active:scale-95 transition-all border border-slate-200 cursor-pointer"
                 >
                   <svg className="w-3.5 h-3.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <line x1="2" y1="10" x2="22" y2="10" />
+                    <polyline points="6 9 6 2 18 2 18 9" />
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                    <rect x="6" y="14" width="12" height="8" />
                   </svg>
-                  <span>{walletSuccess ? "Added to Google Wallet!" : "Add to Google Wallet"}</span>
+                  <span>Print / Save PDF</span>
                 </button>
               </div>
             </div>

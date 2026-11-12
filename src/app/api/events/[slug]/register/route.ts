@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createRegistrationAsync } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { RegistrationInput } from "@/types";
 
 export async function POST(
@@ -7,8 +8,34 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const ip = getClientIp(request);
+    const rate = checkRateLimit(`register:${ip}`, {
+      limit: 15,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          error: "RATE_LIMITED",
+          message: "Too many registration attempts. Please try again in a few minutes.",
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rate.retryAfterSeconds) },
+        }
+      );
+    }
+
     const { slug } = await params;
-    const body = (await request.json()) as RegistrationInput;
+    let body: RegistrationInput;
+    try {
+      body = (await request.json()) as RegistrationInput;
+    } catch {
+      return NextResponse.json(
+        { error: "INVALID_INPUT", message: "Invalid JSON request payload." },
+        { status: 400 }
+      );
+    }
 
     const result = await createRegistrationAsync(slug, body);
 
@@ -18,6 +45,7 @@ export async function POST(
         CAPACITY_FULL: 403,
         REGISTRATION_CLOSED: 403,
         INVALID_INPUT: 400,
+        EVENT_NOT_FOUND: 404,
       };
 
       return NextResponse.json(

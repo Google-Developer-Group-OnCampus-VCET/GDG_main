@@ -36,6 +36,9 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
   });
 
   const checkedInCount = registrations.filter((r) => r.checkedIn).length;
+  const availableTracks = Array.from(
+    new Set(registrations.map((r) => r.track).filter(Boolean))
+  );
 
   const exportColumns: ExportColumn<RegistrationRecord>[] = [
     { key: "referenceId", label: "Pass Reference ID" },
@@ -157,8 +160,11 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
             className="h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
           >
             <option value="all">All Tracks</option>
-            <option value="Track A: Modern Web & Gemini AI">Track A: Web &amp; AI</option>
-            <option value="Track B: Cloud Architecture & GCP">Track B: Cloud &amp; GCP</option>
+            {availableTracks.map((trk) => (
+              <option key={trk} value={trk}>
+                {trk}
+              </option>
+            ))}
           </select>
 
           <select
@@ -260,7 +266,11 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
 
                     <td className="py-2.5 px-3.5 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-100 inline-block">
-                        {reg.track.includes("Track A") ? "Track A (Web/AI)" : "Track B (Cloud/GCP)"}
+                        {reg.track.includes("Track A")
+                          ? "Track A (Web/AI)"
+                          : reg.track.includes("Track B")
+                            ? "Track B (Cloud/GCP)"
+                            : reg.track}
                       </span>
                     </td>
 

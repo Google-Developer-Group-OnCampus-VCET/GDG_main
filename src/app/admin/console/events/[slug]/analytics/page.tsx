@@ -1,6 +1,7 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { events } from "@/content/events";
-import { getEventStatsAsync } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
 
@@ -19,13 +20,9 @@ export async function generateMetadata({
   };
 }
 
-export default async function AdminAnalyticsPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const event = events.find((e) => e.slug === slug);
+async function AdminAnalyticsContent({ slug }: { slug: string }) {
+  await connection();
+  const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
   let stats;
@@ -33,29 +30,15 @@ export default async function AdminAnalyticsPage({
     stats = await getEventStatsAsync(slug);
   } catch {
     stats = {
-      totalRegistered: 124,
+      totalRegistered: 0,
       capacity: 150,
-      remaining: 26,
-      percentFilled: 83,
+      remaining: 150,
+      percentFilled: 0,
       isOpen: true,
-      checkedInCount: 19,
-      trackCounts: {
-        "Track A: Modern Web & Gemini AI": 68,
-        "Track B: Cloud Architecture & GCP": 56,
-      },
-      yearCounts: {
-        "3rd Year": 52,
-        "2nd Year": 38,
-        "4th Year": 24,
-        "1st Year": 10,
-      },
-      departmentCounts: {
-        "Computer Engg": 48,
-        "Information Tech": 36,
-        "AI & Data Science": 24,
-        "Electronics & Telecomm": 12,
-        "Other Engineering": 4,
-      },
+      checkedInCount: 0,
+      trackCounts: {},
+      yearCounts: {},
+      departmentCounts: {},
     };
   }
 
@@ -67,5 +50,25 @@ export default async function AdminAnalyticsPage({
         <AnalyticsView slug={slug} eventTitle={event.title} stats={stats} />
       </main>
     </div>
+  );
+}
+
+export default async function AdminAnalyticsPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
+          Loading event analytics…
+        </div>
+      }
+    >
+      <AdminAnalyticsContent slug={slug} />
+    </Suspense>
   );
 }

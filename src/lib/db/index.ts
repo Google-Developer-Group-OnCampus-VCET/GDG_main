@@ -6,21 +6,27 @@ import type {
   EventFormat,
   EventInput,
   EventTopic,
+  EventUpdateInput,
   RegistrationInput,
   RegistrationRecord,
 } from "@/types";
 import { events as defaultEvents } from "@/content/events";
+import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import {
+  buildEventReferenceId,
   getFirestoreEventStats,
   getFirestoreRegistrations,
   createFirestoreRegistration,
   checkInFirestoreAttendee,
   createFirestoreEvent,
+  updateFirestoreEvent,
   getFirestoreEvents,
   getFirestoreEvent,
   seedFirestoreInitialEvents,
   slugify,
 } from "./firestore";
+
+export { buildEventReferenceId };
 
 // Ensure data directory exists
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -264,6 +270,7 @@ export interface EventStats {
   remaining: number;
   percentFilled: number;
   isOpen: boolean;
+  isRegistrationOpen?: boolean;
   checkedInCount: number;
   trackCounts: Record<string, number>;
   yearCounts: Record<string, number>;
@@ -277,8 +284,12 @@ export function getEventStats(slug: string): EventStats {
     .prepare("SELECT capacity, is_registration_open FROM events WHERE slug = ?")
     .get(slug) as { capacity: number; is_registration_open: number } | undefined;
 
-  const capacity = eventRow?.capacity ?? 150;
-  const isOpen = (eventRow?.is_registration_open ?? 1) === 1;
+  const defaultMatch = defaultEvents.find((e) => e.slug === slug);
+  const capacity = eventRow?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+  const isRegistrationOpen =
+    eventRow !== undefined
+      ? eventRow.is_registration_open === 1
+      : (defaultMatch?.workshop?.registrationConfig?.isOpen ?? true);
 
   const totalRow = db
     .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled'")
@@ -315,14 +326,16 @@ export function getEventStats(slug: string): EventStats {
   }
 
   const remaining = Math.max(0, capacity - totalRegistered);
-  const percentFilled = Math.min(100, Math.round((totalRegistered / capacity) * 100));
+  const percentFilled =
+    capacity > 0 ? Math.min(100, Math.round((totalRegistered / capacity) * 100)) : 100;
 
   return {
     totalRegistered,
     capacity,
     remaining,
     percentFilled,
-    isOpen: isOpen && remaining > 0,
+    isOpen: isRegistrationOpen && remaining > 0,
+    isRegistrationOpen,
     checkedInCount,
     trackCounts,
     yearCounts,
@@ -393,38 +406,150 @@ export function createEvent(input: EventInput): { success: boolean; event?: Chap
   return { success: true, event };
 }
 
+function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
+  let topics: EventTopic[] = ["general"];
+  if (typeof r.topics === "string") {
+    try {
+      topics = JSON.parse(r.topics);
+    } catch {
+      topics = ["general"];
+    }
+  }
+
+  const slug = r.slug as string;
+  const defaultMatch = defaultEvents.find((e) => e.slug === slug);
+
+  return {
+    id: (r.id as string) || slug,
+    slug,
+    title: r.title as string,
+    startsAt: r.starts_at as string,
+    endsAt: (r.ends_at as string) || undefined,
+    timezone: (r.timezone as string) || "Asia/Kolkata",
+    format: (r.format as EventFormat) || "in-person",
+    location:
+      (r.location as string) ||
+      "Vidyavardhini's College of Engineering and Technology, Vasai",
+    topics,
+    summary: (r.summary as string) || defaultMatch?.summary,
+    registrationUrl: `/events/${slug}/register`,
+    workshop: defaultMatch?.workshop,
+  };
+}
+
+function ensureDefaultEventInSqlite(db: DatabaseSync, defMatch: ChapterEvent): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO events (
+      id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open, summary, topics
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    defMatch.id,
+    defMatch.slug,
+    defMatch.title,
+    defMatch.startsAt,
+    defMatch.endsAt ?? null,
+    defMatch.timezone ?? "Asia/Kolkata",
+    defMatch.format ?? "in-person",
+    defMatch.location ?? "Vidyavardhini's College of Engineering and Technology, Vasai",
+    defMatch.workshop?.capacity ?? 150,
+    defMatch.workshop?.registrationConfig?.isOpen === false ? 0 : 1,
+    defMatch.summary ?? "",
+    JSON.stringify(defMatch.topics ?? ["general"])
+  );
+}
+
+export function updateEvent(
+  slug: string,
+  input: EventUpdateInput
+): { success: boolean; event?: ChapterEvent; error?: string } {
+  const db = getDatabase();
+
+  if (input.title !== undefined && !input.title.trim()) {
+    return { success: false, error: "Title cannot be empty." };
+  }
+  if (input.startsAt !== undefined && !input.startsAt.trim()) {
+    return { success: false, error: "Start date cannot be empty." };
+  }
+  if (
+    input.capacity !== undefined &&
+    (typeof input.capacity !== "number" || !Number.isFinite(input.capacity) || input.capacity < 1)
+  ) {
+    return { success: false, error: "Capacity must be at least 1." };
+  }
+
+  const existing = db.prepare("SELECT slug FROM events WHERE slug = ?").get(slug);
+  if (!existing) {
+    const defMatch = defaultEvents.find((e) => e.slug === slug);
+    if (!defMatch) {
+      return { success: false, error: "EVENT_NOT_FOUND" };
+    }
+    ensureDefaultEventInSqlite(db, defMatch);
+  }
+
+  const setClauses: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  if (input.title !== undefined) {
+    setClauses.push("title = ?");
+    params.push(input.title.trim());
+  }
+  if (input.startsAt !== undefined) {
+    setClauses.push("starts_at = ?");
+    params.push(input.startsAt.trim());
+  }
+  if (input.endsAt !== undefined) {
+    setClauses.push("ends_at = ?");
+    params.push(input.endsAt.trim() || null);
+  }
+  if (input.timezone !== undefined) {
+    setClauses.push("timezone = ?");
+    params.push(input.timezone.trim() || "Asia/Kolkata");
+  }
+  if (input.format !== undefined) {
+    setClauses.push("format = ?");
+    params.push(input.format);
+  }
+  if (input.location !== undefined) {
+    setClauses.push("location = ?");
+    params.push(input.location.trim());
+  }
+  if (input.topics !== undefined) {
+    setClauses.push("topics = ?");
+    params.push(JSON.stringify(input.topics.length > 0 ? input.topics : ["general"]));
+  }
+  if (input.summary !== undefined) {
+    setClauses.push("summary = ?");
+    params.push(input.summary.trim() || "");
+  }
+  if (input.capacity !== undefined) {
+    setClauses.push("capacity = ?");
+    params.push(Math.floor(input.capacity));
+  }
+  if (input.isRegistrationOpen !== undefined) {
+    setClauses.push("is_registration_open = ?");
+    params.push(input.isRegistrationOpen ? 1 : 0);
+  }
+
+  if (setClauses.length > 0) {
+    params.push(slug);
+    db.prepare(`UPDATE events SET ${setClauses.join(", ")} WHERE slug = ?`).run(...params);
+  }
+
+  const updatedRow = db.prepare("SELECT * FROM events WHERE slug = ?").get(slug) as
+    | Record<string, unknown>
+    | undefined;
+  if (!updatedRow) {
+    return { success: false, error: "EVENT_NOT_FOUND" };
+  }
+
+  return { success: true, event: mapEventRowToChapterEvent(updatedRow) };
+}
+
 export function getAllEvents(): ChapterEvent[] {
   const db = getDatabase();
   const rows = db.prepare("SELECT * FROM events ORDER BY starts_at DESC").all() as Record<string, unknown>[];
 
-  const dbEvents: ChapterEvent[] = rows.map((r) => {
-    let topics: EventTopic[] = ["general"];
-    if (typeof r.topics === "string") {
-      try {
-        topics = JSON.parse(r.topics);
-      } catch {
-        topics = ["general"];
-      }
-    }
-
-    const slug = r.slug as string;
-    const defaultMatch = defaultEvents.find((e) => e.slug === slug);
-
-    return {
-      id: (r.id as string) || slug,
-      slug,
-      title: r.title as string,
-      startsAt: r.starts_at as string,
-      endsAt: (r.ends_at as string) || undefined,
-      timezone: (r.timezone as string) || "Asia/Kolkata",
-      format: (r.format as EventFormat) || "in-person",
-      location: (r.location as string) || "Vidyavardhini's College of Engineering and Technology, Vasai",
-      topics,
-      summary: (r.summary as string) || defaultMatch?.summary,
-      registrationUrl: `/events/${slug}/register`,
-      workshop: defaultMatch?.workshop,
-    };
-  });
+  const dbEvents: ChapterEvent[] = rows.map(mapEventRowToChapterEvent);
 
   const merged = [...dbEvents];
   for (const def of defaultEvents) {
@@ -522,7 +647,11 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
 
 export type CreateRegistrationResult =
   | { success: true; registration: RegistrationRecord }
-  | { success: false; error: "DUPLICATE_EMAIL" | "CAPACITY_FULL" | "REGISTRATION_CLOSED" | "INVALID_INPUT"; message: string };
+  | {
+      success: false;
+      error: "DUPLICATE_EMAIL" | "CAPACITY_FULL" | "REGISTRATION_CLOSED" | "INVALID_INPUT" | "EVENT_NOT_FOUND";
+      message: string;
+    };
 
 export function createRegistration(
   eventSlug: string,
@@ -530,26 +659,33 @@ export function createRegistration(
 ): CreateRegistrationResult {
   const db = getDatabase();
 
-  // Required fields: fullName, email, phone, track
-  if (
-    !input.fullName?.trim() ||
-    !input.email?.trim() ||
-    !input.phone?.trim() ||
-    !input.track?.trim()
-  ) {
-    return { success: false, error: "INVALID_INPUT", message: "All required fields must be provided." };
+  const validated = validateAndNormalizeRegistrationInput(input);
+  if (!validated.valid) {
+    return { success: false, error: "INVALID_INPUT", message: validated.message };
   }
 
-  if (!input.agreedToCoc) {
-    return { success: false, error: "INVALID_INPUT", message: "You must agree to the Code of Conduct and guidelines." };
+  const {
+    fullName,
+    email: emailNormalized,
+    phone,
+    college,
+    department,
+    yearOfStudy,
+    track,
+    experienceLevel,
+    portfolioUrl,
+    notes,
+  } = validated.data;
+
+  // Ensure event exists in SQLite or static catalog
+  const existingEvent = db.prepare("SELECT slug FROM events WHERE slug = ?").get(eventSlug);
+  if (!existingEvent) {
+    const defMatch = defaultEvents.find((e) => e.slug === eventSlug);
+    if (!defMatch) {
+      return { success: false, error: "EVENT_NOT_FOUND", message: `Event "${eventSlug}" was not found.` };
+    }
+    ensureDefaultEventInSqlite(db, defMatch);
   }
-
-  const college = input.college?.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)";
-  const department = input.department?.trim() || "Computer Engg";
-  const yearOfStudy = input.yearOfStudy?.trim() || "3rd Year";
-  const experienceLevel = input.experienceLevel?.trim() || "Intermediate";
-
-  const emailNormalized = input.email.trim().toLowerCase();
 
   // Check duplicate
   const existing = db
@@ -566,20 +702,23 @@ export function createRegistration(
 
   // Check capacity & open status
   const stats = getEventStats(eventSlug);
-  if (!stats.isOpen) {
+  if (stats.isRegistrationOpen === false) {
     return { success: false, error: "REGISTRATION_CLOSED", message: "Registration for this event is currently closed." };
   }
 
   if (stats.remaining <= 0) {
-    return { success: false, error: "CAPACITY_FULL", message: "Workshop capacity has been reached (150/150 seats reserved)." };
+    return {
+      success: false,
+      error: "CAPACITY_FULL",
+      message: `Workshop capacity has been reached (${stats.totalRegistered}/${stats.capacity} seats reserved).`,
+    };
   }
 
-  // Generate Reference ID: GDG-VCET-2025-XXXX (guaranteed collision-free)
+  // Generate Reference ID (guaranteed collision-free across all events)
   const nextNum = stats.totalRegistered + 1;
-  let referenceId = `GDG-VCET-2025-${String(nextNum).padStart(4, "0")}`;
+  let referenceId = buildEventReferenceId(eventSlug, nextNum);
   while (db.prepare("SELECT id FROM registrations WHERE reference_id = ?").get(referenceId)) {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    referenceId = `GDG-VCET-2025-${randomSuffix}`;
+    referenceId = buildEventReferenceId(eventSlug, nextNum, true);
   }
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
@@ -594,16 +733,16 @@ export function createRegistration(
     id,
     eventSlug,
     referenceId,
-    input.fullName.trim(),
+    fullName,
     emailNormalized,
-    input.phone.trim(),
+    phone,
     college,
     department,
     yearOfStudy,
-    input.track.trim(),
+    track,
     experienceLevel,
-    input.portfolioUrl?.trim() || null,
-    input.notes?.trim() || null,
+    portfolioUrl ?? null,
+    notes ?? null,
     "confirmed",
     0,
     createdAt
@@ -615,16 +754,16 @@ export function createRegistration(
       id,
       eventSlug,
       referenceId,
-      fullName: input.fullName.trim(),
+      fullName,
       email: emailNormalized,
-      phone: input.phone.trim(),
+      phone,
       college,
       department,
       yearOfStudy,
-      track: input.track.trim(),
+      track,
       experienceLevel,
-      portfolioUrl: input.portfolioUrl?.trim() || undefined,
-      notes: input.notes?.trim() || undefined,
+      portfolioUrl,
+      notes,
       status: "confirmed",
       checkedIn: false,
       createdAt,
@@ -699,7 +838,7 @@ export async function getRegistrationsAsync(
 ): Promise<RegistrationRecord[]> {
   try {
     const firestoreRegs = await getFirestoreRegistrations(eventSlug, options);
-    if (firestoreRegs && firestoreRegs.length > 0) return firestoreRegs;
+    if (firestoreRegs !== null) return firestoreRegs;
   } catch (err) {
     console.warn("Firestore registrations query failed, falling back to local SQLite:", (err as Error).message);
   }
@@ -717,6 +856,27 @@ export async function createRegistrationAsync(
         try {
           const db = getDatabase();
           const r = firestoreResult.registration;
+          const localEvent = db.prepare("SELECT slug FROM events WHERE slug = ?").get(eventSlug);
+          if (!localEvent) {
+            const fsEvent = await getFirestoreEvent(eventSlug);
+            if (fsEvent) {
+              db.prepare(`
+                INSERT OR IGNORE INTO events (id, slug, title, starts_at, ends_at, timezone, format, location, summary, topics)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                fsEvent.id,
+                fsEvent.slug,
+                fsEvent.title,
+                fsEvent.startsAt,
+                fsEvent.endsAt ?? null,
+                fsEvent.timezone ?? "Asia/Kolkata",
+                fsEvent.format ?? "in-person",
+                fsEvent.location ?? "Vidyavardhini's College of Engineering and Technology, Vasai",
+                fsEvent.summary ?? "",
+                JSON.stringify(fsEvent.topics ?? ["general"])
+              );
+            }
+          }
           db.prepare(`
             INSERT OR REPLACE INTO registrations (
               id, event_slug, reference_id, full_name, email, phone, college,
@@ -799,6 +959,48 @@ export async function createEventAsync(
   }
 
   return createEvent(input);
+}
+
+export async function updateEventAsync(
+  slug: string,
+  input: EventUpdateInput
+): Promise<{ success: boolean; event?: ChapterEvent; error?: string }> {
+  try {
+    const firestoreResult = await updateFirestoreEvent(slug, input);
+    if (firestoreResult) {
+      if (firestoreResult.success && firestoreResult.event) {
+        try {
+          const localResult = updateEvent(slug, input);
+          if (!localResult.success && localResult.error === "EVENT_NOT_FOUND") {
+            const ev = firestoreResult.event;
+            createEvent({
+              slug: ev.slug,
+              title: ev.title,
+              startsAt: ev.startsAt,
+              endsAt: ev.endsAt,
+              timezone: ev.timezone,
+              format: ev.format,
+              location: ev.location,
+              topics: ev.topics,
+              summary: ev.summary,
+              capacity: input.capacity,
+              isRegistrationOpen: input.isRegistrationOpen,
+            });
+          }
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+        return firestoreResult;
+      }
+      if (firestoreResult.error !== "EVENT_NOT_FOUND") {
+        return firestoreResult;
+      }
+    }
+  } catch (err) {
+    console.warn("Firestore updateEvent failed, falling back to local SQLite:", (err as Error).message);
+  }
+
+  return updateEvent(slug, input);
 }
 
 export async function getAllEventsAsync(): Promise<ChapterEvent[]> {

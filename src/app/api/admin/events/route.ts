@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
+import { isAdminRequestAuthenticated } from "@/lib/auth";
 import { createEventAsync, getAllEventsAsync } from "@/lib/db";
 import type { EventInput } from "@/types";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const isAuthenticated = await isAdminRequestAuthenticated(request);
+    if (!isAuthenticated) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Admin authorization required." },
+        { status: 401 }
+      );
+    }
+
     const events = await getAllEventsAsync();
     return NextResponse.json({ success: true, events });
   } catch (err) {
@@ -19,15 +27,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     // 1. Verify admin session token
-    const cookieHeader = request.headers.get("cookie") || "";
-    const cookies = Object.fromEntries(
-      cookieHeader.split(";").map((c) => {
-        const [k, ...v] = c.trim().split("=");
-        return [k, decodeURIComponent(v.join("="))];
-      })
-    );
-    const token = cookies[ADMIN_COOKIE_NAME];
-    const isAuthenticated = await verifyAdminSessionToken(token);
+    const isAuthenticated = await isAdminRequestAuthenticated(request);
 
     if (!isAuthenticated) {
       return NextResponse.json(

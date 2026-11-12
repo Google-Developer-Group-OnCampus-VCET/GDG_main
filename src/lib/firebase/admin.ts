@@ -2,9 +2,16 @@ import { getApps, initializeApp, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-let adminApp: App | null = null;
-let adminAuth: Auth | null = null;
-let adminDb: Firestore | null = null;
+const globalForFirebase = globalThis as typeof globalThis & {
+  __gdgAdminApp?: App | null;
+  __gdgAdminAuth?: Auth | null;
+  __gdgAdminDb?: Firestore | null;
+  __gdgFirestoreSettingsApplied?: boolean;
+};
+
+let adminApp: App | null = globalForFirebase.__gdgAdminApp ?? null;
+let adminAuth: Auth | null = globalForFirebase.__gdgAdminAuth ?? null;
+let adminDb: Firestore | null = globalForFirebase.__gdgAdminDb ?? null;
 
 export function isFirebaseAdminConfigured(): boolean {
   if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
@@ -68,12 +75,28 @@ export function getAdminAuth(): Auth | null {
 
 export function getAdminDb(): Firestore | null {
   if (adminDb) return adminDb;
+  if (globalForFirebase.__gdgAdminDb) {
+    adminDb = globalForFirebase.__gdgAdminDb;
+    return adminDb;
+  }
   const app = getAdminApp();
   if (!app) return null;
   try {
-    adminDb = getFirestore(app);
+    const db = getFirestore(app);
+    if (!globalForFirebase.__gdgFirestoreSettingsApplied) {
+      try {
+        db.settings({ ignoreUndefinedProperties: true });
+        globalForFirebase.__gdgFirestoreSettingsApplied = true;
+      } catch {
+        // Settings were already locked on this Firestore instance in another chunk
+        globalForFirebase.__gdgFirestoreSettingsApplied = true;
+      }
+    }
+    adminDb = db;
+    globalForFirebase.__gdgAdminDb = db;
     return adminDb;
-  } catch {
+  } catch (err) {
+    console.warn("Firebase Admin Firestore initialization failed:", (err as Error).message);
     return null;
   }
 }

@@ -1,18 +1,18 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { Metadata } from "next";
-import { events } from "@/content/events";
-import { getEventStats } from "@/lib/db";
+import { events as staticEvents } from "@/content/events";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventRegistrationView } from "@/components/workshop/event-registration-view";
 
 export function generateStaticParams() {
-  return events
+  return staticEvents
     .filter((e) => Boolean(e.workshop))
     .map((event) => ({ slug: event.slug }));
-}
-
-function findEvent(slug: string) {
-  return events.find((event) => event.slug === slug);
 }
 
 export async function generateMetadata({
@@ -21,12 +21,60 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const event = findEvent(slug);
-  if (!event || !event.workshop) return { title: "Register" };
+  const staticMatch = staticEvents.find((e) => e.slug === slug);
+  if (staticMatch) {
+    return {
+      title: `Register · ${staticMatch.title}`,
+      description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
+    };
+  }
+  await connection();
+  const event = await getEventBySlugAsync(slug);
+  if (!event) return { title: "Register" };
   return {
     title: `Register · ${event.title}`,
     description: `Official registration for ${event.title} at GDG on Campus VCET.`,
   };
+}
+
+async function EventRegisterContent({ slug }: { slug: string }) {
+  await connection();
+  const event = await getEventBySlugAsync(slug);
+  if (!event) notFound();
+
+  let stats;
+  try {
+    stats = await getEventStatsAsync(slug);
+  } catch {
+    // fallback to defaults
+  }
+
+  const workshop = resolveWorkshopDetails(event, stats);
+
+  return (
+    <div className="w-full flex flex-col">
+      {event.workshop ? (
+        <EventSubNav event={event} />
+      ) : (
+        <div className="border-b border-border bg-white/95 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-(--container-max) items-center justify-between text-xs">
+            <Link
+              href={`/events/${event.slug}`}
+              className="font-semibold text-primary hover:text-primary-hover"
+            >
+              ← Back to {event.title}
+            </Link>
+            <span className="text-foreground-muted">Official Registration</span>
+          </div>
+        </div>
+      )}
+      <EventRegistrationView
+        event={event}
+        workshop={workshop}
+        stats={stats}
+      />
+    </div>
+  );
 }
 
 export default async function EventRegisterPage({
@@ -35,25 +83,16 @@ export default async function EventRegisterPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = findEvent(slug);
-  if (!event || !event.workshop) notFound();
-
-  let stats;
-  try {
-    stats = getEventStats(slug);
-  } catch {
-    // fallback
-  }
 
   return (
-    <div className="w-full flex flex-col">
-      <EventSubNav event={event} />
-      <EventRegistrationView
-        event={event}
-        workshop={event.workshop}
-        stats={stats}
-      />
-    </div>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-(--container-max) px-4 py-16 text-sm text-foreground-muted">
+          Loading registration form…
+        </div>
+      }
+    >
+      <EventRegisterContent slug={slug} />
+    </Suspense>
   );
 }
-

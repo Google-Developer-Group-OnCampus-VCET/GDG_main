@@ -18,9 +18,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Only enforce auth on admin console routes and admin API routes
+  // Only enforce auth on admin console routes, admin API routes, and check-in API
   const isConsoleRoute = pathname.startsWith("/admin/console");
-  const isAdminApiRoute = pathname.startsWith("/api/admin");
+  const isAdminApiRoute =
+    pathname.startsWith("/api/admin") ||
+    (pathname.startsWith("/api/events/") && pathname.endsWith("/check-in"));
 
   if (!isConsoleRoute && !isAdminApiRoute) {
     // Non-console routes (e.g. probing plain /admin or /admin/login) pass through to Next.js 404 handler
@@ -60,5 +62,6 @@ export const config = {
     "/admin",
     "/admin/:path*",
     "/api/admin/:path*",
+    "/api/events/:path*/check-in",
   ],
 };

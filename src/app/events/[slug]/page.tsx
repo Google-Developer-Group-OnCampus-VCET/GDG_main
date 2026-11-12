@@ -1,22 +1,19 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import type { Metadata } from "next";
-import { events } from "@/content/events";
+import { events as staticEvents } from "@/content/events";
 import { formatEventDateRange } from "@/lib/events";
-import { getEventStats } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventDetailsView } from "@/components/workshop/event-details-view";
 
 export function generateStaticParams() {
-  if (events.length === 0) return [{ slug: "__placeholder__" }];
-  return events.map((event) => ({ slug: event.slug }));
-}
-
-function findEvent(slug: string) {
-  return events.find((event) => event.slug === slug);
+  if (staticEvents.length === 0) return [{ slug: "__placeholder__" }];
+  return staticEvents.map((event) => ({ slug: event.slug }));
 }
 
 export async function generateMetadata({
@@ -25,7 +22,12 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const event = findEvent(slug);
+  const staticMatch = staticEvents.find((e) => e.slug === slug);
+  if (staticMatch) {
+    return { title: staticMatch.title, description: staticMatch.summary };
+  }
+  await connection();
+  const event = await getEventBySlugAsync(slug);
   if (!event) return { title: "Event not found" };
   return { title: event.title, description: event.summary };
 }
@@ -36,20 +38,16 @@ const formatLabels: Record<string, string> = {
   hybrid: "Hybrid",
 };
 
-export default async function EventDetailPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  const { slug } = await params;
-  const event = findEvent(slug);
+async function EventDetailContent({ slug }: { slug: string }) {
+  await connection();
+  const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
   // If this event has rich workshop data, render the full Stitch-based workshop experience
   if (event.workshop) {
     let stats;
     try {
-      stats = getEventStats(slug);
+      stats = await getEventStatsAsync(slug);
     } catch {
       // Fallback to static numbers if db is initializing
     }
@@ -62,12 +60,10 @@ export default async function EventDetailPage({
     );
   }
 
-  // Otherwise, render the clean, verified historical event detail layout
+  // Otherwise, render the clean event detail layout with live registration CTA
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
-      <Suspense fallback={<p className="h-5" />}>
-        <EventStatusEyebrow event={event} />
-      </Suspense>
+      <EventStatusEyebrow event={event} />
 
       <h1 className="mt-2 text-[32px] font-medium leading-tight text-foreground sm:text-[40px]">
         {event.title}
@@ -115,9 +111,7 @@ export default async function EventDetailPage({
       </p>
 
       <div className="mt-8 flex flex-col gap-3">
-        <Suspense fallback={null}>
-          <EventStatusActions event={event} />
-        </Suspense>
+        <EventStatusActions event={event} />
 
         {event.url ? (
           <div>
@@ -128,5 +122,25 @@ export default async function EventDetailPage({
         ) : null}
       </div>
     </div>
+  );
+}
+
+export default async function EventDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
+          Loading event details…
+        </div>
+      }
+    >
+      <EventDetailContent slug={slug} />
+    </Suspense>
   );
 }

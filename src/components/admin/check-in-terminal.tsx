@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import jsQR from "jsqr";
 import type { RegistrationRecord } from "@/types";
 import { downloadForGoogleSheets, copyForGoogleSheets } from "@/lib/sheets-export";
 
@@ -30,61 +31,198 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
   const [recentLog, setRecentLog] = useState<CheckInLogEntry[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  async function handleCheckIn(e: React.FormEvent) {
-    e.preventDefault();
-    if (!refInput.trim()) return;
+  // Camera QR Scanner State
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const submittingRef = useRef(false);
+  const lastScannedRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
 
-    setSubmitting(true);
-    setLastResult(null);
+  const submitCheckIn = useCallback(
+    async (rawRef: string) => {
+      const normalized = rawRef.trim().replace(/^#/, "").toUpperCase();
+      if (!normalized || submittingRef.current) return;
 
-    try {
-      const res = await fetch(`/api/events/${eventSlug}/check-in`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ referenceId: refInput.trim() }),
-      });
+      submittingRef.current = true;
+      setSubmitting(true);
+      setLastResult(null);
 
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setLastResult({
-          status: "success",
-          message: data.message,
-          registration: data.registration,
+      try {
+        const res = await fetch(`/api/events/${eventSlug}/check-in`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referenceId: normalized }),
         });
-        setCheckedCount((c) => c + 1);
-        setRecentLog((prev) => [
-          {
-            time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-            name: data.registration.fullName,
-            ref: data.registration.referenceId,
-            track: data.registration.track,
-            email: data.registration.email,
-            college: data.registration.college,
-          },
-          ...prev,
-        ]);
-        setRefInput("");
-      } else if (res.status === 409) {
-        setLastResult({
-          status: "duplicate",
-          message: data.message,
-          registration: data.registration,
-        });
-      } else {
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          setLastResult({
+            status: "success",
+            message: data.message,
+            registration: data.registration,
+          });
+          setCheckedCount((c) => c + 1);
+          setRecentLog((prev) => [
+            {
+              time: new Date().toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              }),
+              name: data.registration.fullName,
+              ref: data.registration.referenceId,
+              track: data.registration.track,
+              email: data.registration.email,
+              college: data.registration.college,
+            },
+            ...prev,
+          ]);
+          setRefInput("");
+        } else if (res.status === 409) {
+          setLastResult({
+            status: "duplicate",
+            message: data.message,
+            registration: data.registration,
+          });
+        } else {
+          setLastResult({
+            status: "error",
+            message: data.message || "Pass reference not found.",
+          });
+        }
+      } catch {
         setLastResult({
           status: "error",
-          message: data.message || "Pass reference not found.",
+          message: "Network error during check-in verification.",
         });
+      } finally {
+        submittingRef.current = false;
+        setSubmitting(false);
       }
-    } catch {
-      setLastResult({
-        status: "error",
-        message: "Network error during check-in verification.",
-      });
-    } finally {
-      setSubmitting(false);
+    },
+    [eventSlug]
+  );
+
+  function stopCameraStream() {
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+      streamRef.current = null;
     }
+  }
+
+  function handleToggleCamera() {
+    if (cameraOpen) {
+      stopCameraStream();
+      setCameraReady(false);
+      setCameraOpen(false);
+      setCameraError(null);
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        "Camera access is unavailable in this browser context (requires HTTPS or localhost)."
+      );
+      return;
+    }
+    setCameraError(null);
+    setCameraReady(false);
+    setCameraOpen(true);
+  }
+
+  useEffect(() => {
+    if (!cameraOpen) return;
+
+    let cancelled = false;
+    let rafId = 0;
+    let lastDecodeAt = 0;
+
+    async function startScanner() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+
+        if (cancelled) {
+          for (const t of stream.getTracks()) t.stop();
+          return;
+        }
+
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play();
+          if (!cancelled) setCameraReady(true);
+        }
+
+        const scanFrame = (timestamp: number) => {
+          if (cancelled) return;
+
+          if (timestamp - lastDecodeAt >= 150) {
+            lastDecodeAt = timestamp;
+            const v = videoRef.current;
+            const canvas = canvasRef.current;
+            if (v && canvas && v.readyState === v.HAVE_ENOUGH_DATA && v.videoWidth > 0) {
+              canvas.width = v.videoWidth;
+              canvas.height = v.videoHeight;
+              const ctx = canvas.getContext("2d", { willReadFrequently: true });
+              if (ctx) {
+                ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const decoded = jsQR(imgData.data, imgData.width, imgData.height, {
+                  inversionAttempts: "dontInvert",
+                });
+                if (decoded?.data) {
+                  const code = decoded.data.trim().replace(/^#/, "").toUpperCase();
+                  const now = Date.now();
+                  const recentlyScannedSame =
+                    lastScannedRef.current.code === code && now - lastScannedRef.current.at < 3000;
+                  if (code && !recentlyScannedSame && !submittingRef.current) {
+                    lastScannedRef.current = { code, at: now };
+                    setRefInput(code);
+                    void submitCheckIn(code);
+                  }
+                }
+              }
+            }
+          }
+
+          rafId = window.requestAnimationFrame(scanFrame);
+        };
+
+        rafId = window.requestAnimationFrame(scanFrame);
+      } catch (err) {
+        if (!cancelled) {
+          const msg = (err as Error)?.name === "NotAllowedError"
+            ? "Camera permission was denied. Allow camera access or enter the Reference ID manually."
+            : "Could not start camera. Make sure a camera is connected and not used by another app.";
+          setCameraError(msg);
+          setCameraReady(false);
+          setCameraOpen(false);
+          stopCameraStream();
+        }
+      }
+    }
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+      if (rafId) window.cancelAnimationFrame(rafId);
+      stopCameraStream();
+    };
+  }, [cameraOpen, submitCheckIn]);
+
+  async function handleCheckIn(e: React.FormEvent) {
+    e.preventDefault();
+    await submitCheckIn(refInput);
   }
 
   function handleExportAttendanceSheets() {
@@ -128,19 +266,59 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
       {/* Scanner & Input Column */}
       <div className="lg:col-span-7 flex flex-col gap-5">
         <div className="bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-5">
-          <div className="flex items-center justify-between pb-3 border-b border-border">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
             <div>
               <h2 className="text-base font-bold text-foreground">
                 Live Attendance Scanner
               </h2>
               <p className="text-xs text-foreground-muted mt-0.5">
-                Scan attendee badge QR code or type reference ID to verify admission.
+                Scan attendee badge QR code with camera or enter reference ID.
               </p>
             </div>
-            <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
-              <strong className="text-emerald-900">{checkedCount}</strong> Checked In
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleCamera}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+                  cameraOpen
+                    ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                    : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/15"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {cameraOpen ? "videocam_off" : "qr_code_scanner"}
+                </span>
+                <span>{cameraOpen ? "Stop Camera" : "Camera QR Scan"}</span>
+              </button>
+              <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+                <strong className="text-emerald-900">{checkedCount}</strong> Checked In
+              </div>
             </div>
           </div>
+
+          {cameraError ? (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+              {cameraError}
+            </div>
+          ) : null}
+
+          {cameraOpen ? (
+            <div className="relative overflow-hidden rounded-2xl border border-border bg-slate-950 aspect-video max-h-72 flex items-center justify-center">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="w-44 h-44 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)]" />
+              </div>
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 text-white text-[11px] font-medium">
+                {cameraReady ? "Point rear camera at attendee QR pass" : "Starting camera…"}
+              </div>
+            </div>
+          ) : null}
 
           <form onSubmit={handleCheckIn} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">

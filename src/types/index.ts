@@ -198,6 +198,8 @@ export interface EventInput {
   isRegistrationOpen?: boolean;
 }
 
+export type EventUpdateInput = Partial<Omit<EventInput, "slug">>;
+
 export interface TeamMember {
   id: string;
   name: string;
