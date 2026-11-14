@@ -37,7 +37,12 @@ export async function generateMetadata({
   };
 }
 
-async function EventRegisterContent({ slug }: { slug: string }) {
+async function EventRegisterContent({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
   await connection();
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
@@ -77,13 +82,11 @@ async function EventRegisterContent({ slug }: { slug: string }) {
   );
 }
 
-export default async function EventRegisterPage({
+export default function EventRegisterPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
-
   return (
     <Suspense
       fallback={
@@ -92,7 +95,7 @@ export default async function EventRegisterPage({
         </div>
       }
     >
-      <EventRegisterContent slug={slug} />
+      <EventRegisterContent params={params} />
     </Suspense>
   );
 }

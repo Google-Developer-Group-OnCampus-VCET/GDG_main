@@ -1,5 +1,5 @@
 import type { ChapterEvent } from "@/types";
-import { devcraftWorkshopData } from "./devcraft-workshop";
+import { devToCloudWorkshopData } from "./dev-to-cloud-workshop";
 
 /**
  * Event titles and dates were transcribed from a screenshot the user
@@ -23,20 +23,20 @@ const VERIFIED_AT = "2026-10-29";
 
 export const events: ChapterEvent[] = [
   {
-    id: "devcraft-2025",
-    slug: "devcraft-2025",
-    title: "DevCraft 2025",
-    startsAt: "2026-11-20T09:00:00+05:30",
-    endsAt: "2026-11-21T17:30:00+05:30",
+    id: "dev-to-cloud",
+    slug: "dev-to-cloud",
+    title: "Dev to Cloud: Zero to Hero",
+    startsAt: "2026-12-01",
+    endsAt: "2026-12-04",
     timezone: "Asia/Kolkata",
     format: "in-person",
-    location: "Vidyavardhini's College of Engineering and Technology, Vasai (Auditorium & Labs 402)",
+    location: "Vidyavardhini's College of Engineering and Technology, Vasai (Seminar Hall & Computer Labs)",
     topics: ["web", "cloud", "ai-ml"],
     summary:
-      "A two-day intensive, project-driven developer workshop organized by GDG on Campus VCET. Build production-grade cloud apps, master modern web performance, and network with tech leaders.",
+      "A four-day intensive, hands-on workshop series taking developers from foundational web engineering to building, containerizing, deploying, and hardening an AI-powered campus assistant on Google Cloud.",
     priceNote: "Free event (Registration required)",
-    registrationUrl: "/events/devcraft-2025/register",
-    workshop: devcraftWorkshopData,
+    registrationUrl: "/events/dev-to-cloud/register",
+    workshop: devToCloudWorkshopData,
     lastVerifiedAt: VERIFIED_AT,
   },
   {

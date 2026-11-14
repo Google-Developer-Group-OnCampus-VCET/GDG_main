@@ -6,7 +6,7 @@ import { AdminHeader } from "@/components/admin/admin-header";
 import { CheckInTerminal } from "@/components/admin/check-in-terminal";
 
 export function generateStaticParams() {
-  return [{ slug: "devcraft-2025" }];
+  return [{ slug: "dev-to-cloud" }];
 }
 
 export async function generateMetadata({

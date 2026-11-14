@@ -32,7 +32,7 @@ export async function POST(
       body = (await request.json()) as RegistrationInput;
     } catch {
       return NextResponse.json(
-        { error: "INVALID_INPUT", message: "Invalid JSON request payload." },
+        { error: "INVALID_INPUT", message: "Invalid request data. Please try again." },
         { status: 400 }
       );
     }

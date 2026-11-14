@@ -10,7 +10,7 @@ interface AdminHeaderProps {
   eventSlug?: string;
 }
 
-export function AdminHeader({ currentTab = "overview", eventSlug = "devcraft-2025" }: AdminHeaderProps) {
+export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud" }: AdminHeaderProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 

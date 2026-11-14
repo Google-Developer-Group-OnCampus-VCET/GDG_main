@@ -33,7 +33,7 @@ export function buildEventReferenceId(
     ? String(Math.floor(1000 + Math.random() * 9000))
     : String(seq).padStart(4, "0");
 
-  if (eventSlug === "devcraft-2025") {
+  if (eventSlug === "dev-to-cloud" || eventSlug === "devcraft-2025") {
     return `GDG-VCET-2026-${numericPart}`;
   }
 
@@ -474,7 +474,7 @@ export async function createFirestoreRegistration(
         return {
           success: false,
           error: "EVENT_NOT_FOUND",
-          message: `Event "${eventSlug}" was not found.`,
+          message: "Event not found.",
         };
       }
 
@@ -504,7 +504,7 @@ export async function createFirestoreRegistration(
           return {
             success: false,
             error: "DUPLICATE_EMAIL",
-            message: `The email ${emailNormalized} is already registered under pass reference #${existingData?.referenceId}.`,
+            message: "This email is already registered for this event.",
           };
         }
       }
@@ -619,7 +619,7 @@ export async function checkInFirestoreAttendee(
 
     const snap = await query.get();
     if (snap.empty) {
-      return { success: false, message: `Pass reference "${ref}" was not found for this event.` };
+      return { success: false, message: "Pass reference was not found for this event." };
     }
 
     const doc = snap.docs[0];
@@ -628,7 +628,7 @@ export async function checkInFirestoreAttendee(
     if (data.checkedIn) {
       return {
         success: false,
-        message: `${data.fullName} (#${ref}) was ALREADY checked in at ${data.checkedInAt}.`,
+        message: `${data.fullName} was ALREADY checked in at ${data.checkedInAt}.`,
         registration: data,
       };
     }
@@ -647,7 +647,7 @@ export async function checkInFirestoreAttendee(
 
     return {
       success: true,
-      message: `Successfully checked in ${data.fullName} (#${ref}) for ${data.track}!`,
+      message: `Successfully checked in ${data.fullName} for ${data.track}!`,
       registration: updated,
     };
   } catch (err) {

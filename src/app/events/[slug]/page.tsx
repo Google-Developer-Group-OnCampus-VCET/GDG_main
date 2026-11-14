@@ -38,7 +38,12 @@ const formatLabels: Record<string, string> = {
   hybrid: "Hybrid",
 };
 
-async function EventDetailContent({ slug }: { slug: string }) {
+async function EventDetailContent({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
   await connection();
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
@@ -125,13 +130,11 @@ async function EventDetailContent({ slug }: { slug: string }) {
   );
 }
 
-export default async function EventDetailPage({
+export default function EventDetailPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const { slug } = await params;
-
   return (
     <Suspense
       fallback={
@@ -140,7 +143,7 @@ export default async function EventDetailPage({
         </div>
       }
     >
-      <EventDetailContent slug={slug} />
+      <EventDetailContent params={params} />
     </Suspense>
   );
 }

@@ -51,7 +51,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
               Our Generous Sponsors &amp; Community Partners
             </h1>
             <p className="text-base sm:text-lg text-foreground-muted leading-relaxed pt-1">
-              DevCraft 2025 is made possible thanks to our visionary partners supporting tech education, open student innovation, and developer growth in VCET.
+              {event.title} is made possible thanks to our visionary partners supporting tech education, open student innovation, and developer growth in VCET.
             </p>
           </div>
 
@@ -265,14 +265,14 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
                 How Workshop Sponsorship Funds Are Allocated
               </h2>
               <p className="text-sm text-foreground-muted leading-relaxed">
-                Every sponsorship dollar goes directly into collegiate empowerment — from cloud runtime credits and mentor honorariums to hot meals and hardware prototyping components.
+                Every sponsorship dollar goes directly into collegiate empowerment — from cloud runtimes and mentor guidance to hot meals and hardware prototyping components.
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 w-full lg:w-96">
               <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
                 <span className="text-2xl font-bold text-primary">45%</span>
-                <span className="text-xs text-foreground-muted font-medium">Cloud &amp; Tooling Credits</span>
+                <span className="text-xs text-foreground-muted font-medium">Cloud &amp; Tooling Infrastructure</span>
               </div>
               <div className="p-4 rounded-xl bg-white border border-border flex flex-col gap-1">
                 <span className="text-2xl font-bold text-secondary">25%</span>
@@ -298,7 +298,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
             Partner With Us
           </span>
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Want to Sponsor DevCraft 2025 or Future GDG VCET Summits?
+            Want to Sponsor {event.title} or Future GDG VCET Summits?
           </h2>
           <p className="text-sm text-foreground-muted max-w-xl">
             Connect with top engineering talent across departments, showcase your developer APIs, and foster open innovation at VCET.
@@ -384,7 +384,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
                   >
                     <option>Title Partner ($5,000)</option>
                     <option>Gold Tier ($1,500)</option>
-                    <option>Tooling / Platform Credits Partner</option>
+                    <option>Tooling / Platform Partner</option>
                     <option>Hackathon Prize Sponsor</option>
                   </select>
                 </div>

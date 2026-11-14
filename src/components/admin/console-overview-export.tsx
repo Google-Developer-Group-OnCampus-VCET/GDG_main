@@ -7,24 +7,25 @@ import type { EventStats } from "@/lib/db";
 
 interface ConsoleOverviewExportProps {
   events: ChapterEvent[];
-  devcraftStats: EventStats;
+  workshopStats?: EventStats;
 }
 
-export function ConsoleOverviewExport({ events, devcraftStats }: ConsoleOverviewExportProps) {
+export function ConsoleOverviewExport({ events, workshopStats }: ConsoleOverviewExportProps) {
   const [copySuccess, setCopySuccess] = useState(false);
+  const activeStats = workshopStats;
 
   const rows = events.map((e) => {
-    const isDevcraft = e.slug === "devcraft-2025";
+    const isWorkshop = Boolean(e.workshop) || e.slug === "dev-to-cloud";
     return {
       title: e.title,
       slug: e.slug,
       date: e.startsAt,
       format: e.format,
       location: e.location,
-      status: isDevcraft ? (devcraftStats.isOpen ? "Registration Open" : "Closed") : "Completed",
-      registered: isDevcraft ? devcraftStats.totalRegistered : "N/A",
-      capacity: isDevcraft ? devcraftStats.capacity : "N/A",
-      checkedIn: isDevcraft ? devcraftStats.checkedInCount : "N/A",
+      status: isWorkshop && activeStats ? (activeStats.isOpen ? "Registration Open" : "Closed") : "Completed",
+      registered: isWorkshop && activeStats ? activeStats.totalRegistered : "N/A",
+      capacity: isWorkshop && activeStats ? activeStats.capacity : "N/A",
+      checkedIn: isWorkshop && activeStats ? activeStats.checkedInCount : "N/A",
     };
   });
 

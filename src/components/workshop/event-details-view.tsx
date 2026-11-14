@@ -109,11 +109,15 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
               <div className="bg-surface-container-lowest p-4 rounded-xl border border-border flex items-center gap-3 shadow-xs">
                 <div className="w-11 h-11 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0">
-                  <span className="material-symbols-outlined text-[24px]">timer</span>
+                  <span className="material-symbols-outlined text-[24px]">calendar_month</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-lg font-bold text-foreground">36 Hours</span>
-                  <span className="text-xs text-foreground-muted">Hands-on Sprints</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {workshop.agenda && workshop.agenda.length > 0
+                      ? `${new Set(workshop.agenda.map((a) => a.day)).size} Days`
+                      : "4 Days"}
+                  </span>
+                  <span className="text-xs text-foreground-muted">Hands-on Workshop</span>
                 </div>
               </div>
               <div className="bg-surface-container-lowest p-4 rounded-xl border border-border flex items-center gap-3 shadow-xs">
@@ -161,7 +165,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                   The Four Pillars of Production Software
                 </h2>
                 <p className="text-sm sm:text-base text-foreground-muted mt-2">
-                  Each session in DevCraft 2025 is engineered around practical industry challenges, moving from client runtimes into distributed cloud scalability.
+                  Each session in {event.title} is engineered around practical industry challenges, moving from client runtimes into distributed cloud scalability.
                 </p>
               </div>
               <Link
@@ -266,7 +270,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                 Cohort Profile
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold text-foreground mt-1">
-                Who Should Attend DevCraft 2025?
+                Who Should Attend?
               </h2>
               <p className="text-sm sm:text-base text-foreground-muted mt-2">
                 Designed for ambitious student engineers who want to accelerate their development journey with industry mentors.
@@ -445,7 +449,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                 Ready to Architect at Scale?
               </h2>
               <p className="text-sm sm:text-base text-foreground-muted">
-                Join 150 student developers, industry architects, and Google Developer Experts for two days of building real production systems.
+                Join 150 student developers, industry architects, and Google Developer Experts for four days of building real production systems.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">

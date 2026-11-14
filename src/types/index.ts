@@ -13,7 +13,7 @@ export interface AgendaSession {
   speakerRole?: string;
   location?: string;
   tags?: string[];
-  day: 1 | 2;
+  day: number;
 }
 
 export interface WorkshopSpeaker {
@@ -120,6 +120,8 @@ export interface WorkshopDetails {
   speakers: WorkshopSpeaker[];
   sponsors: WorkshopSponsor[];
   registrationConfig: WorkshopRegistrationConfig;
+  showSponsors?: boolean;
+  speakersTbd?: boolean;
 }
 
 export interface ChapterEvent {

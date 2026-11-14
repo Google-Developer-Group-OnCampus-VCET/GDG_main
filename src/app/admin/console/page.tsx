@@ -50,19 +50,24 @@ async function AdminConsoleContent() {
   );
 
   const statsBySlug = new Map<string, EventStats>(statsEntries);
-  const devcraftStats = statsBySlug.get("devcraft-2025") ?? createFallbackStats(150);
+  const flagshipWorkshop =
+    allEvents.find((e) => e.slug === "dev-to-cloud") ??
+    allEvents.find((e) => Boolean(e.workshop)) ??
+    allEvents[0];
+  const flagshipSlug = flagshipWorkshop?.slug ?? "dev-to-cloud";
+  const flagshipStats =
+    (flagshipWorkshop ? statsBySlug.get(flagshipWorkshop.slug) : undefined) ??
+    createFallbackStats(150);
+  const otherEventsList = allEvents.filter((e) => e.slug !== flagshipSlug);
 
   const totalRegisteredAll = statsEntries.reduce((sum, [, s]) => sum + s.totalRegistered, 0);
   const activeEventsCount = statsEntries.filter(([, s]) => isEventRegistrationOpen(s)).length;
   const totalCheckedInAll = statsEntries.reduce((sum, [, s]) => sum + s.checkedInCount, 0);
   const totalCapacityAll = statsEntries.reduce((sum, [, s]) => sum + s.capacity, 0);
 
-  const flagshipWorkshop = allEvents.find((e) => e.slug === "devcraft-2025");
-  const otherEventsList = allEvents.filter((e) => e.slug !== "devcraft-2025");
-
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="overview" eventSlug="devcraft-2025" />
+      <AdminHeader currentTab="overview" eventSlug={flagshipSlug} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8">
         {/* Page Heading */}
@@ -86,7 +91,7 @@ async function AdminConsoleContent() {
               </svg>
               <span>Create Event</span>
             </Link>
-            <ConsoleOverviewExport events={allEvents} devcraftStats={devcraftStats} />
+            <ConsoleOverviewExport events={allEvents} workshopStats={flagshipStats} />
             <span className="inline-flex items-center gap-1.5 bg-status-success/10 text-status-success px-3 py-1.5 rounded-xl text-xs font-semibold border border-status-success/20">
               <span className="w-2 h-2 rounded-full bg-status-success animate-pulse"></span>
               <span>Sync Active</span>
@@ -157,8 +162,8 @@ async function AdminConsoleContent() {
                       FLAGSHIP WORKSHOP
                     </span>
                     <EventStatusToggle
-                      eventSlug="devcraft-2025"
-                      initialIsOpen={isEventRegistrationOpen(devcraftStats)}
+                      eventSlug={flagshipSlug}
+                      initialIsOpen={isEventRegistrationOpen(flagshipStats)}
                       compact
                     />
                   </div>
@@ -170,34 +175,34 @@ async function AdminConsoleContent() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  href="/admin/console/events/devcraft-2025/registrations"
+                  href={`/admin/console/events/${flagshipSlug}/registrations`}
                   className="inline-flex items-center gap-1.5 bg-primary text-on-primary px-4 py-2 rounded-full text-xs font-semibold hover:bg-primary-hover transition-all"
                 >
                   <span className="material-symbols-outlined text-[16px]">group</span>
-                  <span>Registrations ({devcraftStats.totalRegistered})</span>
+                  <span>Registrations ({flagshipStats.totalRegistered})</span>
                 </Link>
                 <Link
-                  href="/admin/console/events/devcraft-2025/check-in"
+                  href={`/admin/console/events/${flagshipSlug}/check-in`}
                   className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
                 >
                   <span className="material-symbols-outlined text-[16px] text-secondary">qr_code_scanner</span>
                   <span>Check-in</span>
                 </Link>
                 <Link
-                  href="/admin/console/events/devcraft-2025/analytics"
+                  href={`/admin/console/events/${flagshipSlug}/analytics`}
                   className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
                 >
                   <span className="material-symbols-outlined text-[16px] text-primary">bar_chart</span>
                   <span>Analytics</span>
                 </Link>
                 <Link
-                  href="/admin/console/events/devcraft-2025/edit"
+                  href={`/admin/console/events/${flagshipSlug}/edit`}
                   className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
                 >
                   <span>Edit</span>
                 </Link>
                 <Link
-                  href="/events/devcraft-2025/register"
+                  href={`/events/${flagshipSlug}/register`}
                   className="inline-flex items-center gap-1.5 bg-white text-primary px-4 py-2 rounded-full text-xs font-semibold hover:bg-primary-fixed/40 transition-all border border-border"
                 >
                   <span>Public Form</span>
@@ -227,10 +232,10 @@ async function AdminConsoleContent() {
               <div className="p-4 rounded-xl bg-surface-container-low border border-border/50 flex flex-col gap-1">
                 <span className="text-xs text-foreground-muted">Capacity Status</span>
                 <span className="text-sm font-bold text-primary">
-                  {devcraftStats.totalRegistered} / {devcraftStats.capacity} Seats Claimed
+                  {flagshipStats.totalRegistered} / {flagshipStats.capacity} Seats Claimed
                 </span>
                 <span className="text-xs text-secondary font-medium">
-                  {devcraftStats.remaining} seats remaining before auto-waitlist
+                  {flagshipStats.remaining} seats remaining before auto-waitlist
                 </span>
               </div>
             </div>

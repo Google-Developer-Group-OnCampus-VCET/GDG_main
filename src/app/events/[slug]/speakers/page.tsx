@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
+import { getEventBySlugAsync } from "@/lib/db";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSpeakersView } from "@/components/workshop/event-speakers-view";
 
@@ -10,7 +11,13 @@ export function generateStaticParams() {
     .map((event) => ({ slug: event.slug }));
 }
 
-function findEvent(slug: string) {
+async function findEvent(slug: string) {
+  try {
+    const dbEvent = await getEventBySlugAsync(slug);
+    if (dbEvent?.workshop) return dbEvent;
+  } catch {
+    // fallback
+  }
   return events.find((event) => event.slug === slug);
 }
 
@@ -20,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const event = findEvent(slug);
+  const event = await findEvent(slug);
   if (!event || !event.workshop) return { title: "Speakers" };
   return {
     title: `Speakers & Mentors · ${event.title}`,
@@ -34,7 +41,7 @@ export default async function EventSpeakersPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = findEvent(slug);
+  const event = await findEvent(slug);
   if (!event || !event.workshop) notFound();
 
   return (

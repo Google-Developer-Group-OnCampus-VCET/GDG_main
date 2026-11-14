@@ -112,7 +112,7 @@ export async function GET(
     const event = await getEventBySlugAsync(slug);
     if (!event) {
       return NextResponse.json(
-        { error: "EVENT_NOT_FOUND", message: `Event "${slug}" was not found.` },
+        { error: "EVENT_NOT_FOUND", message: "Event not found." },
         { status: 404 }
       );
     }
@@ -164,12 +164,13 @@ export async function PATCH(
     if (!result.success) {
       if (result.error === "EVENT_NOT_FOUND") {
         return NextResponse.json(
-          { error: "EVENT_NOT_FOUND", message: `Event "${slug}" was not found.` },
+          { error: "EVENT_NOT_FOUND", message: "Event not found." },
           { status: 404 }
         );
       }
+      console.error("Admin PATCH event failed:", result.error);
       return NextResponse.json(
-        { error: "INVALID_INPUT", message: result.error || "Failed to update event." },
+        { error: "INVALID_INPUT", message: "Failed to update event. Please check inputs." },
         { status: 400 }
       );
     }

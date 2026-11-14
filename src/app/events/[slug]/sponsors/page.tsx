@@ -1,16 +1,23 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
+import { getEventBySlugAsync } from "@/lib/db";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSponsorsView } from "@/components/workshop/event-sponsors-view";
 
 export function generateStaticParams() {
   return events
-    .filter((e) => Boolean(e.workshop))
+    .filter((e) => Boolean(e.workshop && e.workshop.showSponsors))
     .map((event) => ({ slug: event.slug }));
 }
 
-function findEvent(slug: string) {
+async function findEvent(slug: string) {
+  try {
+    const dbEvent = await getEventBySlugAsync(slug);
+    if (dbEvent?.workshop) return dbEvent;
+  } catch {
+    // fallback
+  }
   return events.find((event) => event.slug === slug);
 }
 
@@ -20,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const event = findEvent(slug);
+  const event = await findEvent(slug);
   if (!event || !event.workshop) return { title: "Sponsors & Partners" };
   return {
     title: `Sponsors & Partners · ${event.title}`,
@@ -34,8 +41,8 @@ export default async function EventSponsorsPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const event = findEvent(slug);
-  if (!event || !event.workshop) notFound();
+  const event = await findEvent(slug);
+  if (!event || !event.workshop || !event.workshop.showSponsors) notFound();
 
   return (
     <div className="w-full flex flex-col">

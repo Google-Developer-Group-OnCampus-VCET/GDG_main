@@ -259,19 +259,19 @@ export function EventRegistrationView({
                     <span className="w-2.5 h-2.5 rounded-full bg-[#34a853]"></span>
                   </div>
                   <span className="text-xs font-mono bg-surface-container px-2.5 py-0.5 rounded-full text-foreground-muted">
-                    devcraft_2025.sh
+                    {workshop.heroGraphic?.terminalLabel || `${event.slug}.sh`}
                   </span>
                 </div>
 
                 <div className="my-auto flex flex-col gap-2 py-3 text-center">
                   <div className="text-xs font-bold text-primary uppercase tracking-wider">
-                    Hands-On Collegiate Workshop
+                    Hands-On Technical Workshop
                   </div>
                   <div className="text-xl font-bold text-foreground">
-                    Modern Web &bull; Cloud &bull; Gemini AI
+                    {workshop.headline || event.title}
                   </div>
                   <div className="text-xs text-foreground-muted">
-                    2 Days &bull; 2 Intensive Learning Tracks &bull; Verified Badge
+                    {workshop.datesText} &bull; {workshop.seatsText}
                   </div>
                 </div>
 

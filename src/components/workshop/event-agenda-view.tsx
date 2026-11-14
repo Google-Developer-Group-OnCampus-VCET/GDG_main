@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { AgendaSession, ChapterEvent, WorkshopDetails } from "@/types";
+import { generateSchedulePdfBytes } from "@/lib/schedule-pdf";
 
 interface EventAgendaViewProps {
   event: ChapterEvent;
@@ -10,10 +11,13 @@ interface EventAgendaViewProps {
 }
 
 export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
-  const [activeDay, setActiveDay] = useState<1 | 2>(1);
+  const availableDays = Array.from(new Set(workshop.agenda.map((s) => s.day))).sort((a, b) => a - b);
+  const initialDay = availableDays.length > 0 ? availableDays[0] : 1;
+  const [activeDay, setActiveDay] = useState<number>(initialDay);
   const [activeTrack, setActiveTrack] = useState<string>("all");
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
 
   const toggleBookmark = (id: string) => {
@@ -28,14 +32,98 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
     });
   };
 
-  const handleDownloadPdf = () => {
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 3000);
+  const handleDownloadPdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      const pdfBytes = await generateSchedulePdfBytes({
+        eventTitle: event.title,
+        headline: workshop.headline,
+        datesText: workshop.datesText,
+        venueText: workshop.venueText,
+        agenda: workshop.agenda,
+      });
+
+      const blob = new Blob([Uint8Array.from(pdfBytes)], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${event.slug || "workshop"}-schedule.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to generate PDF schedule:", err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleSyncCal = () => {
-    setSyncSuccess(true);
-    setTimeout(() => setSyncSuccess(false), 3000);
+    try {
+      const details = [
+        workshop.headline,
+        "Google Developer Groups on Campus VCET",
+        `Dates: ${workshop.datesText}`,
+        `Venue: ${workshop.venueText}`,
+        "",
+        "Day 1: Build the Foundation",
+        "Day 2: Make It Smart",
+        "Day 3: Ship It to the Cloud",
+        "Day 4: Harden and Prove It",
+        "",
+        `Official Page: ${typeof window !== "undefined" ? window.location.href : ""}`,
+      ].join("\n");
+
+      // Dec 1, 2026 to Dec 4, 2026 (all-day range, 20261205 is exclusive end in Google Calendar)
+      const calUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+        event.title
+      )}&dates=20261201/20261205&details=${encodeURIComponent(
+        details
+      )}&location=${encodeURIComponent(workshop.venueText)}`;
+
+      const newWindow = window.open(calUrl, "_blank", "noopener,noreferrer");
+
+      // Fallback: If popup was blocked or could not open, download .ics file directly
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {
+        const icsContent = [
+          "BEGIN:VCALENDAR",
+          "VERSION:2.0",
+          "PRODID:-//GDG on Campus VCET//Dev to Cloud Workshop//EN",
+          "CALSCALE:GREGORIAN",
+          "METHOD:PUBLISH",
+          "BEGIN:VEVENT",
+          `UID:${event.slug}-2026@gdgoc-vcet.org`,
+          "DTSTAMP:20261201T000000Z",
+          "DTSTART;VALUE=DATE:20261201",
+          "DTEND;VALUE=DATE:20261205",
+          `SUMMARY:${event.title}`,
+          `DESCRIPTION:${workshop.headline} - 4-day hands-on workshop series organized by GDG on Campus VCET`,
+          `LOCATION:${workshop.venueText}`,
+          "STATUS:CONFIRMED",
+          "END:VEVENT",
+          "END:VCALENDAR",
+        ].join("\r\n");
+
+        const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${event.slug || "workshop"}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      setSyncSuccess(true);
+      setTimeout(() => setSyncSuccess(false), 3000);
+    } catch (err) {
+      console.error("Failed to sync calendar:", err);
+    }
   };
 
   const daySessions = workshop.agenda.filter((s) => s.day === activeDay);
@@ -65,13 +153,15 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
             <div className="max-w-3xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container text-primary text-xs font-semibold mb-3">
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-                <span>DevCraft 2025 · Interactive Program</span>
+                <span>{workshop.headline} · Interactive Program</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground">
                 Workshop Schedule &amp; Timeline
               </h1>
               <p className="text-base sm:text-lg text-foreground-muted mt-2">
-                Two power-packed days of keynotes, collaborative labs, live coding sprints, and project showcases.
+                {availableDays.length > 2
+                  ? `${availableDays.length} power-packed days of keynotes, collaborative guided builds, hands-on labs, and live showcases.`
+                  : "Two power-packed days of keynotes, collaborative labs, live coding sprints, and project showcases."}
               </p>
             </div>
 
@@ -79,10 +169,17 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
               <button
                 type="button"
                 onClick={handleDownloadPdf}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white border border-border text-foreground text-xs sm:text-sm font-semibold hover:bg-surface-container transition-all shadow-xs"
+                disabled={isGeneratingPdf}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white border border-border text-foreground text-xs sm:text-sm font-semibold hover:bg-surface-container transition-all shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined text-[18px] text-primary">download</span>
-                <span>{downloadSuccess ? "PDF Downloaded!" : "Download PDF Schedule"}</span>
+                <span>
+                  {isGeneratingPdf
+                    ? "Generating PDF..."
+                    : downloadSuccess
+                    ? "PDF Downloaded!"
+                    : "Download PDF Schedule"}
+                </span>
               </button>
               <button
                 type="button"
@@ -90,36 +187,38 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-primary text-on-primary text-xs sm:text-sm font-semibold hover:bg-primary-hover transition-all shadow-xs"
               >
                 <span className="material-symbols-outlined text-[18px]">event</span>
-                <span>{syncSuccess ? "Calendar Synced!" : "Sync to Google Calendar"}</span>
+                <span>{syncSuccess ? "Calendar Opened!" : "Sync to Google Calendar"}</span>
               </button>
             </div>
           </div>
 
           {/* Controls Bar: Day Tabs & Bookmarked counter */}
           <div className="bg-surface-container-low rounded-2xl p-4 sm:p-5 border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex p-1 bg-surface-container rounded-full gap-1 border border-border/50">
-              <button
-                type="button"
-                onClick={() => setActiveDay(1)}
-                className={`px-4 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  activeDay === 1
-                    ? "bg-primary text-on-primary shadow-xs"
-                    : "text-foreground-muted hover:text-foreground"
-                }`}
-              >
-                Day 1: Saturday, Oct 18 — Foundations &amp; Fullstack
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDay(2)}
-                className={`px-4 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${
-                  activeDay === 2
-                    ? "bg-primary text-on-primary shadow-xs"
-                    : "text-foreground-muted hover:text-foreground"
-                }`}
-              >
-                Day 2: Sunday, Oct 19 — Cloud, AI &amp; Showcase
-              </button>
+            <div className="flex flex-wrap p-1 bg-surface-container rounded-full gap-1 border border-border/50">
+              {availableDays.map((d) => {
+                let label = `Day ${d}`;
+                if (event.slug === "dev-to-cloud") {
+                  if (d === 1) label = "Day 1: Build the Foundation";
+                  if (d === 2) label = "Day 2: Make It Smart";
+                  if (d === 3) label = "Day 3: Ship It to Cloud";
+                  if (d === 4) label = "Day 4: Harden & Demo";
+                }
+
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setActiveDay(d)}
+                    className={`px-4 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                      activeDay === d
+                        ? "bg-primary text-on-primary shadow-xs"
+                        : "text-foreground-muted hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="flex items-center gap-2 text-foreground-muted text-xs font-semibold bg-white border border-border px-3.5 py-1.5 rounded-full self-start lg:self-auto">

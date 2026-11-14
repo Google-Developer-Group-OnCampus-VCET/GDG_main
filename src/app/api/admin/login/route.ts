@@ -58,10 +58,11 @@ export async function POST(request: Request) {
     if (idToken) {
       const auth = await getAdminAuth();
       if (!auth) {
+        console.error("Firebase Auth unavailable: server-side token verification is not configured.");
         return NextResponse.json(
           {
             error: "FIREBASE_AUTH_UNAVAILABLE",
-            message: "Server-side Firebase token verification is not configured.",
+            message: "Authentication service temporarily unavailable.",
           },
           { status: 503 }
         );
@@ -135,11 +136,11 @@ export async function POST(request: Request) {
     try {
       token = await createAdminSessionToken();
     } catch (err) {
-      console.error("Admin session signing unavailable:", (err as Error).message);
+      console.error("Admin session signing unavailable: secrets not configured:", (err as Error).message);
       return NextResponse.json(
         {
           error: "AUTH_NOT_CONFIGURED",
-          message: "Admin authentication secrets are not configured on the server.",
+          message: "Authentication service temporarily unavailable.",
         },
         { status: 503 }
       );

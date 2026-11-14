@@ -9,7 +9,13 @@ interface EventSubNavProps {
   event: ChapterEvent;
 }
 
-function EventSubNavTabs({ basePath }: { basePath: string }) {
+function EventSubNavTabs({
+  basePath,
+  showSponsors = false,
+}: {
+  basePath: string;
+  showSponsors?: boolean;
+}) {
   const pathname = usePathname();
 
   const navItems = [
@@ -17,7 +23,7 @@ function EventSubNavTabs({ basePath }: { basePath: string }) {
     { label: "Registration", href: `${basePath}/register` },
     { label: "Agenda", href: `${basePath}/agenda` },
     { label: "Speakers", href: `${basePath}/speakers` },
-    { label: "Sponsors & Partners", href: `${basePath}/sponsors` },
+    ...(showSponsors ? [{ label: "Sponsors & Partners", href: `${basePath}/sponsors` }] : []),
   ];
 
   return (
@@ -84,10 +90,10 @@ export function EventSubNav({ event }: EventSubNavProps) {
             className="flex flex-col group hover:opacity-90 transition-opacity"
           >
             <span className="text-sm font-bold text-on-surface leading-tight">
-              DevCraft &apos;25
+              {event.workshop?.headline || event.title}
             </span>
             <span className="text-[11px] font-medium text-foreground-muted">
-              Flagship Workshop
+              {event.workshop ? "Workshop Series" : "Event"}
             </span>
           </Link>
         </div>
@@ -97,7 +103,10 @@ export function EventSubNav({ event }: EventSubNavProps) {
             <div className="hidden lg:flex h-8 w-96 rounded-full bg-surface-container animate-pulse" />
           }
         >
-          <EventSubNavTabs basePath={basePath} />
+          <EventSubNavTabs
+            basePath={basePath}
+            showSponsors={Boolean(event.workshop?.showSponsors)}
+          />
         </Suspense>
 
         {/* Right Action */}

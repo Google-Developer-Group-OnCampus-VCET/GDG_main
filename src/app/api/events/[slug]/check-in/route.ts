@@ -47,7 +47,7 @@ export async function POST(
 
     if (!body?.referenceId?.trim()) {
       return NextResponse.json(
-        { error: "INVALID_REQUEST", message: "Pass reference ID is required." },
+        { error: "INVALID_REQUEST", message: "Pass reference is required." },
         { status: 400 }
       );
     }

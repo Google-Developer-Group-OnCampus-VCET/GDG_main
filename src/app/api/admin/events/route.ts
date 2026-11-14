@@ -50,8 +50,12 @@ export async function POST(request: Request) {
 
     if (!result.success) {
       const isDuplicate = result.error?.toLowerCase().includes("already exists");
+      console.error("Admin create event failed:", result.error);
       return NextResponse.json(
-        { error: isDuplicate ? "DUPLICATE_EVENT" : "CREATE_FAILED", message: result.error },
+        {
+          error: isDuplicate ? "DUPLICATE_EVENT" : "CREATE_FAILED",
+          message: isDuplicate ? "An event with this name already exists." : "Failed to create event. Please check inputs.",
+        },
         { status: isDuplicate ? 409 : 400 }
       );
     }

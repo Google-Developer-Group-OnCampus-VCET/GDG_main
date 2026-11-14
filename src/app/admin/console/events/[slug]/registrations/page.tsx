@@ -9,7 +9,7 @@ import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { EventStatusToggle } from "@/components/admin/event-status-toggle";
 
 export function generateStaticParams() {
-  return [{ slug: "devcraft-2025" }];
+  return [{ slug: "dev-to-cloud" }];
 }
 
 export async function generateMetadata({

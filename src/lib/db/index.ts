@@ -699,7 +699,7 @@ export function createRegistration(
   if (!existingEvent) {
     const defMatch = defaultEvents.find((e) => e.slug === eventSlug);
     if (!defMatch) {
-      return { success: false, error: "EVENT_NOT_FOUND", message: `Event "${eventSlug}" was not found.` };
+      return { success: false, error: "EVENT_NOT_FOUND", message: "Event not found." };
     }
     ensureDefaultEventInSqlite(db, defMatch);
   }
@@ -713,7 +713,7 @@ export function createRegistration(
     return {
       success: false,
       error: "DUPLICATE_EMAIL",
-      message: `The email ${emailNormalized} is already registered under pass reference #${existing.reference_id}.`,
+      message: "This email is already registered for this event.",
     };
   }
 
@@ -798,13 +798,13 @@ export function checkInAttendee(
   const reg = getRegistrationByReference(ref);
 
   if (!reg || reg.eventSlug !== eventSlug) {
-    return { success: false, message: `Pass reference "${ref}" was not found for this event.` };
+    return { success: false, message: "Pass reference was not found for this event." };
   }
 
   if (reg.checkedIn) {
     return {
       success: false,
-      message: `${reg.fullName} (#${ref}) was ALREADY checked in at ${reg.checkedInAt}.`,
+      message: `${reg.fullName} was ALREADY checked in at ${reg.checkedInAt}.`,
       registration: reg,
     };
   }
@@ -819,7 +819,7 @@ export function checkInAttendee(
 
   return {
     success: true,
-    message: `Successfully checked in ${reg.fullName} (#${ref}) for ${reg.track}!`,
+    message: `Successfully checked in ${reg.fullName} for ${reg.track}!`,
     registration: updatedReg,
   };
 }
