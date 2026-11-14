@@ -6,9 +6,9 @@ import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSponsorsView } from "@/components/workshop/event-sponsors-view";
 
 export function generateStaticParams() {
-  return events
-    .filter((e) => Boolean(e.workshop && e.workshop.showSponsors))
-    .map((event) => ({ slug: event.slug }));
+  const sponsored = events.filter((e) => Boolean(e.workshop && e.workshop.showSponsors));
+  if (sponsored.length === 0) return [{ slug: "__placeholder__" }];
+  return sponsored.map((event) => ({ slug: event.slug }));
 }
 
 async function findEvent(slug: string) {
