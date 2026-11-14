@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
@@ -12,13 +14,17 @@ export function generateStaticParams() {
 }
 
 async function findEvent(slug: string) {
+  const staticMatch = events.find((event) => event.slug === slug);
+  if (staticMatch?.workshop) return staticMatch;
+
+  await connection();
   try {
     const dbEvent = await getEventBySlugAsync(slug);
     if (dbEvent?.workshop) return dbEvent;
   } catch {
     // fallback
   }
-  return events.find((event) => event.slug === slug);
+  return staticMatch;
 }
 
 export async function generateMetadata({
@@ -35,7 +41,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function EventSpeakersPage({
+async function EventSpeakersContent({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -52,3 +58,20 @@ export default async function EventSpeakersPage({
   );
 }
 
+export default function EventSpeakersPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
+          Loading speakers…
+        </div>
+      }
+    >
+      <EventSpeakersContent params={params} />
+    </Suspense>
+  );
+}
