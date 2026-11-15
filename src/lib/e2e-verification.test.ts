@@ -27,7 +27,7 @@ describe("Comprehensive System Verification", () => {
       const devcraft = events.find((e) => e.slug === TEST_SLUG);
       expect(devcraft).toBeDefined();
       expect(devcraft?.workshop).toBeDefined();
-      expect(devcraft?.workshop?.capacity).toBe(150);
+      expect(devcraft?.workshop?.capacity).toBe(120);
       expect(devcraft?.workshop?.agenda.length).toBeGreaterThan(6);
       expect(devcraft?.workshop?.speakersTbd).toBe(true);
       expect(devcraft?.workshop?.showSponsors).toBe(false);
@@ -178,16 +178,32 @@ describe("Comprehensive System Verification", () => {
 
       const ref = attendee.registration.referenceId;
 
-      // First check-in succeeds
-      const checkIn1 = checkInAttendee(TEST_SLUG, ref);
+      // Day 1 check-in succeeds
+      const checkIn1 = checkInAttendee(TEST_SLUG, ref, 1);
       expect(checkIn1.success).toBe(true);
       expect(checkIn1.registration?.checkedIn).toBe(true);
-      expect(checkIn1.registration?.checkedInAt).toBeDefined();
+      expect(checkIn1.registration?.checkedInDays).toContain(1);
 
-      // Second check-in on the same pass fails with duplicate warning
-      const checkIn2 = checkInAttendee(TEST_SLUG, ref);
-      expect(checkIn2.success).toBe(false);
-      expect(checkIn2.message).toContain("ALREADY checked in");
+      // Re-checking in on Day 1 on the same pass fails with duplicate warning
+      const checkIn1Dup = checkInAttendee(TEST_SLUG, ref, 1);
+      expect(checkIn1Dup.success).toBe(false);
+      expect(checkIn1Dup.message).toContain("ALREADY checked in for Day 1");
+
+      // Day 2 check-in on the same pass succeeds!
+      const checkIn2 = checkInAttendee(TEST_SLUG, ref, 2);
+      expect(checkIn2.success).toBe(true);
+      expect(checkIn2.registration?.checkedInDays).toContain(2);
+
+      // Day 3 and Day 4 check-ins succeed
+      checkInAttendee(TEST_SLUG, ref, 3);
+      const checkIn4 = checkInAttendee(TEST_SLUG, ref, 4);
+      expect(checkIn4.success).toBe(true);
+      expect(checkIn4.registration?.checkedInDays).toEqual([1, 2, 3, 4]);
+
+      // Re-checking in on Day 4 fails
+      const checkIn4Dup = checkInAttendee(TEST_SLUG, ref, 4);
+      expect(checkIn4Dup.success).toBe(false);
+      expect(checkIn4Dup.message).toContain("ALREADY checked in for Day 4");
     });
 
     it("rejects invalid or forged pass references", () => {
@@ -198,7 +214,7 @@ describe("Comprehensive System Verification", () => {
   });
 
   describe("4. Administrative Dashboard & Analytics", () => {
-    it("retrieves registrations with query and track filtering", () => {
+    it("retrieves registrations with query, track, and multi-day filtering", () => {
       const allRegs = getRegistrations(TEST_SLUG);
       expect(allRegs.length).toBeGreaterThan(0);
 
@@ -206,15 +222,25 @@ describe("Comprehensive System Verification", () => {
         track: "Full 4-Day Journey: Zero to Hero",
       });
       expect(trackMatches.length).toBeGreaterThanOrEqual(0);
+
+      // Test multi-day filter
+      const day1Attendees = getRegistrations(TEST_SLUG, { checkedIn: "day-1" });
+      expect(day1Attendees.length).toBeGreaterThan(0);
+
+      const allDaysAttendees = getRegistrations(TEST_SLUG, { checkedIn: "all-days" });
+      expect(allDaysAttendees.length).toBeGreaterThan(0);
     });
 
     it("provides accurate aggregate metrics in getEventStats", () => {
       const stats = getEventStats(TEST_SLUG);
-      expect(stats.capacity).toBe(150);
+      expect(stats.capacity).toBe(120);
       expect(stats.totalRegistered).toBeGreaterThanOrEqual(1);
-      expect(stats.remaining).toBeLessThanOrEqual(149);
+      expect(stats.remaining).toBeLessThanOrEqual(119);
       expect(stats.isOpen).toBe(true);
       expect(stats.checkedInCount).toBeGreaterThanOrEqual(1);
+      expect(stats.dailyCheckedInCounts).toBeDefined();
+      expect(stats.dailyCheckedInCounts?.[1]).toBeGreaterThanOrEqual(1);
+      expect(stats.multiDayCompletionCount).toBeGreaterThanOrEqual(1);
     });
   });
 });
