@@ -245,3 +245,16 @@ export interface ChapterConfig {
   sourceUrl: string;
   lastVerifiedAt: string;
 }
+
+export interface EmailLog {
+  id: string;
+  eventSlug: string;
+  type: "pass" | "announcement";
+  subject: string;
+  recipientCount: number;
+  recipients: string[];
+  sentAt: string;
+  status: "sent" | "simulated" | "failed";
+  sender?: string;
+  previewText?: string;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { RegistrationRecord } from "@/types";
 import { downloadForGoogleSheets, copyForGoogleSheets, type ExportColumn } from "@/lib/sheets-export";
 
@@ -16,6 +17,29 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
   const [checkInFilter, setCheckInFilter] = useState("all");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [emailingRef, setEmailingRef] = useState<string | null>(null);
+
+  async function handleEmailPass(reg: RegistrationRecord) {
+    setEmailingRef(reg.referenceId);
+    try {
+      const res = await fetch(`/api/events/${eventSlug}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send-pass", referenceId: reg.referenceId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionFeedback(`Official pass successfully emailed to ${reg.email}!`);
+      } else {
+        setActionFeedback(data.message || `Failed to email pass to ${reg.email}.`);
+      }
+    } catch {
+      setActionFeedback("Network error emailing pass.");
+    } finally {
+      setEmailingRef(null);
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
+  }
 
   const filtered = registrations.filter((r) => {
     const matchesSearch =
@@ -277,6 +301,18 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
               )}
             </button>
           </div>
+
+          {/* Email Hub & Broadcast Shortcut */}
+          <Link
+            href={`/admin/console/events/${eventSlug}/email`}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 text-xs font-bold transition-all shrink-0"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+              <polyline points="22,6 12,13 2,6" />
+            </svg>
+            <span>Email Hub &amp; Broadcast</span>
+          </Link>
         </div>
       </div>
 
@@ -353,7 +389,21 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
                       })}
                     </div>
 
-                    <div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEmailPass(reg)}
+                        disabled={emailingRef === reg.referenceId}
+                        title={`Email pass & QR code to ${reg.email}`}
+                        className="px-2.5 py-1.5 rounded-lg border border-border text-foreground-muted hover:text-primary hover:border-primary text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 min-h-[36px]"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                          <polyline points="22,6 12,13 2,6" />
+                        </svg>
+                        <span>{emailingRef === reg.referenceId ? "Sending…" : "Email Pass"}</span>
+                      </button>
+
                       {nextMissingDay ? (
                         <button
                           type="button"
@@ -468,19 +518,33 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
                       </td>
 
                       <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
-                        {nextMissingDay ? (
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
+                            onClick={() => handleEmailPass(reg)}
+                            disabled={emailingRef === reg.referenceId}
+                            title={`Email pass & QR code to ${reg.email}`}
+                            className="p-1.5 rounded-lg border border-border bg-slate-50/50 text-foreground-muted hover:text-primary hover:border-primary transition-all cursor-pointer disabled:opacity-50"
                           >
-                            Admit Day {nextMissingDay}
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                              <polyline points="22,6 12,13 2,6" />
+                            </svg>
                           </button>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            ✓ All 4 Days
-                          </span>
-                        )}
+                          {nextMissingDay ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
+                            >
+                              Admit Day {nextMissingDay}
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              ✓ All 4 Days
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

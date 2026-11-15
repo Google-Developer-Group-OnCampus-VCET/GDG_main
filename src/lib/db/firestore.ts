@@ -4,6 +4,7 @@ import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import type {
   ChapterEvent,
+  EmailLog,
   EventInput,
   EventUpdateInput,
   RegistrationInput,
@@ -827,6 +828,44 @@ export async function checkInFirestoreAttendee(
     };
   } catch (err) {
     console.warn("Firestore checkInAttendee failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function logFirestoreEmail(log: EmailLog): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+  try {
+    await db.collection("email_logs").doc(log.id).set({
+      ...log,
+      createdAt: log.sentAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.warn("Failed to write email log to Firestore:", (err as Error).message);
+    return false;
+  }
+}
+
+export async function getFirestoreEmailLogs(eventSlug: string): Promise<EmailLog[] | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+  try {
+    const snap = await db
+      .collection("email_logs")
+      .where("eventSlug", "==", eventSlug)
+      .limit(50)
+      .get();
+
+    const logs: EmailLog[] = [];
+    snap.forEach((doc) => {
+      const d = doc.data() as EmailLog;
+      logs.push(d);
+    });
+    logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+    return logs;
+  } catch (err) {
+    console.warn("Failed to fetch email logs from Firestore:", (err as Error).message);
     return null;
   }
 }

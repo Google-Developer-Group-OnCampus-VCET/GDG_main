@@ -61,6 +61,8 @@ export function EventRegistrationView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [previewPassMode, setPreviewPassMode] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [emailingPass, setEmailingPass] = useState(false);
+  const [emailPassResult, setEmailPassResult] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   async function handleSubmit(e: React.FormEvent) {
@@ -136,6 +138,42 @@ export function EventRegistrationView({
     URL.revokeObjectURL(url);
     setDownloadSuccess(true);
     setTimeout(() => setDownloadSuccess(false), 3000);
+  }
+
+  async function handleEmailSelfPass() {
+    if (previewPassMode) {
+      setEmailPassResult("Complete registration to receive your official pass by email.");
+      setTimeout(() => setEmailPassResult(null), 3500);
+      return;
+    }
+    if (!confirmedRegistration) return;
+
+    setEmailingPass(true);
+    setEmailPassResult(null);
+
+    try {
+      const res = await fetch(`/api/events/${event.slug}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "self-send",
+          referenceId: confirmedRegistration.referenceId,
+          email: confirmedRegistration.email,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailPassResult(`Pass successfully emailed to ${confirmedRegistration.email}!`);
+      } else {
+        setEmailPassResult(data.message || "Failed to send email.");
+      }
+    } catch {
+      setEmailPassResult("Network error sending pass email.");
+    } finally {
+      setEmailingPass(false);
+      setTimeout(() => setEmailPassResult(null), 4000);
+    }
   }
 
   const activePass = confirmedRegistration ?? {
@@ -785,18 +823,41 @@ export function EventRegistrationView({
               </div>
 
               {/* Pass Actions */}
-              <button
-                type="button"
-                onClick={handleDownloadPass}
-                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-xl text-sm font-semibold hover:bg-primary-hover active:scale-95 transition-all cursor-pointer min-h-[44px]"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                <span>{downloadSuccess ? "PDF Pass Downloaded!" : "Download Pass (PDF)"}</span>
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleDownloadPass}
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-xl text-sm font-semibold hover:bg-primary-hover active:scale-95 transition-all cursor-pointer min-h-[44px]"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span>{downloadSuccess ? "PDF Pass Downloaded!" : "Download Pass (PDF)"}</span>
+                </button>
+
+                {!previewPassMode && confirmedRegistration ? (
+                  <button
+                    type="button"
+                    onClick={handleEmailSelfPass}
+                    disabled={emailingPass}
+                    className="inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 px-4 rounded-xl text-sm font-semibold active:scale-95 transition-all cursor-pointer min-h-[44px] disabled:opacity-50"
+                  >
+                    <svg className="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                      <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                    <span>{emailingPass ? "Sending Email…" : "Email Me My Pass"}</span>
+                  </button>
+                ) : null}
+              </div>
+
+              {emailPassResult ? (
+                <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs font-semibold text-center">
+                  {emailPassResult}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

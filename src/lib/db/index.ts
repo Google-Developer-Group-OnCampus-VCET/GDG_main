@@ -4,6 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ChapterEvent,
+  EmailLog,
   EventFormat,
   EventInput,
   EventTopic,
@@ -24,6 +25,8 @@ import {
   getFirestoreEvents,
   getFirestoreEvent,
   seedFirestoreInitialEvents,
+  logFirestoreEmail,
+  getFirestoreEmailLogs,
   slugify,
 } from "./firestore";
 
@@ -122,6 +125,20 @@ export function getDatabase(): DatabaseSync {
 
     CREATE INDEX IF NOT EXISTS idx_registrations_slug ON registrations(event_slug);
     CREATE INDEX IF NOT EXISTS idx_registrations_ref ON registrations(reference_id);
+
+    CREATE TABLE IF NOT EXISTS email_logs (
+      id TEXT PRIMARY KEY,
+      event_slug TEXT NOT NULL,
+      type TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      recipient_count INTEGER NOT NULL,
+      recipients TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      sender TEXT,
+      preview_text TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_logs_event ON email_logs(event_slug);
   `);
 
   try {
@@ -990,6 +1007,7 @@ export function cleanupTestRegistrations(): void {
        OR email LIKE '%checkin%'
        OR email LIKE '%duplicate%'
        OR email LIKE '%noconsent%'
+       OR event_slug LIKE 'test-%'
   `).run();
 }
 
@@ -1245,6 +1263,77 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     console.warn("SQLite getEventBySlug fallback failed, checking static events:", (err as Error).message);
     return defaultEvents.find((e) => e.slug === slug) ?? null;
   }
+}
+
+export function logEmailRecord(log: EmailLog): void {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT OR REPLACE INTO email_logs (
+      id, event_slug, type, subject, recipient_count, recipients, sent_at, status, sender, preview_text
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    log.id,
+    log.eventSlug,
+    log.type,
+    log.subject,
+    log.recipientCount,
+    JSON.stringify(log.recipients),
+    log.sentAt,
+    log.status,
+    log.sender ?? null,
+    log.previewText ?? null
+  );
+}
+
+export function getEmailLogs(eventSlug: string): EmailLog[] {
+  const db = getDatabase();
+  const rows = db
+    .prepare("SELECT * FROM email_logs WHERE event_slug = ? ORDER BY sent_at DESC LIMIT 50")
+    .all(eventSlug) as Record<string, unknown>[];
+
+  return rows.map((r) => {
+    let recipients: string[] = [];
+    try {
+      recipients = JSON.parse(r.recipients as string);
+    } catch {
+      recipients = [];
+    }
+    return {
+      id: r.id as string,
+      eventSlug: r.event_slug as string,
+      type: r.type as "pass" | "announcement",
+      subject: r.subject as string,
+      recipientCount: r.recipient_count as number,
+      recipients,
+      sentAt: r.sent_at as string,
+      status: r.status as "sent" | "simulated" | "failed",
+      sender: (r.sender as string) || undefined,
+      previewText: (r.preview_text as string) || undefined,
+    };
+  });
+}
+
+export async function logEmailRecordAsync(log: EmailLog): Promise<void> {
+  try {
+    logEmailRecord(log);
+  } catch (err) {
+    console.warn("SQLite logEmailRecord failed:", (err as Error).message);
+  }
+  try {
+    await logFirestoreEmail(log);
+  } catch (err) {
+    console.warn("Firestore logFirestoreEmail failed:", (err as Error).message);
+  }
+}
+
+export async function getEmailLogsAsync(eventSlug: string): Promise<EmailLog[]> {
+  try {
+    const fsLogs = await getFirestoreEmailLogs(eventSlug);
+    if (fsLogs && fsLogs.length > 0) return fsLogs;
+  } catch (err) {
+    console.warn("Firestore getEmailLogs failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getEmailLogs(eventSlug);
 }
 
 

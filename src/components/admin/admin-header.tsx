@@ -6,7 +6,7 @@ import { useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics";
+  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email";
   eventSlug?: string;
 }
 
@@ -81,6 +81,16 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
               }`}
             >
               Analytics
+            </Link>
+            <Link
+              href={`/admin/console/events/${eventSlug}/email`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                currentTab === "email"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground"
+              }`}
+            >
+              Email &amp; Broadcast
             </Link>
           </nav>
         ) : null}
@@ -177,6 +187,16 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             }`}
           >
             Analytics
+          </Link>
+          <Link
+            href={`/admin/console/events/${eventSlug}/email`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "email"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Email
           </Link>
           <Link
             href={`/events/${eventSlug}`}
