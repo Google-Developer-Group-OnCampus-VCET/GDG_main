@@ -22,9 +22,9 @@ export function validateAndNormalizeRegistrationInput(
   const fullName = input.fullName?.trim() || "";
   const email = input.email?.trim().toLowerCase() || "";
   const phone = input.phone?.trim() || "";
-  const track = input.track?.trim() || "";
+  const track = input.track?.trim() || "General Admission";
 
-  if (!fullName || !email || !phone || !track) {
+  if (!fullName || !email || !phone) {
     return { valid: false, message: "All required fields must be provided." };
   }
 

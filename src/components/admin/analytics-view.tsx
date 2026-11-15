@@ -33,7 +33,7 @@ export function AnalyticsView({ slug, eventTitle, stats }: AnalyticsViewProps) {
           { metric: "All 4 Days Completed", value: stats.multiDayCompletionCount || 0, category: "4-Day Attendance" },
         ]
       : []),
-    ...Object.entries(stats.trackCounts).map(([track, count]) => ({
+    ...Object.entries(stats.trackCounts || {}).map(([track, count]) => ({
       metric: track,
       value: count,
       category: "Track Distribution",
@@ -223,28 +223,30 @@ export function AnalyticsView({ slug, eventTitle, stats }: AnalyticsViewProps) {
 
       {/* High-Density Breakdown Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Track Selection */}
-        <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
-            Track Preference
-          </h2>
-          <div className="flex flex-col gap-3 divide-y divide-border/40 text-xs">
-            {Object.entries(stats.trackCounts).map(([track, count]) => {
-              const pct = stats.totalRegistered > 0 ? Math.round((count / stats.totalRegistered) * 100) : 0;
-              return (
-                <div key={track} className="pt-2 first:pt-0 flex flex-col gap-1">
-                  <div className="flex justify-between items-center font-medium">
-                    <span className="text-slate-800">{track}</span>
-                    <span className="font-mono font-bold text-slate-900">{count} ({pct}%)</span>
+        {/* Track Selection (Optional: only if track data exists) */}
+        {Object.keys(stats.trackCounts || {}).length > 0 ? (
+          <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider">
+              Track Preference
+            </h2>
+            <div className="flex flex-col gap-3 divide-y divide-border/40 text-xs">
+              {Object.entries(stats.trackCounts || {}).map(([track, count]) => {
+                const pct = stats.totalRegistered > 0 ? Math.round((count / stats.totalRegistered) * 100) : 0;
+                return (
+                  <div key={track} className="pt-2 first:pt-0 flex flex-col gap-1">
+                    <div className="flex justify-between items-center font-medium">
+                      <span className="text-slate-800">{track}</span>
+                      <span className="font-mono font-bold text-slate-900">{count} ({pct}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-primary h-full rounded-full" style={{ width: `${pct}%` }}></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                    <div className="bg-primary h-full rounded-full" style={{ width: `${pct}%` }}></div>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Academic Year */}
         <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">

@@ -92,10 +92,10 @@ export interface WorkshopRegistrationConfig {
   deadline?: string;
   price: number; // 0 for free
   currency: string;
-  tracks: WorkshopTrack[];
-  departments: string[];
-  yearsOfStudy: string[];
-  experienceLevels: string[];
+  tracks?: WorkshopTrack[];
+  departments?: string[];
+  yearsOfStudy?: string[];
+  experienceLevels?: string[];
 }
 
 export interface WorkshopDetails {
@@ -165,7 +165,7 @@ export interface RegistrationRecord {
   college: string;
   department: string;
   yearOfStudy: string;
-  track: string;
+  track?: string;
   experienceLevel: string;
   portfolioUrl?: string;
   notes?: string;
@@ -184,7 +184,7 @@ export interface RegistrationInput {
   college?: string;
   department?: string;
   yearOfStudy?: string;
-  track: string;
+  track?: string;
   experienceLevel?: string;
   portfolioUrl?: string;
   notes?: string;

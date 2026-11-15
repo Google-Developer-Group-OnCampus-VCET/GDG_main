@@ -198,7 +198,7 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
   );
   infoY -= 12;
   drawField("College / Institute", registration.college);
-  drawField("Assigned Track", registration.track);
+  drawField("Assigned Track", registration.track || "General Admission");
 
   return pdfDoc.save();
 }

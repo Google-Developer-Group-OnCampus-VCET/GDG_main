@@ -200,7 +200,7 @@ export function generatePassEmailHtml(options: {
           </tr>
           <tr>
             <td class="details-label">Assigned Track</td>
-            <td class="details-value">${registration.track}</td>
+            <td class="details-value">${registration.track || "General Admission"}</td>
           </tr>
           <tr>
             <td class="details-label">Dates & Times</td>
@@ -242,7 +242,7 @@ Location: ${venueText}
 
 Attendee: ${registration.fullName}
 Pass Reference ID: #${registration.referenceId}
-Track: ${registration.track}
+Track: ${registration.track || "General Admission"}
 Department: ${registration.department} (${registration.yearOfStudy})
 
 **VALID FOR ALL 4 DAYS (Dec 1–4, 2026)**

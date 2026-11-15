@@ -40,12 +40,16 @@ export function resolveWorkshopDetails(
       venueText: event.location || event.workshop.venueText || venueText,
       datesText: event.startsAt ? formatEventDateRange(event) : event.workshop.datesText || datesText,
       registrationConfig: {
-        ...event.workshop.registrationConfig,
+        ...(event.workshop.registrationConfig || {}),
+        tracks: event.workshop.registrationConfig?.tracks || [],
+        departments: event.workshop.registrationConfig?.departments || DEFAULT_DEPARTMENTS,
+        yearsOfStudy: event.workshop.registrationConfig?.yearsOfStudy || DEFAULT_YEARS,
+        experienceLevels: event.workshop.registrationConfig?.experienceLevels || ["Beginner", "Intermediate", "Advanced"],
         isOpen:
           stats?.isOpen ??
           (typeof event.isRegistrationOpen === "boolean"
             ? event.isRegistrationOpen
-            : event.workshop.registrationConfig.isOpen),
+            : event.workshop.registrationConfig?.isOpen ?? true),
       },
     };
   }

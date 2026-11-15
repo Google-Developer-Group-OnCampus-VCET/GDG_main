@@ -606,7 +606,7 @@ export function EmailHub({
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">
                           <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-100">
-                            {reg.track.split(":")[0]}
+                            {(reg.track || "General").split(":")[0]}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">

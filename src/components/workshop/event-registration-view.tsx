@@ -36,20 +36,20 @@ export function EventRegistrationView({
   const [phone, setPhone] = useState("");
   const [college, setCollege] = useState("");
   const [department, setDepartment] = useState(
-    workshop.registrationConfig.departments[0] ?? "Computer Engg"
+    workshop.registrationConfig?.departments?.[0] ?? "Computer Engg"
   );
   const [yearOfStudy, setYearOfStudy] = useState(
-    workshop.registrationConfig.yearsOfStudy?.includes("3rd Year")
+    workshop.registrationConfig?.yearsOfStudy?.includes("3rd Year")
       ? "3rd Year"
-      : workshop.registrationConfig.yearsOfStudy?.[0] ?? "1st Year"
+      : workshop.registrationConfig?.yearsOfStudy?.[0] ?? "1st Year"
   );
   const [experienceLevel, setExperienceLevel] = useState(
-    workshop.registrationConfig.experienceLevels?.includes("Intermediate")
+    workshop.registrationConfig?.experienceLevels?.includes("Intermediate")
       ? "Intermediate"
-      : workshop.registrationConfig.experienceLevels?.[0] ?? "Beginner"
+      : workshop.registrationConfig?.experienceLevels?.[0] ?? "Beginner"
   );
   const [track, setTrack] = useState(
-    workshop.registrationConfig.tracks[0]?.name ?? "General Admission"
+    workshop.registrationConfig?.tracks?.[0]?.name ?? "General Admission"
   );
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [agreedToCoc, setAgreedToCoc] = useState(false);
@@ -184,10 +184,10 @@ export function EventRegistrationView({
     email: email.trim() || "atharva.joshi@vcet.edu.in",
     phone: phone.trim() || "+91 98765 43210",
     college: college.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)",
-    department: department || workshop.registrationConfig.departments[0] || "Computer Engg",
-    yearOfStudy: yearOfStudy || workshop.registrationConfig.yearsOfStudy[0] || "3rd Year",
-    track: track || workshop.registrationConfig.tracks[0]?.name || "General Admission",
-    experienceLevel: experienceLevel || workshop.registrationConfig.experienceLevels?.[0] || "Intermediate",
+    department: department || workshop.registrationConfig?.departments?.[0] || "Computer Engg",
+    yearOfStudy: yearOfStudy || workshop.registrationConfig?.yearsOfStudy?.[0] || "3rd Year",
+    track: track || workshop.registrationConfig?.tracks?.[0]?.name || "General Admission",
+    experienceLevel: experienceLevel || workshop.registrationConfig?.experienceLevels?.[0] || "Intermediate",
     status: "confirmed" as const,
     checkedIn: false,
     createdAt: "2026-11-20T09:00:00.000Z",
@@ -482,7 +482,7 @@ export function EventRegistrationView({
                         onChange={(e) => setDepartment(e.target.value)}
                         className="w-full h-12 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                       >
-                        {workshop.registrationConfig.departments.map((d) => (
+                        {(workshop.registrationConfig?.departments || ["Computer Engg", "Information Tech", "AI & Data Science", "Other Engg"]).map((d) => (
                           <option key={d} value={d}>
                             {d}
                           </option>
@@ -495,7 +495,7 @@ export function EventRegistrationView({
                         Year of Study <span className="text-rose-500">*</span>
                       </label>
                       <div className="grid grid-cols-4 gap-1.5 h-12 w-full">
-                        {workshop.registrationConfig.yearsOfStudy.map((yr) => (
+                        {(workshop.registrationConfig?.yearsOfStudy || ["1st Year", "2nd Year", "3rd Year", "4th Year"]).map((yr) => (
                           <label key={yr} className="cursor-pointer">
                             <input
                               type="radio"
@@ -541,64 +541,69 @@ export function EventRegistrationView({
                     </div>
                   ) : null}
 
-                  {/* 6. Workshop Track Selection (Mobile-Friendly Tactile Cards) */}
-                  <div className="flex flex-col gap-2 text-left pt-1 w-full">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Select Workshop Track <span className="text-rose-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-                      {workshop.registrationConfig.tracks.map((t) => {
-                        const isSelected = track === t.name;
-                        return (
-                          <label
-                            key={t.id}
-                            className={`cursor-pointer rounded-2xl border p-3.5 sm:p-4 transition-all active:scale-[0.99] flex flex-col gap-2 w-full ${
-                              isSelected
-                                ? "border-primary bg-primary/5 shadow-xs ring-2 ring-primary/20"
-                                : "border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50"
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name="track"
-                              value={t.name}
-                              checked={isSelected}
-                              onChange={(e) => setTrack(e.target.value)}
-                              className="sr-only"
-                            />
-                            <div className="flex items-center justify-between">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  isSelected
-                                    ? "bg-primary text-white"
-                                    : "bg-slate-200 text-slate-700"
-                                }`}
-                              >
-                                {t.badge}
+                  {/* 6. Workshop Track Selection (Optional: only rendered if tracks exist in Firestore config) */}
+                  {workshop.registrationConfig?.tracks && workshop.registrationConfig.tracks.length > 0 ? (
+                    <div className="flex flex-col gap-2 text-left pt-1 w-full">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Workshop Track
+                        </label>
+                        <span className="text-[11px] text-slate-400 font-medium">Optional</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                        {workshop.registrationConfig.tracks.map((t) => {
+                          const isSelected = track === t.name;
+                          return (
+                            <label
+                              key={t.id}
+                              className={`cursor-pointer rounded-2xl border p-3.5 sm:p-4 transition-all active:scale-[0.99] flex flex-col gap-2 w-full ${
+                                isSelected
+                                  ? "border-primary bg-primary/5 shadow-xs ring-2 ring-primary/20"
+                                  : "border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="track"
+                                value={t.name}
+                                checked={isSelected}
+                                onChange={(e) => setTrack(e.target.value)}
+                                className="sr-only"
+                              />
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    isSelected
+                                      ? "bg-primary text-white"
+                                      : "bg-slate-200 text-slate-700"
+                                  }`}
+                                >
+                                  {t.badge}
+                                </span>
+                                <span
+                                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                                    isSelected
+                                      ? "border-primary bg-primary text-white"
+                                      : "border-slate-300 bg-white"
+                                  }`}
+                                >
+                                  {isSelected ? (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                  ) : null}
+                                </span>
+                              </div>
+                              <span className="text-sm font-bold text-slate-900 leading-snug">
+                                {t.name}
                               </span>
-                              <span
-                                className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                  isSelected
-                                    ? "border-primary bg-primary text-white"
-                                    : "border-slate-300 bg-white"
-                                }`}
-                              >
-                                {isSelected ? (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                                ) : null}
-                              </span>
-                            </div>
-                            <span className="text-sm font-bold text-slate-900 leading-snug">
-                              {t.name}
-                            </span>
-                            <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                              {t.description}
-                            </p>
-                          </label>
-                        );
-                      })}
+                              <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
+                                {t.description}
+                              </p>
+                            </label>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
 
                   {/* 6. GitHub or LinkedIn Profile (Optional) */}
                   <div className="flex flex-col gap-1.5 text-left pt-1 w-full">
@@ -765,13 +770,17 @@ export function EventRegistrationView({
                   </div>
 
                   <div className="flex flex-col gap-0.5">
+                    {activePass.track && activePass.track !== "General Admission" ? (
+                      <>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          Assigned Track
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 mb-1">
+                          {activePass.track}
+                        </span>
+                      </>
+                    ) : null}
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Assigned Track
-                    </span>
-                    <span className="text-xs font-bold text-slate-900">
-                      {activePass.track}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1.5">
                       Pass Ref ID
                     </span>
                     <span className="font-mono font-bold text-sm text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200 inline-block self-start">

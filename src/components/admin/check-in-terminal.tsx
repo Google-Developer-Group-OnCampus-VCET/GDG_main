@@ -106,7 +106,7 @@ export function CheckInTerminal({
               day: activeDay,
               name: data.registration.fullName,
               ref: data.registration.referenceId,
-              track: data.registration.track,
+              track: data.registration.track || "General Admission",
               email: data.registration.email,
               college: data.registration.college,
               totalDaysAttended: data.registration.checkedInDays?.length || 1,
@@ -487,7 +487,7 @@ export function CheckInTerminal({
                     </div>
                     <div className="col-span-2">
                       <span className="opacity-70">Track:</span>{" "}
-                      <strong className="underline decoration-current/30">{lastResult.registration.track}</strong>
+                      <strong className="underline decoration-current/30">{lastResult.registration.track || "General"}</strong>
                     </div>
                   </div>
 
@@ -588,7 +588,7 @@ export function CheckInTerminal({
                   <div className="flex flex-col items-end">
                     <span className="font-mono text-emerald-700 font-bold">{entry.time}</span>
                     <span className="text-[10px] text-foreground-muted truncate max-w-[120px]">
-                      {entry.track.split(":")[0]}
+                      {(entry.track || "General").split(":")[0]}
                       {entry.totalDaysAttended ? ` · ${entry.totalDaysAttended}/4 d` : ""}
                     </span>
                   </div>

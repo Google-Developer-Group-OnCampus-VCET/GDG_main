@@ -84,6 +84,21 @@ describe("Comprehensive System Verification", () => {
       }
     });
 
+    it("allows registration when track is omitted and defaults to General Admission gracefully", () => {
+      const emailWithoutTrack = `notrack.${Date.now()}@vcet.edu.in`;
+      const result = createRegistration(TEST_SLUG, {
+        fullName: "Attendee Without Track",
+        email: emailWithoutTrack,
+        phone: "+91 98222 33445",
+        agreedToCoc: true,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.registration.track).toBe("General Admission");
+      }
+    });
+
     it("rejects invalid input when required fields are missing", () => {
       const result = createRegistration(TEST_SLUG, {
         fullName: "",
