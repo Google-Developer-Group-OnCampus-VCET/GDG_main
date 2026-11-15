@@ -148,6 +148,9 @@ export interface ChapterEvent {
   lastVerifiedAt?: string;
   transcribedFrom?: string;
   transcribedAt?: string;
+  capacity?: number;
+  isRegistrationOpen?: boolean;
+  registeredCount?: number;
   /** When present, enables the rich multi-page workshop experience */
   workshop?: WorkshopDetails;
 }
@@ -197,6 +200,7 @@ export interface EventInput {
   topics?: EventTopic[];
   summary?: string;
   capacity?: number;
+  priceNote?: string;
   isRegistrationOpen?: boolean;
 }
 

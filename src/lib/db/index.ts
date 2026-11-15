@@ -436,6 +436,19 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
   const slug = r.slug as string;
   const defaultMatch = defaultEvents.find((e) => e.slug === slug);
 
+  const capacity = typeof r.capacity === "number" ? r.capacity : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity;
+  const workshop = defaultMatch?.workshop
+    ? {
+        ...defaultMatch.workshop,
+        ...(capacity !== undefined
+          ? {
+              capacity,
+              seatsText: `Limited to ${capacity} Seats`,
+            }
+          : {}),
+      }
+    : undefined;
+
   return {
     id: (r.id as string) || slug,
     slug,
@@ -449,8 +462,9 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
       "Vidyavardhini's College of Engineering and Technology, Vasai",
     topics,
     summary: (r.summary as string) || defaultMatch?.summary,
+    capacity,
     registrationUrl: `/events/${slug}/register`,
-    workshop: defaultMatch?.workshop,
+    workshop,
   };
 }
 
@@ -1057,7 +1071,12 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     if (firestoreEvent) {
       const defMatch = defaultEvents.find((e) => e.slug === slug);
       if (defMatch?.workshop && !firestoreEvent.workshop) {
-        firestoreEvent.workshop = defMatch.workshop;
+        const cap = firestoreEvent.capacity ?? defMatch.capacity ?? defMatch.workshop.capacity;
+        firestoreEvent.workshop = {
+          ...defMatch.workshop,
+          capacity: cap,
+          seatsText: `Limited to ${cap} Seats`,
+        };
       }
       return firestoreEvent;
     }

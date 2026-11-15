@@ -90,7 +90,8 @@ export async function createFirestoreEvent(
 
     const docPayload = {
       ...eventRecord,
-      capacity: input.capacity ?? 150,
+      capacity: input.capacity ?? 120,
+      priceNote: input.priceNote?.trim() || undefined,
       isRegistrationOpen: input.isRegistrationOpen ?? true,
       registeredCount: 0,
       createdAt: now,
@@ -150,7 +151,13 @@ export async function updateFirestoreEvent(
       updates.topics = input.topics.length > 0 ? input.topics : ["general"];
     }
     if (input.summary !== undefined) updates.summary = input.summary.trim() || null;
-    if (input.capacity !== undefined) updates.capacity = Math.floor(input.capacity);
+    if (input.priceNote !== undefined) updates.priceNote = input.priceNote.trim() || null;
+    if (input.capacity !== undefined) {
+      const cap = Math.floor(input.capacity);
+      updates.capacity = cap;
+      updates["workshop.capacity"] = cap;
+      updates["workshop.seatsText"] = `Limited to ${cap} Seats`;
+    }
     if (input.isRegistrationOpen !== undefined) {
       updates.isRegistrationOpen = Boolean(input.isRegistrationOpen);
     }
@@ -186,7 +193,12 @@ export async function updateFirestoreEvent(
 
     const updatedEvent = await getFirestoreEvent(slug);
     if (updatedEvent && defaultMatch?.workshop && !updatedEvent.workshop) {
-      updatedEvent.workshop = defaultMatch.workshop;
+      const cap = updatedEvent.capacity ?? defaultMatch.capacity ?? defaultMatch.workshop.capacity;
+      updatedEvent.workshop = {
+        ...defaultMatch.workshop,
+        capacity: cap,
+        seatsText: `Limited to ${cap} Seats`,
+      };
     }
 
     return updatedEvent
@@ -209,6 +221,35 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
     const list: ChapterEvent[] = [];
     snapshot.forEach((doc) => {
       const d = doc.data();
+      const capacity =
+        typeof d.capacity === "number"
+          ? d.capacity
+          : typeof d.workshop?.capacity === "number"
+          ? d.workshop.capacity
+          : undefined;
+
+      const workshop = d.workshop
+        ? {
+            ...d.workshop,
+            ...(capacity !== undefined
+              ? {
+                  capacity,
+                  seatsText: `Limited to ${capacity} Seats`,
+                }
+              : {}),
+            ...(d.location ? { venueText: d.location } : {}),
+            ...(typeof d.registeredCount === "number"
+              ? { initialRegisteredCount: d.registeredCount }
+              : {}),
+            registrationConfig: {
+              ...(d.workshop.registrationConfig || {}),
+              ...(typeof d.isRegistrationOpen === "boolean"
+                ? { isOpen: d.isRegistrationOpen }
+                : {}),
+            },
+          }
+        : undefined;
+
       list.push({
         id: d.id || doc.id,
         slug: d.slug || doc.id,
@@ -220,8 +261,12 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
         location: d.location,
         topics: d.topics || ["general"],
         summary: d.summary || undefined,
+        capacity,
+        priceNote: d.priceNote || undefined,
+        isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+        registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
         registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-        workshop: d.workshop || undefined,
+        workshop,
       });
     });
 
@@ -243,6 +288,35 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
     const d = doc.data();
     if (!d) return null;
 
+    const capacity =
+      typeof d.capacity === "number"
+        ? d.capacity
+        : typeof d.workshop?.capacity === "number"
+        ? d.workshop.capacity
+        : undefined;
+
+    const workshop = d.workshop
+      ? {
+          ...d.workshop,
+          ...(capacity !== undefined
+            ? {
+                capacity,
+                seatsText: `Limited to ${capacity} Seats`,
+              }
+            : {}),
+          ...(d.location ? { venueText: d.location } : {}),
+          ...(typeof d.registeredCount === "number"
+            ? { initialRegisteredCount: d.registeredCount }
+            : {}),
+          registrationConfig: {
+            ...(d.workshop.registrationConfig || {}),
+            ...(typeof d.isRegistrationOpen === "boolean"
+              ? { isOpen: d.isRegistrationOpen }
+              : {}),
+          },
+        }
+      : undefined;
+
     return {
       id: d.id || doc.id,
       slug: d.slug || doc.id,
@@ -254,8 +328,12 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
       location: d.location,
       topics: d.topics || ["general"],
       summary: d.summary || undefined,
+      capacity,
+      priceNote: d.priceNote || undefined,
+      isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+      registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
       registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-      workshop: d.workshop || undefined,
+      workshop,
     };
   } catch (err) {
     console.warn("Firestore getEvent failed:", (err as Error).message);
@@ -305,7 +383,12 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const eventDoc = await db.collection("events").doc(slug).get();
     const eventData = eventDoc.data();
     const defaultMatch = defaultEvents.find((e) => e.slug === slug);
-    const capacity = eventData?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+    const capacity =
+      typeof eventData?.capacity === "number"
+        ? eventData.capacity
+        : typeof eventData?.workshop?.capacity === "number"
+        ? eventData.workshop.capacity
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
     const isRegistrationOpen =
       eventData?.isRegistrationOpen ??
       eventData?.is_registration_open ??
@@ -479,7 +562,12 @@ export async function createFirestoreRegistration(
       }
 
       const eventData = eventDoc.data();
-      const capacity = eventData?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+      const capacity =
+      typeof eventData?.capacity === "number"
+        ? eventData.capacity
+        : typeof eventData?.workshop?.capacity === "number"
+        ? eventData.workshop.capacity
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
       const isRegistrationOpen = Boolean(
         eventData?.isRegistrationOpen ??
           eventData?.is_registration_open ??

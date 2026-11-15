@@ -11,7 +11,7 @@ export const metadata = {
   title: "Admin Console · GDG on Campus VCET",
 };
 
-function createFallbackStats(capacity = 150): EventStats {
+function createFallbackStats(capacity = 120): EventStats {
   return {
     totalRegistered: 0,
     capacity,
@@ -44,7 +44,7 @@ async function AdminConsoleContent() {
         const stats = await getEventStatsAsync(e.slug);
         return [e.slug, stats];
       } catch {
-        return [e.slug, createFallbackStats(e.workshop?.capacity ?? 150)];
+        return [e.slug, createFallbackStats(e.capacity ?? e.workshop?.capacity ?? 120)];
       }
     })
   );
@@ -57,7 +57,7 @@ async function AdminConsoleContent() {
   const flagshipSlug = flagshipWorkshop?.slug ?? "dev-to-cloud";
   const flagshipStats =
     (flagshipWorkshop ? statsBySlug.get(flagshipWorkshop.slug) : undefined) ??
-    createFallbackStats(150);
+    createFallbackStats(flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 120);
   const otherEventsList = allEvents.filter((e) => e.slug !== flagshipSlug);
 
   const totalRegisteredAll = statsEntries.reduce((sum, [, s]) => sum + s.totalRegistered, 0);
@@ -173,37 +173,37 @@ async function AdminConsoleContent() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
                 <Link
                   href={`/admin/console/events/${flagshipSlug}/registrations`}
-                  className="inline-flex items-center gap-1.5 bg-primary text-on-primary px-4 py-2 rounded-full text-xs font-semibold hover:bg-primary-hover transition-all"
+                  className="inline-flex items-center justify-center gap-1.5 bg-primary text-on-primary px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-primary-hover transition-all text-center"
                 >
                   <span className="material-symbols-outlined text-[16px]">group</span>
                   <span>Registrations ({flagshipStats.totalRegistered})</span>
                 </Link>
                 <Link
                   href={`/admin/console/events/${flagshipSlug}/check-in`}
-                  className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
+                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
                 >
                   <span className="material-symbols-outlined text-[16px] text-secondary">qr_code_scanner</span>
                   <span>Check-in</span>
                 </Link>
                 <Link
                   href={`/admin/console/events/${flagshipSlug}/analytics`}
-                  className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
+                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
                 >
                   <span className="material-symbols-outlined text-[16px] text-primary">bar_chart</span>
                   <span>Analytics</span>
                 </Link>
                 <Link
                   href={`/admin/console/events/${flagshipSlug}/edit`}
-                  className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-4 py-2 rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
+                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
                 >
                   <span>Edit</span>
                 </Link>
                 <Link
                   href={`/events/${flagshipSlug}/register`}
-                  className="inline-flex items-center gap-1.5 bg-white text-primary px-4 py-2 rounded-full text-xs font-semibold hover:bg-primary-fixed/40 transition-all border border-border"
+                  className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 bg-white text-primary px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-primary-fixed/40 transition-all border border-border text-center"
                 >
                   <span>Public Form</span>
                   <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
@@ -265,7 +265,7 @@ async function AdminConsoleContent() {
               </thead>
               <tbody className="divide-y divide-border/40">
                 {otherEventsList.map((e) => {
-                  const eventStats = statsBySlug.get(e.slug) ?? createFallbackStats(e.workshop?.capacity ?? 150);
+                  const eventStats = statsBySlug.get(e.slug) ?? createFallbackStats(e.capacity ?? e.workshop?.capacity ?? 120);
                   const eventIsOpen = isEventRegistrationOpen(eventStats);
 
                   return (

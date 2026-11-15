@@ -25,7 +25,7 @@ async function AdminEditEventContent({ slug }: { slug: string }) {
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
-  let initialCapacity = event.workshop?.capacity ?? 150;
+  let initialCapacity = event.capacity ?? event.workshop?.capacity ?? 120;
   let initialIsOpen = true;
 
   try {

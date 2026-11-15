@@ -328,7 +328,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
               >
                 Pass Reference ID / QR Code Payload
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   id="ref-input"
                   type="text"
@@ -337,12 +337,12 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                   placeholder="GDG-VCET-2026-XXXX"
                   disabled={submitting}
                   autoFocus
-                  className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
+                  className="flex-1 h-12 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
                 />
                 <button
                   type="submit"
                   disabled={submitting || !refInput.trim()}
-                  className="h-11 px-5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                  className="h-12 px-5 rounded-xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer w-full sm:w-auto shrink-0"
                 >
                   {submitting ? "Checking..." : "Verify & Admit"}
                 </button>

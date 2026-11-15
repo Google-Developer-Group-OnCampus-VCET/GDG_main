@@ -130,7 +130,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
       ) : null}
 
       {/* Simplified Filter & Export Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-border shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search */}
         <div className="relative flex-1">
           <input
@@ -138,10 +138,10 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, email, pass ID, college..."
-            className="w-full h-10 pl-9 pr-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden transition-all"
+            className="w-full h-11 pl-9 pr-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden transition-all"
           />
           <svg
-            className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none"
+            className="w-4 h-4 text-slate-400 absolute left-3 top-3.5 pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -153,51 +153,53 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
         </div>
 
         {/* Filter Controls & Universal Export to Sheets */}
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={trackFilter}
-            onChange={(e) => setTrackFilter(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
-          >
-            <option value="all">All Tracks</option>
-            {availableTracks.map((trk) => (
-              <option key={trk} value={trk}>
-                {trk}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
+            <select
+              value={trackFilter}
+              onChange={(e) => setTrackFilter(e.target.value)}
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="all">All Tracks</option>
+              {availableTracks.map((trk) => (
+                <option key={trk} value={trk}>
+                  {trk}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={checkInFilter}
-            onChange={(e) => setCheckInFilter(e.target.value)}
-            className="h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
-          >
-            <option value="all">All Status</option>
-            <option value="checked-in">Checked In Only</option>
-            <option value="not-checked-in">Pending Check-in</option>
-          </select>
+            <select
+              value={checkInFilter}
+              onChange={(e) => setCheckInFilter(e.target.value)}
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="all">All Status</option>
+              <option value="checked-in">Checked In Only</option>
+              <option value="not-checked-in">Pending Check-in</option>
+            </select>
+          </div>
 
           {/* Export to Google Sheets Actions */}
-          <div className="inline-flex rounded-xl border border-emerald-300 bg-emerald-50/70 p-0.5 shrink-0">
+          <div className="inline-flex rounded-xl border border-emerald-300 bg-emerald-50/70 p-0.5 shrink-0 justify-between sm:justify-start">
             <button
               type="button"
               onClick={handleDownloadSheets}
               title="Download UTF-8 CSV formatted for Google Sheets & Excel"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-emerald-800 hover:bg-emerald-100 text-xs font-semibold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-emerald-800 hover:bg-emerald-100 text-xs font-semibold transition-all cursor-pointer flex-1 sm:flex-initial justify-center"
             >
               <svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Export to Sheets (.csv)</span>
+              <span>Export to Sheets</span>
             </button>
 
             <button
               type="button"
               onClick={handleCopySheets}
               title="Copy table to clipboard for instant paste (Ctrl+V) into any open Google Spreadsheet"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 text-xs font-medium border-l border-emerald-200 transition-all cursor-pointer"
+              className="inline-flex items-center px-2.5 py-2 rounded-lg text-emerald-700 hover:bg-emerald-100 text-xs font-medium border-l border-emerald-200 transition-all cursor-pointer"
             >
               {copySuccess ? (
                 <span className="font-bold text-emerald-800">Copied!</span>
@@ -221,9 +223,64 @@ export function RegistrationsTable({ initialRegistrations, eventSlug }: Registra
         </span>
       </div>
 
-      {/* High-Density Data Table */}
+      {/* High-Density Data Display (Cards on Mobile, Table on Desktop) */}
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Attendee Card View */}
+        <div className="md:hidden divide-y divide-border/60">
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-xs">
+              No attendees match the active filters.
+            </div>
+          ) : (
+            filtered.map((reg) => (
+              <div key={reg.id} className="p-3.5 flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-slate-900 text-sm">{reg.fullName}</span>
+                    <span className="text-xs text-slate-500 font-mono">{reg.email}</span>
+                  </div>
+                  <span className="font-mono font-bold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                    #{reg.referenceId}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                  <span className="font-medium text-slate-700">{reg.department} · {reg.yearOfStudy}</span>
+                  <span>•</span>
+                  <span className="truncate max-w-[200px]">{reg.college}</span>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-semibold border border-blue-100">
+                    {reg.track}
+                  </span>
+
+                  <div>
+                    {!reg.checkedIn ? (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCheckIn(reg)}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer min-h-[36px]"
+                      >
+                        Check In
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-200">
+                        <svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span>Present</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Data Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="border-b border-border bg-slate-50 text-slate-600 font-bold text-[11px] uppercase tracking-wider">
               <tr>

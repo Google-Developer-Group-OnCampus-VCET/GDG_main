@@ -10,6 +10,7 @@ interface EventSponsorsViewProps {
 }
 
 export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
+  const capacity = event.capacity ?? workshop.capacity ?? 120;
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerEmail, setPartnerEmail] = useState("");
@@ -58,7 +59,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
           {/* Quick Stats Metric Band */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
             <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
-              <span className="text-2xl font-bold text-primary">150+</span>
+              <span className="text-2xl font-bold text-primary">{capacity}+</span>
               <span className="text-xs text-foreground-muted font-medium">Top Student Coders</span>
             </div>
             <div className="p-5 rounded-2xl bg-surface-container-low border border-border shadow-xs flex flex-col gap-1">
@@ -131,7 +132,7 @@ export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
                   {titleSponsor.contribution}
                 </span>
                 <span className="text-xs text-foreground-muted">
-                  Empowering 150 students with Vertex AI &amp; Cloud Run runtimes
+                  Empowering {capacity} students with Vertex AI &amp; Cloud Run runtimes
                 </span>
               </div>
             </div>

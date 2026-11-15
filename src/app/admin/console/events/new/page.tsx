@@ -26,7 +26,8 @@ export default function CreateEventPage() {
   const [location, setLocation] = useState(
     "Vidyavardhini's College of Engineering and Technology, Vasai"
   );
-  const [capacity, setCapacity] = useState(150);
+  const [capacity, setCapacity] = useState(120);
+  const [priceNote, setPriceNote] = useState("Free event (Registration required)");
   const [selectedTopics, setSelectedTopics] = useState<EventTopic[]>(["web", "cloud"]);
   const [summary, setSummary] = useState("");
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
@@ -79,7 +80,8 @@ export default function CreateEventPage() {
           startsAt: startsAt.trim(),
           endsAt: endsAt.trim() || undefined,
           location: location.trim(),
-          capacity: Number(capacity) || 150,
+          capacity: Number(capacity) || 120,
+          priceNote: priceNote.trim() || undefined,
           topics: selectedTopics,
           summary: summary.trim() || undefined,
           isRegistrationOpen,
@@ -271,7 +273,22 @@ export default function CreateEventPage() {
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="Vidyavardhini's College of Engineering and Technology, Vasai"
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                />
+              </div>
+
+              {/* Price Note */}
+              <div className="flex flex-col gap-1 text-left">
+                <label htmlFor="event-priceNote" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Pricing Note / Badge
+                </label>
+                <input
+                  id="event-priceNote"
+                  type="text"
+                  value={priceNote}
+                  onChange={(e) => setPriceNote(e.target.value)}
+                  placeholder="Free event (Registration required)"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
                 />
               </div>
 

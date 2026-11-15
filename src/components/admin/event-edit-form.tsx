@@ -73,7 +73,8 @@ export function EventEditForm({
   const [location, setLocation] = useState(
     event.location ?? "Vidyavardhini's College of Engineering and Technology, Vasai"
   );
-  const [capacity, setCapacity] = useState<number>(initialCapacity || 150);
+  const [capacity, setCapacity] = useState<number>(initialCapacity || event.capacity || 120);
+  const [priceNote, setPriceNote] = useState(event.priceNote ?? "");
   const [selectedTopics, setSelectedTopics] = useState<EventTopic[]>(
     event.topics && event.topics.length > 0 ? event.topics : ["general"]
   );
@@ -130,6 +131,7 @@ export function EventEditForm({
           endsAt: formattedEndsAt,
           location: location.trim(),
           capacity: parsedCapacity,
+          priceNote: priceNote.trim() || undefined,
           topics: selectedTopics,
           summary: summary.trim(),
           isRegistrationOpen,
@@ -371,7 +373,25 @@ export function EventEditForm({
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="Vidyavardhini's College of Engineering and Technology, Vasai"
-                className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+              />
+            </div>
+
+            {/* Price Note */}
+            <div className="flex flex-col gap-1 text-left">
+              <label
+                htmlFor="edit-event-priceNote"
+                className="text-xs font-bold text-slate-700 uppercase tracking-wider"
+              >
+                Pricing Note / Badge
+              </label>
+              <input
+                id="edit-event-priceNote"
+                type="text"
+                value={priceNote}
+                onChange={(e) => setPriceNote(e.target.value)}
+                placeholder="e.g. Free event (Registration required)"
+                className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
               />
             </div>
 

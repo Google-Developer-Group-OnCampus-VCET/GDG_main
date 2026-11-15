@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { events as staticEvents } from "@/content/events";
 import { formatEventDateRange } from "@/lib/events";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
 import { EventSubNav } from "@/components/event-sub-nav";
@@ -57,10 +58,12 @@ async function EventDetailContent({
       // Fallback to static numbers if db is initializing
     }
 
+    const workshop = resolveWorkshopDetails(event, stats);
+
     return (
       <div className="w-full flex flex-col">
         <EventSubNav event={event} />
-        <EventDetailsView event={event} workshop={event.workshop} stats={stats} />
+        <EventDetailsView event={event} workshop={workshop} stats={stats} />
       </div>
     );
   }

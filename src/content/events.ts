@@ -34,6 +34,7 @@ export const events: ChapterEvent[] = [
     topics: ["web", "cloud", "ai-ml"],
     summary:
       "A four-day intensive, hands-on workshop series taking developers from foundational web engineering to building, containerizing, deploying, and hardening an AI-powered campus assistant on Google Cloud.",
+    capacity: 120,
     priceNote: "Free event (Registration required)",
     registrationUrl: "/events/dev-to-cloud/register",
     workshop: devToCloudWorkshopData,

@@ -23,7 +23,8 @@ export function EventRegistrationView({
   workshop,
   stats,
 }: EventRegistrationViewProps) {
-  const capacity = stats?.capacity ?? workshop.capacity;
+  const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
+  const seatsText = `Limited to ${capacity} Seats`;
   const [remainingSeats, setRemainingSeats] = useState(
     stats?.remaining ?? Math.max(0, capacity - workshop.initialRegisteredCount)
   );
@@ -37,7 +38,16 @@ export function EventRegistrationView({
   const [department, setDepartment] = useState(
     workshop.registrationConfig.departments[0] ?? "Computer Engg"
   );
-  const [yearOfStudy, setYearOfStudy] = useState("3rd Year");
+  const [yearOfStudy, setYearOfStudy] = useState(
+    workshop.registrationConfig.yearsOfStudy?.includes("3rd Year")
+      ? "3rd Year"
+      : workshop.registrationConfig.yearsOfStudy?.[0] ?? "1st Year"
+  );
+  const [experienceLevel, setExperienceLevel] = useState(
+    workshop.registrationConfig.experienceLevels?.includes("Intermediate")
+      ? "Intermediate"
+      : workshop.registrationConfig.experienceLevels?.[0] ?? "Beginner"
+  );
   const [track, setTrack] = useState(
     workshop.registrationConfig.tracks[0]?.name ?? "General Admission"
   );
@@ -78,7 +88,7 @@ export function EventRegistrationView({
           department,
           yearOfStudy,
           track,
-          experienceLevel: "Intermediate",
+          experienceLevel,
           portfolioUrl: portfolioUrl.trim() || undefined,
           agreedToCoc,
         }),
@@ -136,10 +146,10 @@ export function EventRegistrationView({
     email: email.trim() || "atharva.joshi@vcet.edu.in",
     phone: phone.trim() || "+91 98765 43210",
     college: college.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)",
-    department: department || "Computer Engineering",
-    yearOfStudy: yearOfStudy || "3rd Year",
-    track: track || "Track A: Modern Web & Gemini AI",
-    experienceLevel: "Intermediate",
+    department: department || workshop.registrationConfig.departments[0] || "Computer Engg",
+    yearOfStudy: yearOfStudy || workshop.registrationConfig.yearsOfStudy[0] || "3rd Year",
+    track: track || workshop.registrationConfig.tracks[0]?.name || "General Admission",
+    experienceLevel: experienceLevel || workshop.registrationConfig.experienceLevels?.[0] || "Intermediate",
     status: "confirmed" as const,
     checkedIn: false,
     createdAt: "2026-11-20T09:00:00.000Z",
@@ -190,12 +200,12 @@ export function EventRegistrationView({
 
               {/* Main Headline */}
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
-                {event.title}
+                {event.title || workshop.headline}
               </h1>
 
               {/* Subheading */}
               <p className="text-sm sm:text-base text-foreground-muted max-w-2xl leading-relaxed">
-                {workshop.subheading}
+                {event.summary || workshop.subheading}
               </p>
 
               {/* Metadata Bar */}
@@ -218,15 +228,15 @@ export function EventRegistrationView({
                 </div>
                 <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-foreground font-semibold">{workshop.seatsText}</span>
+                  <span className="text-foreground font-semibold">{seatsText}</span>
                 </div>
               </div>
 
               {/* CTAs */}
-              <div className="flex flex-wrap items-center gap-3 pt-1">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1 w-full sm:w-auto">
                 <a
                   href="#registration-form"
-                  className="inline-flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover active:scale-95 transition-all cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-6 py-3.5 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover active:scale-95 transition-all cursor-pointer w-full sm:w-auto text-center"
                 >
                   <span>Register for Workshop</span>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -237,7 +247,7 @@ export function EventRegistrationView({
                 <button
                   type="button"
                   onClick={handleOpenPreviewPass}
-                  className="inline-flex items-center gap-2 bg-white text-foreground px-5 py-3 rounded-full text-sm font-semibold border border-border hover:bg-surface-container active:scale-95 transition-all cursor-pointer"
+                  className="inline-flex items-center justify-center gap-2 bg-white text-foreground px-5 py-3.5 rounded-full text-sm font-semibold border border-border hover:bg-surface-container active:scale-95 transition-all cursor-pointer w-full sm:w-auto text-center"
                 >
                   <svg className="w-4 h-4 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M4 4h16v16H4z" />
@@ -250,8 +260,8 @@ export function EventRegistrationView({
             </div>
 
             {/* Right Visual composition */}
-            <div className="lg:col-span-5 relative flex justify-center">
-              <div className="relative w-full max-w-sm aspect-4/3 bg-white rounded-3xl border border-border shadow-md p-5 flex flex-col justify-between overflow-hidden">
+            <div className="lg:col-span-5 relative flex justify-center w-full">
+              <div className="relative w-full max-w-sm bg-white rounded-3xl border border-border shadow-md p-4 sm:p-5 flex flex-col justify-between overflow-hidden min-h-[220px]">
                 <div className="flex items-center justify-between border-b border-border/60 pb-3">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#ea4335]"></span>
@@ -265,20 +275,19 @@ export function EventRegistrationView({
 
                 <div className="my-auto flex flex-col gap-2 py-3 text-center">
                   <div className="text-xs font-bold text-primary uppercase tracking-wider">
-                    Hands-On Technical Workshop
+                    {workshop.heroGraphic?.versionBadge || "Hands-On Technical Workshop"}
                   </div>
                   <div className="text-xl font-bold text-foreground">
-                    {workshop.headline || event.title}
+                    {event.title || workshop.headline}
                   </div>
                   <div className="text-xs text-foreground-muted">
-                    {workshop.datesText} &bull; {workshop.seatsText}
+                    {workshop.datesText} &bull; {seatsText}
                   </div>
                 </div>
 
-                <div className="bg-surface-container px-3.5 py-2 rounded-xl flex items-center justify-between text-xs">
-                  <span className="font-semibold text-emerald-800">100% Free For Students</span>
-                  <span className="bg-secondary-fixed text-on-secondary-fixed text-[11px] px-2 py-0.5 rounded-full font-bold">
-                    BATCH &apos;25
+                <div className="bg-surface-container px-3.5 py-2 rounded-xl flex items-center justify-center text-xs">
+                  <span className="font-semibold text-emerald-800">
+                    {event.priceNote || (workshop.registrationConfig.price === 0 ? "100% Free For Students" : `${workshop.registrationConfig.currency} ${workshop.registrationConfig.price}`)}
                   </span>
                 </div>
               </div>
@@ -289,11 +298,11 @@ export function EventRegistrationView({
 
       {/* SECTION 2: FAST MOBILE-NATIVE REGISTRATION FORM */}
       <section
-        className="w-full py-12 sm:py-16 bg-surface-container-low border-b border-border scroll-mt-20"
+        className="w-full py-8 sm:py-16 bg-surface-container-low border-b border-border scroll-mt-20"
         id="registration-form"
       >
-        <div className="max-w-xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col gap-6">
+        <div className="max-w-xl mx-auto px-3 sm:px-6">
+          <div className="flex flex-col gap-5 sm:gap-6">
             {/* Header with live seat counter */}
             <div className="text-center flex flex-col items-center gap-2">
               <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
@@ -309,7 +318,7 @@ export function EventRegistrationView({
             </div>
 
             {/* Mobile Native Registration Card */}
-            <div className="bg-white p-5 sm:p-8 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/50 flex flex-col gap-5">
+            <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/50 flex flex-col gap-4 sm:gap-5 w-full">
               {!isRegistrationOpen ? (
                 <div className="text-center py-10 flex flex-col items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
@@ -326,7 +335,7 @@ export function EventRegistrationView({
                   </p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-5">
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-5 w-full">
                   {/* Error Notification */}
                   {submitError ? (
                     <div
@@ -343,7 +352,7 @@ export function EventRegistrationView({
                   ) : null}
 
                   {/* 1. Full Name */}
-                  <div className="flex flex-col gap-1.5 text-left">
+                  <div className="flex flex-col gap-1.5 text-left w-full">
                     <label htmlFor="fullName" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Full Name <span className="text-rose-500">*</span>
                     </label>
@@ -356,13 +365,13 @@ export function EventRegistrationView({
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="e.g. Atharva Joshi"
-                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                   </div>
 
                   {/* 2. Contact Details (Email & Phone in Responsive Grid) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5 text-left">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <div className="flex flex-col gap-1.5 text-left w-full">
                       <label htmlFor="email" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         Email Address <span className="text-rose-500">*</span>
                       </label>
@@ -376,11 +385,11 @@ export function EventRegistrationView({
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@vcet.edu.in"
-                        className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                        className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                       />
                     </div>
 
-                    <div className="flex flex-col gap-1.5 text-left">
+                    <div className="flex flex-col gap-1.5 text-left w-full">
                       <label htmlFor="phone" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         WhatsApp / Phone <span className="text-rose-500">*</span>
                       </label>
@@ -394,13 +403,13 @@ export function EventRegistrationView({
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="+91 98765 43210"
-                        className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all font-mono"
+                        className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all font-mono"
                       />
                     </div>
                   </div>
 
                   {/* 3. College / Institution (Placeholder hint for VCET, editable) */}
-                  <div className="flex flex-col gap-1.5 text-left">
+                  <div className="flex flex-col gap-1.5 text-left w-full">
                     <div className="flex items-center justify-between">
                       <label htmlFor="college" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         College / University
@@ -415,7 +424,7 @@ export function EventRegistrationView({
                       value={college}
                       onChange={(e) => setCollege(e.target.value)}
                       placeholder="Vidyavardhini's College of Engineering & Technology (VCET)"
-                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                     <span className="text-[11px] text-slate-500">
                       Leave blank for VCET, or enter your college name if attending from another institute.
@@ -423,8 +432,8 @@ export function EventRegistrationView({
                   </div>
 
                   {/* 4. Academic Standing (Department & Year in 2-Column Grid) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5 text-left">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    <div className="flex flex-col gap-1.5 text-left w-full">
                       <label htmlFor="department" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         Department / Branch <span className="text-rose-500">*</span>
                       </label>
@@ -433,7 +442,7 @@ export function EventRegistrationView({
                         required
                         value={department}
                         onChange={(e) => setDepartment(e.target.value)}
-                        className="h-12 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                        className="w-full h-12 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                       >
                         {workshop.registrationConfig.departments.map((d) => (
                           <option key={d} value={d}>
@@ -443,11 +452,11 @@ export function EventRegistrationView({
                       </select>
                     </div>
 
-                    <div className="flex flex-col gap-1.5 text-left">
+                    <div className="flex flex-col gap-1.5 text-left w-full">
                       <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         Year of Study <span className="text-rose-500">*</span>
                       </label>
-                      <div className="grid grid-cols-4 gap-1.5 h-12">
+                      <div className="grid grid-cols-4 gap-1.5 h-12 w-full">
                         {workshop.registrationConfig.yearsOfStudy.map((yr) => (
                           <label key={yr} className="cursor-pointer">
                             <input
@@ -458,7 +467,7 @@ export function EventRegistrationView({
                               onChange={(e) => setYearOfStudy(e.target.value)}
                               className="sr-only peer"
                             />
-                            <span className="h-full flex items-center justify-center rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary active:scale-95 transition-all">
+                            <span className="h-full flex items-center justify-center rounded-xl border border-slate-300 text-[11px] sm:text-xs font-semibold text-slate-600 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary active:scale-95 transition-all text-center px-0.5">
                               {yr.replace(" Year", "")}
                             </span>
                           </label>
@@ -467,18 +476,45 @@ export function EventRegistrationView({
                     </div>
                   </div>
 
-                  {/* 5. Workshop Track Selection (Mobile-Friendly Tactile Cards) */}
-                  <div className="flex flex-col gap-2 text-left pt-1">
+                  {/* 5. Experience Level (Sourced from Firestore registrationConfig.experienceLevels) */}
+                  {workshop.registrationConfig.experienceLevels &&
+                  workshop.registrationConfig.experienceLevels.length > 0 ? (
+                    <div className="flex flex-col gap-1.5 text-left w-full">
+                      <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Experience Level <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5 sm:gap-2 h-11 sm:h-12 w-full">
+                        {workshop.registrationConfig.experienceLevels.map((lvl) => (
+                          <label key={lvl} className="cursor-pointer">
+                            <input
+                              type="radio"
+                              name="experienceLevel"
+                              value={lvl}
+                              checked={experienceLevel === lvl}
+                              onChange={(e) => setExperienceLevel(e.target.value)}
+                              className="sr-only peer"
+                            />
+                            <span className="h-full flex items-center justify-center rounded-xl border border-slate-300 text-[11px] sm:text-xs font-semibold text-slate-600 peer-checked:bg-primary peer-checked:text-white peer-checked:border-primary active:scale-95 transition-all text-center px-1">
+                              {lvl}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* 6. Workshop Track Selection (Mobile-Friendly Tactile Cards) */}
+                  <div className="flex flex-col gap-2 text-left pt-1 w-full">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Select Workshop Track <span className="text-rose-500">*</span>
                     </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
                       {workshop.registrationConfig.tracks.map((t) => {
                         const isSelected = track === t.name;
                         return (
                           <label
                             key={t.id}
-                            className={`cursor-pointer rounded-2xl border p-4 transition-all active:scale-[0.99] flex flex-col gap-2 ${
+                            className={`cursor-pointer rounded-2xl border p-3.5 sm:p-4 transition-all active:scale-[0.99] flex flex-col gap-2 w-full ${
                               isSelected
                                 ? "border-primary bg-primary/5 shadow-xs ring-2 ring-primary/20"
                                 : "border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50"
@@ -527,7 +563,7 @@ export function EventRegistrationView({
                   </div>
 
                   {/* 6. GitHub or LinkedIn Profile (Optional) */}
-                  <div className="flex flex-col gap-1.5 text-left pt-1">
+                  <div className="flex flex-col gap-1.5 text-left pt-1 w-full">
                     <div className="flex items-center justify-between">
                       <label htmlFor="portfolioUrl" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                         GitHub / LinkedIn Profile
@@ -542,12 +578,12 @@ export function EventRegistrationView({
                       value={portfolioUrl}
                       onChange={(e) => setPortfolioUrl(e.target.value)}
                       placeholder="https://github.com/username or linkedin.com/in/username"
-                      className="h-12 px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-sm sm:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                      className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                   </div>
 
                   {/* 7. Agreement Checkbox */}
-                  <div className="flex items-start gap-3 pt-2 text-left">
+                  <div className="flex items-start gap-3 pt-2 text-left w-full">
                     <input
                       id="coc-agree"
                       type="checkbox"
@@ -556,8 +592,8 @@ export function EventRegistrationView({
                       onChange={(e) => setAgreedToCoc(e.target.checked)}
                       className="mt-0.5 h-5 w-5 rounded-md border-slate-300 text-primary focus:ring-0 cursor-pointer shrink-0"
                     />
-                    <label htmlFor="coc-agree" className="text-xs text-slate-600 leading-relaxed cursor-pointer">
-                      I agree to the <span className="text-primary font-semibold">GDG Code of Conduct</span>. I understand workshop seats are strictly limited to {workshop.capacity}.
+                    <label htmlFor="coc-agree" className="text-xs text-slate-600 leading-relaxed cursor-pointer select-none">
+                      I agree to the <span className="text-primary font-semibold">GDG Code of Conduct</span>. I understand workshop seats are strictly limited to {capacity}.
                     </label>
                   </div>
 
@@ -565,7 +601,7 @@ export function EventRegistrationView({
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full h-13 mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-white text-base font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
+                    className="w-full min-h-[50px] py-3.5 px-4 mt-2 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-white text-base font-bold shadow-lg shadow-primary/20 hover:bg-primary-hover active:scale-[0.99] transition-all disabled:opacity-60 cursor-pointer"
                   >
                     {submitting ? (
                       <>
@@ -587,7 +623,7 @@ export function EventRegistrationView({
                   </button>
 
                   <div className="text-center text-[11px] text-slate-400 pt-1">
-                    100% Free &bull; Verified GDG Certificate &bull; Instant QR Pass
+                    {event.priceNote ? `${event.priceNote} • ` : "100% Free • "}Verified GDG Certificate &bull; Instant QR Pass
                   </div>
                 </form>
               )}
@@ -601,22 +637,22 @@ export function EventRegistrationView({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="bg-white w-full max-w-lg rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative my-auto"
+            className="bg-white w-full max-w-lg rounded-2xl sm:rounded-3xl border border-slate-200 shadow-2xl overflow-hidden relative my-auto max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Google Colors Stripe */}
-            <div className="h-1.5 w-full grid grid-cols-4">
+            <div className="h-1.5 w-full grid grid-cols-4 shrink-0">
               <div className="bg-[#4285f4]"></div>
               <div className="bg-[#ea4335]"></div>
               <div className="bg-[#fbbc04]"></div>
               <div className="bg-[#34a853]"></div>
             </div>
 
-            <div className="p-5 sm:p-7 flex flex-col gap-5">
+            <div className="p-4 sm:p-7 flex flex-col gap-4 sm:gap-5 overflow-y-auto">
               {/* Modal Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -652,10 +688,10 @@ export function EventRegistrationView({
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
-                      GDG on Campus VCET
+                      {workshop.badgeText || "GDG on Campus VCET"}
                     </span>
                     <h3 className="text-lg font-bold text-slate-900">
-                      {event.title}
+                      {event.title || workshop.headline}
                     </h3>
                     <span className="text-xs text-slate-500 capitalize">
                       {event.format ?? "in-person"} &bull; {workshop.venueText}
@@ -666,7 +702,7 @@ export function EventRegistrationView({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-b border-slate-200/80 py-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 border-t border-b border-slate-200/80 py-3 sm:py-4">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       Attendee
@@ -744,7 +780,7 @@ export function EventRegistrationView({
               <button
                 type="button"
                 onClick={handleDownloadPass}
-                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-white py-2.5 px-4 rounded-xl text-xs font-semibold hover:bg-primary-hover active:scale-95 transition-all cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-xl text-sm font-semibold hover:bg-primary-hover active:scale-95 transition-all cursor-pointer min-h-[44px]"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

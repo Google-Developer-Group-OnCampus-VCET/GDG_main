@@ -3,7 +3,8 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
-import { getEventBySlugAsync } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSpeakersView } from "@/components/workshop/event-speakers-view";
 
@@ -14,9 +15,6 @@ export function generateStaticParams() {
 }
 
 async function findEvent(slug: string) {
-  const staticMatch = events.find((event) => event.slug === slug);
-  if (staticMatch?.workshop) return staticMatch;
-
   await connection();
   try {
     const dbEvent = await getEventBySlugAsync(slug);
@@ -24,7 +22,9 @@ async function findEvent(slug: string) {
   } catch {
     // fallback
   }
-  return staticMatch;
+
+  const staticMatch = events.find((event) => event.slug === slug);
+  return staticMatch ?? null;
 }
 
 export async function generateMetadata({
@@ -50,10 +50,19 @@ async function EventSpeakersContent({
   const event = await findEvent(slug);
   if (!event || !event.workshop) notFound();
 
+  let stats;
+  try {
+    stats = await getEventStatsAsync(slug);
+  } catch {
+    // fallback
+  }
+
+  const workshop = resolveWorkshopDetails(event, stats);
+
   return (
     <div className="w-full flex flex-col">
       <EventSubNav event={event} />
-      <EventSpeakersView event={event} workshop={event.workshop} />
+      <EventSpeakersView event={event} workshop={workshop} />
     </div>
   );
 }
