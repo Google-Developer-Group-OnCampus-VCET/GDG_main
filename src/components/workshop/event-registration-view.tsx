@@ -57,7 +57,6 @@ export function EventRegistrationView({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmedRegistration, setConfirmedRegistration] = useState<RegistrationRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [previewPassMode, setPreviewPassMode] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [emailingPass, setEmailingPass] = useState(false);
   const [emailPassResult, setEmailPassResult] = useState<string | null>(null);
@@ -104,18 +103,12 @@ export function EventRegistrationView({
 
       setConfirmedRegistration(data.registration);
       setRemainingSeats((prev) => Math.max(0, prev - 1));
-      setPreviewPassMode(false);
       setIsModalOpen(true);
       setSubmitting(false);
     } catch {
       setSubmitError("Network connection error. Please try again.");
       setSubmitting(false);
     }
-  }
-
-  function handleOpenPreviewPass() {
-    setPreviewPassMode(true);
-    setIsModalOpen(true);
   }
 
   async function handleDownloadPass() {
@@ -139,11 +132,6 @@ export function EventRegistrationView({
   }
 
   async function handleEmailSelfPass() {
-    if (previewPassMode) {
-      setEmailPassResult("Complete registration to receive your official pass by email.");
-      setTimeout(() => setEmailPassResult(null), 3500);
-      return;
-    }
     if (!confirmedRegistration) return;
 
     setEmailingPass(true);
@@ -178,8 +166,8 @@ export function EventRegistrationView({
     id: "preview",
     eventSlug: event.slug,
     referenceId: "GDG-VCET-2026-0842",
-    fullName: fullName.trim() || "Atharva Joshi",
-    email: email.trim() || "atharva.joshi@vcet.edu.in",
+    fullName: fullName.trim() || "John Doe",
+    email: email.trim() || "john.doe@example.com",
     phone: phone.trim() || "+91 98765 43210",
     college: college.trim() || "Vidyavardhini's College of Engineering & Technology (VCET)",
     department: department || workshop.registrationConfig?.departments?.[0] || "Computer Engg",
@@ -280,18 +268,6 @@ export function EventRegistrationView({
                     <polyline points="19 12 12 19 5 12" />
                   </svg>
                 </a>
-                <button
-                  type="button"
-                  onClick={handleOpenPreviewPass}
-                  className="inline-flex items-center justify-center gap-2 bg-white text-foreground px-5 py-3.5 rounded-full text-sm font-semibold border border-border hover:bg-surface-container active:scale-95 transition-all cursor-pointer w-full sm:w-auto text-center"
-                >
-                  <svg className="w-4 h-4 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16v16H4z" />
-                    <circle cx="12" cy="10" r="3" />
-                    <path d="M6 18c0-3 3-4 6-4s6 1 6 4" />
-                  </svg>
-                  <span>Preview Attendee Pass</span>
-                </button>
               </div>
             </div>
 
@@ -400,7 +376,7 @@ export function EventRegistrationView({
                       enterKeyHint="next"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Atharva Joshi"
+                      placeholder="John Doe"
                       className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                   </div>
@@ -420,7 +396,7 @@ export function EventRegistrationView({
                         enterKeyHint="next"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@vcet.edu.in"
+                        placeholder="john.doe@example.com"
                         className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                       />
                     </div>
@@ -444,7 +420,7 @@ export function EventRegistrationView({
                     </div>
                   </div>
 
-                  {/* 3. College / Institution (Placeholder hint for VCET, editable) */}
+                  {/* 3. College / Institution (Defaults to VCET if blank) */}
                   <div className="flex flex-col gap-1.5 text-left w-full">
                     <div className="flex items-center justify-between">
                       <label htmlFor="college" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -459,7 +435,7 @@ export function EventRegistrationView({
                       enterKeyHint="next"
                       value={college}
                       onChange={(e) => setCollege(e.target.value)}
-                      placeholder="Vidyavardhini's College of Engineering & Technology (VCET)"
+                      placeholder=""
                       className="w-full h-12 px-3.5 sm:px-4 rounded-xl border border-slate-300 bg-slate-50/50 text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                     />
                     <span className="text-[11px] text-slate-500">
@@ -631,7 +607,7 @@ export function EventRegistrationView({
       </section>
 
       {/* CONFIRMATION / QR MODAL OVERLAY */}
-      {isModalOpen ? (
+      {isModalOpen && confirmedRegistration ? (
         <div
           role="dialog"
           aria-modal="true"
@@ -656,7 +632,7 @@ export function EventRegistrationView({
                 <div className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    {previewPassMode ? "Sample Pass Preview" : "Official GDG VCET Attendee Pass"}
+                    Official GDG VCET Attendee Pass
                   </span>
                 </div>
                 <button
@@ -672,14 +648,12 @@ export function EventRegistrationView({
               </div>
 
               {/* Success Notification if live submitted */}
-              {!previewPassMode && confirmedRegistration ? (
-                <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-2.5">
-                  <svg className="w-5 h-5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>Registration Confirmed! Your official seat is reserved.</span>
-                </div>
-              ) : null}
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold flex items-center gap-2.5">
+                <svg className="w-5 h-5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span>Registration Confirmed! Your official seat is reserved.</span>
+              </div>
 
               {/* Pass Card */}
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-xs flex flex-col gap-4">
@@ -797,17 +771,24 @@ export function EventRegistrationView({
                   <span>{downloadSuccess ? "PDF Pass Downloaded!" : "Download Pass (PDF)"}</span>
                 </button>
 
-                {!previewPassMode && confirmedRegistration ? (
+                {confirmedRegistration ? (
                   <button
                     type="button"
                     onClick={handleEmailSelfPass}
                     disabled={emailingPass}
                     className="inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 py-3 px-4 rounded-xl text-sm font-semibold active:scale-95 transition-all cursor-pointer min-h-[44px] disabled:opacity-50"
                   >
-                    <svg className="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                      <polyline points="22,6 12,13 2,6" />
-                    </svg>
+                    {emailingPass ? (
+                      <svg className="w-3.5 h-3.5 animate-spin text-slate-700" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <polyline points="22,6 12,13 2,6" />
+                      </svg>
+                    )}
                     <span>{emailingPass ? "Sending Email…" : "Email Me My Pass"}</span>
                   </button>
                 ) : null}

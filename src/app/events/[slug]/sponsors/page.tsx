@@ -7,6 +7,7 @@ import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSponsorsView } from "@/components/workshop/event-sponsors-view";
+import { EventSponsorsSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   const sponsored = events.filter((e) => Boolean(e.workshop && e.workshop.showSponsors));
@@ -73,13 +74,7 @@ export default function EventSponsorsPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
-          Loading sponsors…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventSponsorsSkeleton />}>
       <EventSponsorsContent params={params} />
     </Suspense>
   );

@@ -7,6 +7,7 @@ import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSpeakersView } from "@/components/workshop/event-speakers-view";
+import { EventSpeakersSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   return events
@@ -73,13 +74,7 @@ export default function EventSpeakersPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
-          Loading speakers…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventSpeakersSkeleton />}>
       <EventSpeakersContent params={params} />
     </Suspense>
   );

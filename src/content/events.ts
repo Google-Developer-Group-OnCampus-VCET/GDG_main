@@ -25,7 +25,7 @@ export const events: ChapterEvent[] = [
   {
     id: "dev-to-cloud",
     slug: "dev-to-cloud",
-    title: "Dev to Cloud: Zero to Hero",
+    title: "Zero to Hero: Dev to Cloud",
     startsAt: "2026-12-01",
     endsAt: "2026-12-04",
     timezone: "Asia/Kolkata",

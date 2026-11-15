@@ -10,6 +10,7 @@ import { TeamCard } from "@/components/team-card";
 import { Faq } from "@/components/faq";
 import { UpcomingEventsSection } from "@/components/upcoming-events-section";
 import { RecentPastEventsSection } from "@/components/recent-past-events-section";
+import { EventCardsGridSkeleton } from "@/components/skeletons/event-skeletons";
 
 const faqItems = [
   {
@@ -88,7 +89,7 @@ export default function Home() {
             </Button>
           </div>
 
-          <Suspense fallback={<p className="text-sm text-foreground-muted">Loading events…</p>}>
+          <Suspense fallback={<EventCardsGridSkeleton count={3} />}>
             <UpcomingEventsSection events={events} />
           </Suspense>
         </div>
@@ -107,7 +108,7 @@ export default function Home() {
             </Button>
           </div>
 
-          <Suspense fallback={<p className="text-sm text-foreground-muted">Loading events…</p>}>
+          <Suspense fallback={<EventCardsGridSkeleton count={3} />}>
             <RecentPastEventsSection events={events} />
           </Suspense>
         </div>

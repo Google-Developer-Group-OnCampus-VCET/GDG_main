@@ -8,6 +8,7 @@ import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventRegistrationView } from "@/components/workshop/event-registration-view";
+import { EventRegistrationSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   return staticEvents
@@ -95,13 +96,7 @@ export default function EventRegisterPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-(--container-max) px-4 py-16 text-sm text-foreground-muted">
-          Loading registration form…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventRegistrationSkeleton />}>
       <EventRegisterContent params={params} />
     </Suspense>
   );

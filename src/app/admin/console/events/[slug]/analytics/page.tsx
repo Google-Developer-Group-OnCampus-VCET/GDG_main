@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
   return [{ slug: "dev-to-cloud" }];
@@ -62,13 +63,7 @@ export default async function AdminAnalyticsPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading event analytics…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading event analytics…" />}>
       <AdminAnalyticsContent slug={slug} />
     </Suspense>
   );
