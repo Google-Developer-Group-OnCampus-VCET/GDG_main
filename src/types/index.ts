@@ -172,6 +172,8 @@ export interface RegistrationRecord {
   status: "confirmed" | "waitlisted" | "cancelled";
   checkedIn: boolean;
   checkedInAt?: string;
+  checkedInDays?: number[];
+  checkIns?: Record<number, string>;
   createdAt: string;
 }
 

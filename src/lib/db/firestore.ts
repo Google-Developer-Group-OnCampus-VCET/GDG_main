@@ -402,6 +402,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
 
     let totalRegistered = 0;
     let checkedInCount = 0;
+    const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    let multiDayCompletionCount = 0;
     const trackCounts: Record<string, number> = {};
     const yearCounts: Record<string, number> = {};
     const departmentCounts: Record<string, number> = {};
@@ -411,6 +413,18 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       if (data.status === "cancelled") return;
       totalRegistered++;
       if (data.checkedIn) checkedInCount++;
+
+      const days: number[] = Array.isArray(data.checkedInDays)
+        ? data.checkedInDays
+        : data.checkedIn
+        ? [1]
+        : [];
+      days.forEach((d) => {
+        dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
+      });
+      if (days.length >= 4) {
+        multiDayCompletionCount++;
+      }
 
       if (data.track) {
         trackCounts[data.track] = (trackCounts[data.track] || 0) + 1;
@@ -435,6 +449,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       isOpen: Boolean(isRegistrationOpen) && remaining > 0,
       isRegistrationOpen: Boolean(isRegistrationOpen),
       checkedInCount,
+      dailyCheckedInCounts,
+      multiDayCompletionCount,
       trackCounts,
       yearCounts,
       departmentCounts,
@@ -485,14 +501,42 @@ export async function getFirestoreRegistrations(
         status: d.status || "confirmed",
         checkedIn: Boolean(d.checkedIn),
         checkedInAt: d.checkedInAt || undefined,
+        checkedInDays: Array.isArray(d.checkedInDays)
+          ? d.checkedInDays
+          : d.checkedIn
+          ? [1]
+          : [],
+        checkIns:
+          typeof d.checkIns === "object" && d.checkIns !== null
+            ? d.checkIns
+            : d.checkedIn && d.checkedInAt
+            ? { 1: d.checkedInAt }
+            : {},
         createdAt: d.createdAt || new Date().toISOString(),
       });
     });
 
     // Client-side filtering for search & checkedIn filter
     if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
-      const isChecked = options.checkedIn === "true" || options.checkedIn === "1";
-      records = records.filter((r) => r.checkedIn === isChecked);
+      if (options.checkedIn.startsWith("day-")) {
+        const targetDay = Number(options.checkedIn.replace("day-", ""));
+        records = records.filter((r) => r.checkedInDays?.includes(targetDay));
+      } else if (options.checkedIn === "all-days") {
+        records = records.filter((r) => (r.checkedInDays?.length ?? 0) >= 4);
+      } else if (
+        options.checkedIn === "absent" ||
+        options.checkedIn === "not-checked-in" ||
+        options.checkedIn === "false" ||
+        options.checkedIn === "0"
+      ) {
+        records = records.filter((r) => !r.checkedIn || (r.checkedInDays?.length ?? 0) === 0);
+      } else {
+        const isChecked =
+          options.checkedIn === "true" ||
+          options.checkedIn === "1" ||
+          options.checkedIn === "checked-in";
+        records = records.filter((r) => r.checkedIn === isChecked);
+      }
     }
 
     if (options?.search) {
@@ -691,7 +735,8 @@ export async function createFirestoreRegistration(
 
 export async function checkInFirestoreAttendee(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day?: number
 ): Promise<{ success: boolean; message: string; registration?: RegistrationRecord } | null> {
   const db = getAdminDb();
   if (!db) return null;
@@ -713,29 +758,71 @@ export async function checkInFirestoreAttendee(
     const doc = snap.docs[0];
     const data = doc.data() as RegistrationRecord;
 
-    if (data.checkedIn) {
-      return {
-        success: false,
-        message: `${data.fullName} was ALREADY checked in at ${data.checkedInAt}.`,
-        registration: data,
-      };
+    const existingDays: number[] = Array.isArray(data.checkedInDays)
+      ? data.checkedInDays
+      : data.checkedIn
+      ? [1]
+      : [];
+    const existingCheckIns: Record<number, string> =
+      typeof data.checkIns === "object" && data.checkIns !== null
+        ? data.checkIns
+        : data.checkedIn && data.checkedInAt
+        ? { 1: data.checkedInAt }
+        : {};
+
+    const targetDay = day !== undefined && day >= 1 ? day : 1;
+
+    if (day !== undefined) {
+      if (existingDays.includes(targetDay)) {
+        return {
+          success: false,
+          message: `${data.fullName} is ALREADY checked in for Day ${targetDay} at ${existingCheckIns[targetDay] || data.checkedInAt}.`,
+          registration: {
+            ...data,
+            checkedInDays: existingDays,
+            checkIns: existingCheckIns,
+          },
+        };
+      }
+    } else {
+      if (data.checkedIn) {
+        return {
+          success: false,
+          message: `${data.fullName} was ALREADY checked in at ${data.checkedInAt}.`,
+          registration: {
+            ...data,
+            checkedInDays: existingDays,
+            checkIns: existingCheckIns,
+          },
+        };
+      }
     }
 
     const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const updatedDays = Array.from(new Set([...existingDays, targetDay])).sort((a, b) => a - b);
+    const updatedCheckIns = { ...existingCheckIns, [targetDay]: now };
+
     await doc.ref.update({
       checkedIn: true,
       checkedInAt: now,
+      checkedInDays: updatedDays,
+      checkIns: updatedCheckIns,
     });
 
     const updated: RegistrationRecord = {
       ...data,
       checkedIn: true,
       checkedInAt: now,
+      checkedInDays: updatedDays,
+      checkIns: updatedCheckIns,
     };
+
+    const dayText = day !== undefined ? ` for Day ${targetDay}` : "";
+    const progressText = updatedDays.length > 1 ? ` (${updatedDays.length}/4 Days Attended)` : "";
 
     return {
       success: true,
-      message: `Successfully checked in ${data.fullName} for ${data.track}!`,
+      message: `Successfully checked in ${data.fullName}${dayText}!${progressText}`,
       registration: updated,
     };
   } catch (err) {

@@ -8,18 +8,42 @@ import { downloadForGoogleSheets, copyForGoogleSheets } from "@/lib/sheets-expor
 interface CheckInTerminalProps {
   eventSlug: string;
   initialCheckedInCount: number;
+  initialDailyCounts?: Record<number, number>;
+  totalDays?: number;
 }
 
 interface CheckInLogEntry {
   time: string;
+  day: number;
   name: string;
   ref: string;
   track: string;
   email?: string;
   college?: string;
+  totalDaysAttended?: number;
 }
 
-export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTerminalProps) {
+const DAY_LABELS: Record<number, { title: string; date: string }> = {
+  1: { title: "Day 1: Web Architecture", date: "Dec 1, 2026" },
+  2: { title: "Day 2: AI Agents & RAG", date: "Dec 2, 2026" },
+  3: { title: "Day 3: Cloud Run CI/CD", date: "Dec 3, 2026" },
+  4: { title: "Day 4: Prod Hardening", date: "Dec 4, 2026" },
+};
+
+export function CheckInTerminal({
+  eventSlug,
+  initialCheckedInCount,
+  initialDailyCounts,
+  totalDays = 4,
+}: CheckInTerminalProps) {
+  const [activeDay, setActiveDay] = useState<number>(1);
+  const [dailyCounts, setDailyCounts] = useState<Record<number, number>>(() => {
+    const counts: Record<number, number> = {};
+    for (let i = 1; i <= totalDays; i++) {
+      counts[i] = initialDailyCounts?.[i] ?? (i === 1 ? initialCheckedInCount : 0);
+    }
+    return counts;
+  });
   const [refInput, setRefInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [checkedCount, setCheckedCount] = useState(initialCheckedInCount);
@@ -27,6 +51,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
     status: "success" | "duplicate" | "error";
     message: string;
     registration?: RegistrationRecord;
+    checkedDay?: number;
   } | null>(null);
   const [recentLog, setRecentLog] = useState<CheckInLogEntry[]>([]);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -54,7 +79,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
         const res = await fetch(`/api/events/${eventSlug}/check-in`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ referenceId: normalized }),
+          body: JSON.stringify({ referenceId: normalized, day: activeDay }),
         });
 
         const data = await res.json();
@@ -64,8 +89,13 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
             status: "success",
             message: data.message,
             registration: data.registration,
+            checkedDay: activeDay,
           });
           setCheckedCount((c) => c + 1);
+          setDailyCounts((prev) => ({
+            ...prev,
+            [activeDay]: (prev[activeDay] || 0) + 1,
+          }));
           setRecentLog((prev) => [
             {
               time: new Date().toLocaleTimeString("en-IN", {
@@ -73,11 +103,13 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                 minute: "2-digit",
                 second: "2-digit",
               }),
+              day: activeDay,
               name: data.registration.fullName,
               ref: data.registration.referenceId,
               track: data.registration.track,
               email: data.registration.email,
               college: data.registration.college,
+              totalDaysAttended: data.registration.checkedInDays?.length || 1,
             },
             ...prev,
           ]);
@@ -87,24 +119,27 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
             status: "duplicate",
             message: data.message,
             registration: data.registration,
+            checkedDay: activeDay,
           });
         } else {
           setLastResult({
             status: "error",
             message: data.message || "Pass reference not found.",
+            checkedDay: activeDay,
           });
         }
       } catch {
         setLastResult({
           status: "error",
           message: "Network error during check-in verification.",
+          checkedDay: activeDay,
         });
       } finally {
         submittingRef.current = false;
         setSubmitting(false);
       }
     },
-    [eventSlug]
+    [eventSlug, activeDay]
   );
 
   function stopCameraStream() {
@@ -232,15 +267,17 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
     }
 
     downloadForGoogleSheets(
-      `gdg_vcet_${eventSlug}_attendance_${new Date().toISOString().slice(0, 10)}`,
+      `gdg_vcet_${eventSlug}_day${activeDay}_attendance_${new Date().toISOString().slice(0, 10)}`,
       recentLog,
       [
+        { key: "day", label: "Day" },
         { key: "time", label: "Check-in Time" },
         { key: "ref", label: "Pass Reference ID" },
         { key: "name", label: "Attendee Name" },
         { key: "track", label: "Track" },
         { key: "email", label: "Email Address" },
         { key: "college", label: "College" },
+        { key: "totalDaysAttended", label: "Total Days Attended" },
       ]
     );
   }
@@ -248,12 +285,14 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
   async function handleCopyAttendanceSheets() {
     if (recentLog.length === 0) return;
     const ok = await copyForGoogleSheets(recentLog, [
+      { key: "day", label: "Day" },
       { key: "time", label: "Check-in Time" },
       { key: "ref", label: "Pass Reference ID" },
       { key: "name", label: "Attendee Name" },
       { key: "track", label: "Track" },
       { key: "email", label: "Email Address" },
       { key: "college", label: "College" },
+      { key: "totalDaysAttended", label: "Total Days Attended" },
     ]);
     if (ok) {
       setCopySuccess(true);
@@ -272,7 +311,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                 Live Attendance Scanner
               </h2>
               <p className="text-xs text-foreground-muted mt-0.5">
-                Scan attendee badge QR code with camera or enter reference ID.
+                Scan attendee badge QR code with camera or enter reference ID for Day {activeDay}.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -291,8 +330,59 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                 <span>{cameraOpen ? "Stop Camera" : "Camera QR Scan"}</span>
               </button>
               <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
-                <strong className="text-emerald-900">{checkedCount}</strong> Checked In
+                Day {activeDay}: <strong className="text-emerald-900">{dailyCounts[activeDay] || 0}</strong> Checked In
               </div>
+            </div>
+          </div>
+
+          {/* 4-Day Workshop Selector Tabs */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Select Active Check-in Day
+              </span>
+              <span className="text-xs text-foreground-muted">
+                Active: Day {activeDay} of {totalDays}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => {
+                const isSelected = activeDay === d;
+                const count = dailyCounts[d] || 0;
+                const info = DAY_LABELS[d] || { title: `Day ${d}`, date: `Day ${d}` };
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setActiveDay(d)}
+                    className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/40"
+                        : "bg-surface border-border hover:bg-surface-container-high"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className={`text-xs font-bold ${isSelected ? "text-primary" : "text-foreground"}`}>
+                        Day {d}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          isSelected
+                            ? "bg-primary text-white"
+                            : count > 0
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-surface-container text-foreground-muted"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-medium text-foreground-muted truncate w-full mt-1">
+                      {info.date}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -315,7 +405,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                 <div className="w-44 h-44 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)]" />
               </div>
               <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 text-white text-[11px] font-medium">
-                {cameraReady ? "Point rear camera at attendee QR pass" : "Starting camera…"}
+                {cameraReady ? `Point camera at attendee pass for Day ${activeDay}` : "Starting camera…"}
               </div>
             </div>
           ) : null}
@@ -324,9 +414,10 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="ref-input"
-                className="text-xs font-bold text-foreground uppercase tracking-wider"
+                className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center justify-between"
               >
-                Pass Reference ID / QR Code Payload
+                <span>Pass Reference ID / QR Code Payload</span>
+                <span className="text-primary normal-case font-medium">Checking in for Day {activeDay}</span>
               </label>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
@@ -344,7 +435,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
                   disabled={submitting || !refInput.trim()}
                   className="h-12 px-5 rounded-xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer w-full sm:w-auto shrink-0"
                 >
-                  {submitting ? "Checking..." : "Verify & Admit"}
+                  {submitting ? "Checking..." : `Admit for Day ${activeDay}`}
                 </button>
               </div>
             </div>
@@ -353,7 +444,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
           {/* Instant Verification Status Result */}
           {lastResult ? (
             <div
-              className={`p-4 rounded-xl border flex flex-col gap-2 ${
+              className={`p-4 rounded-xl border flex flex-col gap-2.5 ${
                 lastResult.status === "success"
                   ? "bg-emerald-50/80 border-emerald-200 text-emerald-900"
                   : lastResult.status === "duplicate"
@@ -384,20 +475,62 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
               </div>
 
               {lastResult.registration ? (
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-current/20 text-xs">
-                  <div>
-                    <span className="opacity-70">Attendee:</span>{" "}
-                    <strong>{lastResult.registration.fullName}</strong>
+                <>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-current/20 text-xs">
+                    <div>
+                      <span className="opacity-70">Attendee:</span>{" "}
+                      <strong>{lastResult.registration.fullName}</strong>
+                    </div>
+                    <div>
+                      <span className="opacity-70">College:</span>{" "}
+                      <strong>{lastResult.registration.college}</strong>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="opacity-70">Track:</span>{" "}
+                      <strong className="underline decoration-current/30">{lastResult.registration.track}</strong>
+                    </div>
                   </div>
-                  <div>
-                    <span className="opacity-70">College:</span>{" "}
-                    <strong>{lastResult.registration.college}</strong>
+
+                  {/* 4-Day Attendance Breakdown */}
+                  <div className="pt-2 border-t border-current/20 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-[11px] font-medium">
+                      <span className="opacity-80">4-Day Workshop Attendance Record:</span>
+                      <strong className="font-bold">
+                        {lastResult.registration.checkedInDays?.length || 1} / {totalDays} Days Completed
+                      </strong>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => {
+                        const isAttended = lastResult.registration?.checkedInDays?.includes(d);
+                        const isCurrentDay = d === activeDay;
+                        const checkInTime = lastResult.registration?.checkIns?.[d];
+
+                        return (
+                          <div
+                            key={d}
+                            className={`px-2 py-1.5 rounded-lg border text-center flex flex-col items-center justify-center ${
+                              isAttended
+                                ? "bg-emerald-100/90 border-emerald-300 text-emerald-900"
+                                : isCurrentDay
+                                ? "bg-white/90 border-dashed border-amber-300 text-amber-900"
+                                : "bg-black/5 border-dashed border-current/20 text-current/50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1 font-bold text-xs">
+                              <span>Day {d}</span>
+                              {isAttended ? (
+                                <span className="text-emerald-700 font-black">✓</span>
+                              ) : null}
+                            </div>
+                            <span className="text-[9px] opacity-75 truncate max-w-full">
+                              {isAttended ? checkInTime?.split(",")[1]?.trim() || "Attended" : "Pending"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="col-span-2">
-                    <span className="opacity-70">Track:</span>{" "}
-                    <strong className="underline decoration-current/30">{lastResult.registration.track}</strong>
-                  </div>
-                </div>
+                </>
               ) : null}
             </div>
           ) : null}
@@ -409,7 +542,7 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
         <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-4">
           <div className="flex items-center justify-between pb-3 border-b border-border">
             <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-              Recent Check-in Feed ({recentLog.length})
+              Session Check-in Feed ({recentLog.length})
             </h3>
 
             {/* Export Attendance to Sheets */}
@@ -444,12 +577,20 @@ export function CheckInTerminal({ eventSlug, initialCheckedInCount }: CheckInTer
               {recentLog.map((entry, idx) => (
                 <div key={idx} className="py-2.5 flex items-center justify-between text-xs">
                   <div className="flex flex-col">
-                    <span className="font-bold text-foreground">{entry.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold text-[10px]">
+                        Day {entry.day}
+                      </span>
+                      <span className="font-bold text-foreground">{entry.name}</span>
+                    </div>
                     <span className="text-[11px] text-foreground-muted font-mono">{entry.ref}</span>
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="font-mono text-emerald-700 font-bold">{entry.time}</span>
-                    <span className="text-[10px] text-foreground-muted truncate max-w-[120px]">{entry.track.split(":")[0]}</span>
+                    <span className="text-[10px] text-foreground-muted truncate max-w-[120px]">
+                      {entry.track.split(":")[0]}
+                      {entry.totalDaysAttended ? ` · ${entry.totalDaysAttended}/4 d` : ""}
+                    </span>
                   </div>
                 </div>
               ))}

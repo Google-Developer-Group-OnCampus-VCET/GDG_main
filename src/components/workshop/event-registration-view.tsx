@@ -698,8 +698,16 @@ export function EventRegistrationView({
                     </span>
                   </div>
                   <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase shrink-0">
-                    ALL-ACCESS PASS
+                    4-DAY ALL-ACCESS PASS
                   </span>
+                </div>
+
+                {/* Multi-day info banner */}
+                <div className="text-[11px] text-emerald-800 bg-emerald-50/80 p-2 rounded-xl border border-emerald-200/80 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>This single pass &amp; QR code is valid for check-in on all 4 workshop days (Dec 1–4, 2026).</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 border-t border-b border-slate-200/80 py-3 sm:py-4">
@@ -769,8 +777,8 @@ export function EventRegistrationView({
                     ) : (
                       <div className="w-20 h-20 rounded bg-slate-100 animate-pulse" />
                     )}
-                    <span className="font-mono text-[9px] text-slate-400 font-bold mt-1">
-                      SCAN AT ENTRANCE
+                    <span className="font-mono text-[9px] text-emerald-700 font-bold mt-1">
+                      VALID FOR ALL 4 DAYS
                     </span>
                   </div>
                 </div>

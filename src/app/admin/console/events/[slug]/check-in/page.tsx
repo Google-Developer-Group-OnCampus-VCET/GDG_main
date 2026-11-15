@@ -26,12 +26,21 @@ async function AdminCheckInContent({ slug }: { slug: string }) {
   if (!event) notFound();
 
   let checkedInCount = 0;
+  let dailyCheckedInCounts: Record<number, number> | undefined;
   try {
     const stats = await getEventStatsAsync(slug);
     checkedInCount = stats.checkedInCount;
+    dailyCheckedInCounts = stats.dailyCheckedInCounts;
   } catch {
     // fallback
   }
+
+  const totalDays =
+    event.workshop?.agenda && event.workshop.agenda.length > 0
+      ? event.workshop.agenda.reduce((max, item) => Math.max(max, item.day || 1), 1)
+      : slug === "dev-to-cloud"
+      ? 4
+      : 1;
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
@@ -47,11 +56,16 @@ async function AdminCheckInContent({ slug }: { slug: string }) {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
             Live Check-in &amp; Pass Verification Terminal
           </h1>
+          <p className="text-sm text-foreground-muted mt-1">
+            4-Day Workshop Check-in Management &middot; Days 1, 2, 3, and 4
+          </p>
         </div>
 
         <CheckInTerminal
           eventSlug={slug}
           initialCheckedInCount={checkedInCount}
+          initialDailyCounts={dailyCheckedInCounts}
+          totalDays={totalDays}
         />
       </main>
     </div>

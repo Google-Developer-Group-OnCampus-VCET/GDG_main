@@ -124,6 +124,17 @@ export function getDatabase(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_registrations_ref ON registrations(reference_id);
   `);
 
+  try {
+    _db.exec("ALTER TABLE registrations ADD COLUMN checked_in_days TEXT;");
+  } catch {
+    // Column already exists
+  }
+  try {
+    _db.exec("ALTER TABLE registrations ADD COLUMN check_ins TEXT;");
+  } catch {
+    // Column already exists
+  }
+
   // Seed default DevCraft 2025 event if not existing
   const eventCheck = _db.prepare("SELECT slug FROM events WHERE slug = ?").get("devcraft-2025");
   if (!eventCheck) {
@@ -289,6 +300,8 @@ export interface EventStats {
   isOpen: boolean;
   isRegistrationOpen?: boolean;
   checkedInCount: number;
+  dailyCheckedInCounts?: Record<number, number>;
+  multiDayCompletionCount?: number;
   trackCounts: Record<string, number>;
   yearCounts: Record<string, number>;
   departmentCounts: Record<string, number>;
@@ -317,6 +330,37 @@ export function getEventStats(slug: string): EventStats {
     .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND checked_in = 1")
     .get(slug) as { count: number };
   const checkedInCount = checkedInRow?.count ?? 0;
+
+  const regRows = db
+    .prepare("SELECT checked_in, checked_in_days FROM registrations WHERE event_slug = ? AND status != 'cancelled'")
+    .all(slug) as { checked_in: number; checked_in_days: string | null }[];
+
+  const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  let multiDayCompletionCount = 0;
+
+  for (const r of regRows) {
+    let days: number[] = [];
+    if (r.checked_in_days) {
+      try {
+        const parsed = JSON.parse(r.checked_in_days);
+        if (Array.isArray(parsed)) {
+          days = parsed.map(Number).filter((d) => !isNaN(d));
+        }
+      } catch {
+        // fallback
+      }
+    } else if (r.checked_in === 1) {
+      days = [1];
+    }
+
+    days.forEach((day) => {
+      dailyCheckedInCounts[day] = (dailyCheckedInCounts[day] || 0) + 1;
+    });
+
+    if (days.includes(1) && days.includes(2) && days.includes(3) && days.includes(4)) {
+      multiDayCompletionCount++;
+    }
+  }
 
   const trackRows = db
     .prepare("SELECT track, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY track")
@@ -354,6 +398,8 @@ export function getEventStats(slug: string): EventStats {
     isOpen: isRegistrationOpen && remaining > 0,
     isRegistrationOpen,
     checkedInCount,
+    dailyCheckedInCounts,
+    multiDayCompletionCount,
     trackCounts,
     yearCounts,
     departmentCounts,
@@ -618,33 +664,81 @@ export function getRegistrations(
   }
 
   if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
-    query += " AND checked_in = ?";
-    params.push(options.checkedIn === "true" || options.checkedIn === "1" ? 1 : 0);
+    if (options.checkedIn.startsWith("day-")) {
+      const targetDay = parseInt(options.checkedIn.replace("day-", ""), 10);
+      if (!isNaN(targetDay)) {
+        query += " AND (checked_in_days LIKE ? OR (checked_in = 1 AND ? = 1))";
+        params.push(`%${targetDay}%`, targetDay);
+      }
+    } else if (options.checkedIn === "all-days") {
+      query += " AND (checked_in_days LIKE '%1%' AND checked_in_days LIKE '%2%' AND checked_in_days LIKE '%3%' AND checked_in_days LIKE '%4%')";
+    } else if (
+      options.checkedIn === "absent" ||
+      options.checkedIn === "not-checked-in" ||
+      options.checkedIn === "false" ||
+      options.checkedIn === "0"
+    ) {
+      query += " AND (checked_in = 0 OR checked_in IS NULL)";
+    } else {
+      query += " AND checked_in = ?";
+      params.push(options.checkedIn === "true" || options.checkedIn === "1" || options.checkedIn === "checked-in" ? 1 : 0);
+    }
   }
 
   query += " ORDER BY created_at DESC";
 
   const rows = db.prepare(query).all(...params) as Record<string, unknown>[];
 
-  return rows.map((r) => ({
-    id: r.id as string,
-    eventSlug: r.event_slug as string,
-    referenceId: r.reference_id as string,
-    fullName: r.full_name as string,
-    email: r.email as string,
-    phone: r.phone as string,
-    college: r.college as string,
-    department: r.department as string,
-    yearOfStudy: r.year_of_study as string,
-    track: r.track as string,
-    experienceLevel: r.experience_level as string,
-    portfolioUrl: (r.portfolio_url as string) || undefined,
-    notes: (r.notes as string) || undefined,
-    status: r.status as "confirmed" | "waitlisted" | "cancelled",
-    checkedIn: (r.checked_in as number) === 1,
-    checkedInAt: (r.checked_in_at as string) || undefined,
-    createdAt: r.created_at as string,
-  }));
+  return rows.map((r) => {
+    let checkedInDays: number[] | undefined;
+    if (r.checked_in_days) {
+      try {
+        const parsed = JSON.parse(r.checked_in_days as string);
+        if (Array.isArray(parsed)) {
+          checkedInDays = parsed.map(Number).filter((d) => !isNaN(d));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!checkedInDays && (r.checked_in as number) === 1) {
+      checkedInDays = [1];
+    }
+
+    let checkIns: Record<number, string> | undefined;
+    if (r.check_ins) {
+      try {
+        checkIns = JSON.parse(r.check_ins as string);
+      } catch {
+        // ignore
+      }
+    }
+    if (!checkIns && (r.checked_in as number) === 1 && r.checked_in_at) {
+      checkIns = { 1: r.checked_in_at as string };
+    }
+
+    return {
+      id: r.id as string,
+      eventSlug: r.event_slug as string,
+      referenceId: r.reference_id as string,
+      fullName: r.full_name as string,
+      email: r.email as string,
+      phone: r.phone as string,
+      college: r.college as string,
+      department: r.department as string,
+      yearOfStudy: r.year_of_study as string,
+      track: r.track as string,
+      experienceLevel: r.experience_level as string,
+      portfolioUrl: (r.portfolio_url as string) || undefined,
+      notes: (r.notes as string) || undefined,
+      status: r.status as "confirmed" | "waitlisted" | "cancelled",
+      checkedIn: (r.checked_in as number) === 1,
+      checkedInAt: (r.checked_in_at as string) || undefined,
+      checkedInDays,
+      checkIns,
+      createdAt: r.created_at as string,
+    };
+  });
 }
 
 export function getRegistrationByReference(referenceId: string): RegistrationRecord | null {
@@ -654,6 +748,33 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
     .get(referenceId) as Record<string, unknown> | undefined;
 
   if (!row) return null;
+
+  let checkedInDays: number[] | undefined;
+  if (row.checked_in_days) {
+    try {
+      const parsed = JSON.parse(row.checked_in_days as string);
+      if (Array.isArray(parsed)) {
+        checkedInDays = parsed.map(Number).filter((d) => !isNaN(d));
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!checkedInDays && (row.checked_in as number) === 1) {
+    checkedInDays = [1];
+  }
+
+  let checkIns: Record<number, string> | undefined;
+  if (row.check_ins) {
+    try {
+      checkIns = JSON.parse(row.check_ins as string);
+    } catch {
+      // ignore
+    }
+  }
+  if (!checkIns && (row.checked_in as number) === 1 && row.checked_in_at) {
+    checkIns = { 1: row.checked_in_at as string };
+  }
 
   return {
     id: row.id as string,
@@ -672,6 +793,8 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
     status: row.status as "confirmed" | "waitlisted" | "cancelled",
     checkedIn: (row.checked_in as number) === 1,
     checkedInAt: (row.checked_in_at as string) || undefined,
+    checkedInDays,
+    checkIns,
     createdAt: row.created_at as string,
   };
 }
@@ -804,7 +927,8 @@ export function createRegistration(
 
 export function checkInAttendee(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day: number = 1
 ): { success: boolean; message: string; registration?: RegistrationRecord } {
   const db = getDatabase();
 
@@ -815,25 +939,44 @@ export function checkInAttendee(
     return { success: false, message: "Pass reference was not found for this event." };
   }
 
-  if (reg.checkedIn) {
+  const existingDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
+  const existingCheckIns = reg.checkIns || (reg.checkedInAt ? { 1: reg.checkedInAt } : {});
+
+  if (existingDays.includes(day)) {
+    const priorTime = existingCheckIns[day] || reg.checkedInAt || "previously";
     return {
       success: false,
-      message: `${reg.fullName} was ALREADY checked in at ${reg.checkedInAt}.`,
+      message: `${reg.fullName} is ALREADY checked in for Day ${day} (at ${priorTime}).`,
       registration: reg,
     };
   }
 
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  db.prepare("UPDATE registrations SET checked_in = 1, checked_in_at = ? WHERE reference_id = ?").run(
+  const updatedDays = Array.from(new Set([...existingDays, day])).sort((a, b) => a - b);
+  const updatedCheckIns = { ...existingCheckIns, [day]: now };
+
+  db.prepare(`
+    UPDATE registrations
+    SET checked_in = 1,
+        checked_in_at = ?,
+        checked_in_days = ?,
+        check_ins = ?
+    WHERE reference_id = ?
+  `).run(
     now,
+    JSON.stringify(updatedDays),
+    JSON.stringify(updatedCheckIns),
     ref
   );
 
   const updatedReg = getRegistrationByReference(ref)!;
 
+  const dayText = ` for Day ${day}`;
+  const progressText = updatedDays.length > 1 ? ` (${updatedDays.length}/4 Days Attended)` : "";
+
   return {
     success: true,
-    message: `Successfully checked in ${reg.fullName} for ${reg.track}!`,
+    message: `Successfully checked in ${reg.fullName}${dayText}!${progressText}`,
     registration: updatedReg,
   };
 }
@@ -946,16 +1089,27 @@ export async function createRegistrationAsync(
 
 export async function checkInAttendeeAsync(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day?: number
 ): Promise<{ success: boolean; message: string; registration?: RegistrationRecord }> {
   try {
-    const firestoreResult = await checkInFirestoreAttendee(eventSlug, referenceId);
+    const firestoreResult = await checkInFirestoreAttendee(eventSlug, referenceId, day);
     if (firestoreResult) {
       if (firestoreResult.success && firestoreResult.registration) {
         try {
           const db = getDatabase();
-          db.prepare("UPDATE registrations SET checked_in = 1, checked_in_at = ? WHERE reference_id = ?").run(
-            firestoreResult.registration.checkedInAt ?? new Date().toISOString(),
+          const reg = firestoreResult.registration;
+          db.prepare(`
+            UPDATE registrations
+            SET checked_in = 1,
+                checked_in_at = ?,
+                checked_in_days = ?,
+                check_ins = ?
+            WHERE reference_id = ?
+          `).run(
+            reg.checkedInAt ?? new Date().toISOString(),
+            JSON.stringify(reg.checkedInDays || [day ?? 1]),
+            JSON.stringify(reg.checkIns || {}),
             referenceId.trim().toUpperCase()
           );
         } catch {
@@ -967,7 +1121,7 @@ export async function checkInAttendeeAsync(
   } catch (err) {
     console.warn("Firestore check-in failed, falling back to local SQLite:", (err as Error).message);
   }
-  return checkInAttendee(eventSlug, referenceId);
+  return checkInAttendee(eventSlug, referenceId, day);
 }
 
 export async function createEventAsync(
