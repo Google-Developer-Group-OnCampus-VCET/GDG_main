@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { EventEditForm } from "@/components/admin/event-edit-form";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
   return [{ slug: "dev-to-cloud" }];
@@ -63,13 +64,7 @@ export default async function AdminEditEventPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading event editor…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading event editor…" />}>
       <AdminEditEventContent slug={slug} />
     </Suspense>
   );

@@ -92,7 +92,7 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
         const icsContent = [
           "BEGIN:VCALENDAR",
           "VERSION:2.0",
-          "PRODID:-//GDG on Campus VCET//Dev to Cloud Workshop//EN",
+          "PRODID:-//GDG on Campus VCET//Zero to Hero Dev to Cloud Workshop//EN",
           "CALSCALE:GREGORIAN",
           "METHOD:PUBLISH",
           "BEGIN:VEVENT",

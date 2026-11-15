@@ -6,6 +6,7 @@ import { formatEventDateRange } from "@/lib/events";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { ConsoleOverviewExport } from "@/components/admin/console-overview-export";
 import { EventStatusToggle } from "@/components/admin/event-status-toggle";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export const metadata = {
   title: "Admin Console · GDG on Campus VCET",
@@ -353,13 +354,7 @@ async function AdminConsoleContent() {
 
 export default function AdminConsolePage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading Admin Console…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading Admin Console…" />}>
       <AdminConsoleContent />
     </Suspense>
   );
