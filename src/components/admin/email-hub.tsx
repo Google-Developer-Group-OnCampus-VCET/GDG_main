@@ -380,7 +380,7 @@ export function EmailHub({
                   <select
                     value={audience}
                     onChange={(e) => setAudience(e.target.value)}
-                    className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm text-foreground focus:bg-white focus:outline-hidden"
+                    className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
                   >
                     <option value="all">All Confirmed Attendees ({registrations.length})</option>
                     <option value="day-1">Day 1 Attendees (Dec 1)</option>
@@ -407,7 +407,7 @@ export function EmailHub({
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. Day 1 Starts Tomorrow at 10 AM · Dev to Cloud"
                   required
-                  className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
+                  className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
                 />
               </div>
 
@@ -422,7 +422,7 @@ export function EmailHub({
                   rows={8}
                   placeholder="Write your announcement message here..."
                   required
-                  className="p-3.5 rounded-xl border border-border bg-slate-50/50 text-sm text-foreground focus:bg-white focus:outline-hidden font-normal leading-relaxed resize-y"
+                  className="p-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-normal leading-relaxed resize-y"
                 />
               </div>
 
@@ -437,7 +437,7 @@ export function EmailHub({
                     value={ctaText}
                     onChange={(e) => setCtaText(e.target.value)}
                     placeholder="e.g. View Lab Guide"
-                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm text-foreground focus:bg-white focus:outline-hidden"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -449,7 +449,7 @@ export function EmailHub({
                     value={ctaUrl}
                     onChange={(e) => setCtaUrl(e.target.value)}
                     placeholder="https://..."
-                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm text-foreground focus:bg-white focus:outline-hidden"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
                   />
                 </div>
               </div>
@@ -565,7 +565,7 @@ export function EmailHub({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search name, email, or pass ID..."
-                className="w-full h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
+                className="w-full h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
               />
             </div>
           </div>

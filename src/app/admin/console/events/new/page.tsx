@@ -171,7 +171,7 @@ export default function CreateEventPage() {
                   value={title}
                   onChange={(e) => handleTitleChange(e.target.value)}
                   placeholder="e.g. Cloud Community Day 2026"
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
                 />
               </div>
 
@@ -194,7 +194,7 @@ export default function CreateEventPage() {
                     setSlug(e.target.value);
                   }}
                   placeholder="cloud-community-day-2026"
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
                 />
               </div>
 
@@ -208,7 +208,7 @@ export default function CreateEventPage() {
                     id="event-format"
                     value={format}
                     onChange={(e) => setFormat(e.target.value as EventFormat)}
-                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
                   >
                     <option value="in-person">In-Person (VCET Campus)</option>
                     <option value="online">Online / Virtual</option>
@@ -227,7 +227,7 @@ export default function CreateEventPage() {
                     max="1000"
                     value={capacity}
                     onChange={(e) => setCapacity(Number(e.target.value))}
-                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
                   />
                 </div>
               </div>
@@ -244,7 +244,7 @@ export default function CreateEventPage() {
                     required
                     value={startsAt}
                     onChange={(e) => setStartsAt(e.target.value)}
-                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
                   />
                 </div>
 
@@ -257,7 +257,7 @@ export default function CreateEventPage() {
                     type="datetime-local"
                     value={endsAt}
                     onChange={(e) => setEndsAt(e.target.value)}
-                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
                   />
                 </div>
               </div>

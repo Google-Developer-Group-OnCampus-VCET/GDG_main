@@ -193,15 +193,17 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
           </div>
 
           {/* Controls Bar: Day Tabs & Bookmarked counter */}
-          <div className="bg-surface-container-low rounded-2xl p-4 sm:p-5 border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex flex-wrap p-1 bg-surface-container rounded-full gap-1 border border-border/50">
+          <div className="bg-surface-container-low rounded-2xl p-3 sm:p-5 border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex p-1 bg-surface-container rounded-2xl sm:rounded-full gap-1 border border-border/50 overflow-x-auto no-scrollbar max-w-full">
               {availableDays.map((d) => {
-                let label = `Day ${d}`;
+                let fullLabel = `Day ${d}`;
+                let midLabel = `Day ${d}`;
+                let shortLabel = `Day ${d}`;
                 if (event.slug === "dev-to-cloud") {
-                  if (d === 1) label = "Day 1: Build the Foundation";
-                  if (d === 2) label = "Day 2: Make It Smart";
-                  if (d === 3) label = "Day 3: Ship It to Cloud";
-                  if (d === 4) label = "Day 4: Harden & Demo";
+                  if (d === 1) { fullLabel = "Day 1: Build the Foundation"; midLabel = "Day 1: Foundation"; shortLabel = "Day 1"; }
+                  if (d === 2) { fullLabel = "Day 2: Make It Smart"; midLabel = "Day 2: AI & Agents"; shortLabel = "Day 2"; }
+                  if (d === 3) { fullLabel = "Day 3: Ship It to Cloud"; midLabel = "Day 3: Cloud Run"; shortLabel = "Day 3"; }
+                  if (d === 4) { fullLabel = "Day 4: Harden & Demo"; midLabel = "Day 4: Production"; shortLabel = "Day 4"; }
                 }
 
                 return (
@@ -209,19 +211,21 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
                     key={d}
                     type="button"
                     onClick={() => setActiveDay(d)}
-                    className={`px-4 sm:px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                    className={`px-3.5 sm:px-5 py-2 rounded-xl sm:rounded-full text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer shrink-0 min-h-[38px] flex items-center justify-center ${
                       activeDay === d
                         ? "bg-primary text-on-primary shadow-xs"
-                        : "text-foreground-muted hover:text-foreground"
+                        : "text-foreground-muted hover:text-foreground hover:bg-white/50"
                     }`}
                   >
-                    {label}
+                    <span className="hidden lg:inline">{fullLabel}</span>
+                    <span className="hidden sm:inline lg:hidden">{midLabel}</span>
+                    <span className="sm:hidden">{shortLabel}</span>
                   </button>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-2 text-foreground-muted text-xs font-semibold bg-white border border-border px-3.5 py-1.5 rounded-full self-start lg:self-auto">
+            <div className="flex items-center gap-2 text-foreground-muted text-xs font-semibold bg-white border border-border px-3.5 py-1.5 rounded-full self-start lg:self-auto shrink-0">
               <span className="material-symbols-outlined text-[16px] text-primary">bookmark</span>
               <span>{bookmarkedIds.size} sessions bookmarked</span>
             </div>

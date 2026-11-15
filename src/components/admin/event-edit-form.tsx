@@ -279,7 +279,7 @@ export function EventEditForm({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Cloud Community Day 2026"
-                className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
               />
             </div>
 
@@ -296,7 +296,7 @@ export function EventEditForm({
                   id="edit-event-format"
                   value={format}
                   onChange={(e) => setFormat(e.target.value as EventFormat)}
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                 >
                   <option value="in-person">In-Person (VCET Campus)</option>
                   <option value="online">Online / Virtual</option>
@@ -318,7 +318,7 @@ export function EventEditForm({
                   max={5000}
                   value={capacity}
                   onChange={(e) => setCapacity(Number(e.target.value))}
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all font-mono"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all font-mono"
                 />
               </div>
             </div>
@@ -338,7 +338,7 @@ export function EventEditForm({
                   required
                   value={startsAt}
                   onChange={(e) => setStartsAt(e.target.value)}
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                 />
               </div>
 
@@ -354,7 +354,7 @@ export function EventEditForm({
                   type="datetime-local"
                   value={endsAt}
                   onChange={(e) => setEndsAt(e.target.value)}
-                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-base sm:text-sm text-slate-900 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                 />
               </div>
             </div>

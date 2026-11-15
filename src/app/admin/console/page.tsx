@@ -189,6 +189,13 @@ async function AdminConsoleContent() {
                   <span>Check-in</span>
                 </Link>
                 <Link
+                  href={`/admin/console/events/${flagshipSlug}/email`}
+                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-emerald-600">mail</span>
+                  <span>Email Hub</span>
+                </Link>
+                <Link
                   href={`/admin/console/events/${flagshipSlug}/analytics`}
                   className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
                 >
