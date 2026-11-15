@@ -48,9 +48,7 @@ export function EventRegistrationView({
       ? "Intermediate"
       : workshop.registrationConfig?.experienceLevels?.[0] ?? "Beginner"
   );
-  const [track, setTrack] = useState(
-    workshop.registrationConfig?.tracks?.[0]?.name ?? "General Admission"
-  );
+  const [track] = useState("4-Day All-Access");
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [agreedToCoc, setAgreedToCoc] = useState(false);
 
@@ -541,69 +539,26 @@ export function EventRegistrationView({
                     </div>
                   ) : null}
 
-                  {/* 6. Workshop Track Selection (Optional: only rendered if tracks exist in Firestore config) */}
-                  {workshop.registrationConfig?.tracks && workshop.registrationConfig.tracks.length > 0 ? (
-                    <div className="flex flex-col gap-2 text-left pt-1 w-full">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                          Workshop Track
-                        </label>
-                        <span className="text-[11px] text-slate-400 font-medium">Optional</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-                        {workshop.registrationConfig.tracks.map((t) => {
-                          const isSelected = track === t.name;
-                          return (
-                            <label
-                              key={t.id}
-                              className={`cursor-pointer rounded-2xl border p-3.5 sm:p-4 transition-all active:scale-[0.99] flex flex-col gap-2 w-full ${
-                                isSelected
-                                  ? "border-primary bg-primary/5 shadow-xs ring-2 ring-primary/20"
-                                  : "border-slate-200 bg-slate-50/60 hover:border-slate-300 hover:bg-slate-50"
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="track"
-                                value={t.name}
-                                checked={isSelected}
-                                onChange={(e) => setTrack(e.target.value)}
-                                className="sr-only"
-                              />
-                              <div className="flex items-center justify-between">
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                    isSelected
-                                      ? "bg-primary text-white"
-                                      : "bg-slate-200 text-slate-700"
-                                  }`}
-                                >
-                                  {t.badge}
-                                </span>
-                                <span
-                                  className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                                    isSelected
-                                      ? "border-primary bg-primary text-white"
-                                      : "border-slate-300 bg-white"
-                                  }`}
-                                >
-                                  {isSelected ? (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                                  ) : null}
-                                </span>
-                              </div>
-                              <span className="text-sm font-bold text-slate-900 leading-snug">
-                                {t.name}
-                              </span>
-                              <p className="text-xs text-slate-500 leading-relaxed line-clamp-2">
-                                {t.description}
-                              </p>
-                            </label>
-                          );
-                        })}
-                      </div>
+                  {/* 4-Day All-Access Pass Banner (All 4 workshop days included automatically) */}
+                  <div className="flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-primary/5 via-secondary/5 to-surface-container border border-primary/20 text-xs text-left w-full">
+                    <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
                     </div>
-                  ) : null}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground text-xs sm:text-sm">4-Day All-Access Workshop Pass</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Included</span>
+                      </div>
+                      <span className="text-[11px] text-foreground-muted">
+                        Registration admits you to all 4 days (Dec 1–4, 2026). No track selection needed.
+                      </span>
+                    </div>
+                  </div>
 
                   {/* 6. GitHub or LinkedIn Profile (Optional) */}
                   <div className="flex flex-col gap-1.5 text-left pt-1 w-full">
@@ -770,16 +725,12 @@ export function EventRegistrationView({
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    {activePass.track && activePass.track !== "General Admission" ? (
-                      <>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          Assigned Track
-                        </span>
-                        <span className="text-xs font-bold text-slate-900 mb-1">
-                          {activePass.track}
-                        </span>
-                      </>
-                    ) : null}
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Access Tier
+                    </span>
+                    <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md inline-block self-start mb-1.5">
+                      4-Day All-Access Pass
+                    </span>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       Pass Ref ID
                     </span>

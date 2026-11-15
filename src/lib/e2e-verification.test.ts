@@ -84,7 +84,7 @@ describe("Comprehensive System Verification", () => {
       }
     });
 
-    it("allows registration when track is omitted and defaults to General Admission gracefully", () => {
+    it("allows registration when track is omitted and defaults to 4-Day All-Access gracefully", () => {
       const emailWithoutTrack = `notrack.${Date.now()}@vcet.edu.in`;
       const result = createRegistration(TEST_SLUG, {
         fullName: "Attendee Without Track",
@@ -95,7 +95,7 @@ describe("Comprehensive System Verification", () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.registration.track).toBe("General Admission");
+        expect(result.registration.track).toBe("4-Day All-Access");
       }
     });
 

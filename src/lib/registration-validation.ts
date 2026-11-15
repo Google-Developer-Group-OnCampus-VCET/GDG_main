@@ -22,7 +22,7 @@ export function validateAndNormalizeRegistrationInput(
   const fullName = input.fullName?.trim() || "";
   const email = input.email?.trim().toLowerCase() || "";
   const phone = input.phone?.trim() || "";
-  const track = input.track?.trim() || "General Admission";
+  const track = input.track?.trim() || "4-Day All-Access";
 
   if (!fullName || !email || !phone) {
     return { valid: false, message: "All required fields must be provided." };
