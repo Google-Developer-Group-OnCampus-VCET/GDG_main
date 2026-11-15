@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import nodemailer from "nodemailer";
 import type { RegistrationRecord, EmailLog } from "@/types";
 import { logEmailRecordAsync } from "@/lib/db";
 
@@ -17,15 +18,56 @@ export interface SendEmailResult {
   error?: string;
 }
 
+export const CHAPTER_OFFICIAL_EMAIL = "vcet_gdg@vcet.edu.in";
+export const CHAPTER_FROM_SENDER = `GDG on Campus VCET <${CHAPTER_OFFICIAL_EMAIL}>`;
+
 /**
- * Sends an email using Resend API (if RESEND_API_KEY is configured),
- * or returns simulated success in local/demo environment.
+ * Sends an email using:
+ * 1. Google Workspace / Gmail SMTP via vcet_gdg@vcet.edu.in (when SMTP_PASS or GMAIL_APP_PASSWORD is set)
+ * 2. Resend API (when RESEND_API_KEY is configured)
+ * 3. Simulated Dev Mode (gracefully logs and saves records when no external credentials are set)
  */
 export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailResult> {
   const recipients = Array.isArray(payload.to) ? payload.to : [payload.to];
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  const fromEmail = process.env.EMAIL_FROM?.trim() || "GDG on Campus VCET <events@vcet.edu.in>";
+  const fromEmail = process.env.EMAIL_FROM?.trim() || CHAPTER_FROM_SENDER;
+  const replyTo = payload.replyTo || CHAPTER_OFFICIAL_EMAIL;
 
+  // 1. Check for Google Workspace / Gmail SMTP
+  const smtpPass = process.env.SMTP_PASS?.trim() || process.env.GMAIL_APP_PASSWORD?.trim();
+  const smtpUser = process.env.SMTP_USER?.trim() || CHAPTER_OFFICIAL_EMAIL;
+  const smtpHost = process.env.SMTP_HOST?.trim() || "smtp.gmail.com";
+  const smtpPort = Number(process.env.SMTP_PORT) || 465;
+
+  if (smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: fromEmail,
+        to: recipients,
+        subject: payload.subject,
+        html: payload.html,
+        text: payload.text,
+        replyTo,
+      });
+
+      return { success: true, messageId: info.messageId };
+    } catch (err) {
+      console.error("SMTP error sending email via Google Workspace:", err);
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  // 2. Check for Resend API
+  const apiKey = process.env.RESEND_API_KEY?.trim();
   if (apiKey) {
     try {
       const res = await fetch("https://api.resend.com/emails", {
@@ -40,7 +82,7 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
           subject: payload.subject,
           html: payload.html,
           text: payload.text,
-          reply_to: payload.replyTo || "gdg@vcet.edu.in",
+          reply_to: replyTo,
         }),
       });
 
@@ -58,8 +100,8 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
     }
   }
 
-  // Simulated Mode (No external API key set)
-  console.log(`[SIMULATED EMAIL DISPATCH] To: ${recipients.join(", ")} | Subject: ${payload.subject}`);
+  // 3. Simulated Mode (when no external credentials are configured yet)
+  console.log(`[SIMULATED EMAIL DISPATCH] From: ${fromEmail} | To: ${recipients.join(", ")} | Subject: ${payload.subject}`);
   return {
     success: true,
     simulated: true,
@@ -186,7 +228,7 @@ export function generatePassEmailHtml(options: {
 
     <div class="footer">
       Google Developer Groups on Campus &middot; Vidyavardhini's College of Engineering and Technology<br>
-      K.T. Marg, Vasai West, Maharashtra 401202 &middot; Questions? Contact <a href="mailto:gdg@vcet.edu.in" style="color: #2563eb;">gdg@vcet.edu.in</a>
+      K.T. Marg, Vasai West, Maharashtra 401202 &middot; Questions? Contact <a href="mailto:vcet_gdg@vcet.edu.in" style="color: #2563eb;">vcet_gdg@vcet.edu.in</a>
     </div>
   </div>
 </body>
@@ -209,7 +251,7 @@ Show this pass reference at the check-in desk each morning.
 View / Download your Pass:
 ${passUrl}
 
-Questions? Email gdg@vcet.edu.in`;
+Questions? Email vcet_gdg@vcet.edu.in`;
 
   return { subject, html, text };
 }
@@ -312,7 +354,7 @@ export function generateAnnouncementEmailHtml(options: {
 
     <div class="footer">
       Google Developer Groups on Campus &middot; Vidyavardhini's College of Engineering and Technology<br>
-      K.T. Marg, Vasai West, Maharashtra 401202 &middot; <a href="mailto:gdg@vcet.edu.in" style="color: #2563eb;">gdg@vcet.edu.in</a>
+      K.T. Marg, Vasai West, Maharashtra 401202 &middot; <a href="mailto:vcet_gdg@vcet.edu.in" style="color: #2563eb;">vcet_gdg@vcet.edu.in</a>
     </div>
   </div>
 </body>
