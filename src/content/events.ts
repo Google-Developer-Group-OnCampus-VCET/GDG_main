@@ -32,6 +32,7 @@ export const events: ChapterEvent[] = [
     format: "in-person",
     location: "Vidyavardhini's College of Engineering and Technology, Vasai (Seminar Hall & Computer Labs)",
     topics: ["web", "cloud", "ai-ml"],
+    image: "/images/events/dev-to-cloud-poster.png",
     summary:
       "A four-day intensive, hands-on workshop series taking developers from foundational web engineering to building, containerizing, deploying, and hardening an AI-powered campus assistant on Google Cloud.",
     capacity: 120,
