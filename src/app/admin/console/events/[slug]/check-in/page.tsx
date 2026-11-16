@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { CheckInTerminal } from "@/components/admin/check-in-terminal";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
   return [{ slug: "dev-to-cloud" }];
@@ -80,13 +81,7 @@ export default async function AdminCheckInPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading check-in terminal…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading check-in terminal…" />}>
       <AdminCheckInContent slug={slug} />
     </Suspense>
   );

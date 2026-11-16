@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventDetailsView } from "@/components/workshop/event-details-view";
+import { EventDetailSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   if (staticEvents.length === 0) return [{ slug: "__placeholder__" }];
@@ -139,13 +140,7 @@ export default function EventDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
-          Loading event details…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventDetailSkeleton />}>
       <EventDetailContent params={params} />
     </Suspense>
   );

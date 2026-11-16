@@ -13,10 +13,10 @@ interface EmailHubProps {
 const EMAIL_TEMPLATES = [
   {
     name: "Pre-Event Prerequisites & Schedule",
-    subject: "Dev to Cloud: Zero to Hero · Getting Ready for Day 1",
+    subject: "Zero to Hero: Dev to Cloud · Getting Ready for Day 1",
     message: `Dear Attendees,
 
-We are excited to welcome you to Dev to Cloud: Zero to Hero starting this Tuesday, December 1, 2026!
+We are excited to welcome you to Zero to Hero: Dev to Cloud starting this Tuesday, December 1, 2026!
 
 Here is what you need to prepare:
 1. Laptop & Charger (Linux, macOS, or Windows WSL2 recommended).
@@ -43,9 +43,9 @@ Day 1 of Dev to Cloud begins today at 10:00 AM in the VCET Seminar Hall.
 
 Today's Schedule:
 • 10:00 AM: Concept Primer: Anatomy of Modern Web Applications
-• 10:30 AM: Guided Build: Workspace Setup & Core Screens
-• 11:40 AM: Hands-on Lab: Database CRUD & AI Documents Table
-• 12:50 PM: Git Checkpoint & Day 2 Preview
+• 10:45 AM: Guided Build: Workspace Setup & Core Screens
+• 12:15 PM: Hands-on Lab: Database CRUD & AI Documents Table
+• 01:30 PM: Git Checkpoint & Day 2 Preview (until 2:00 PM)
 
 Have your digital pass QR code open for quick admission at the registration desk.
 
@@ -514,7 +514,7 @@ export function EmailHub({
                   {subject || "Email Subject Line"}
                 </h3>
                 <p className="text-xs font-semibold text-slate-800">
-                  Dear Atharva Joshi,
+                  Dear John Doe,
                 </p>
                 <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed font-normal">
                   {message || "Announcement message body..."}

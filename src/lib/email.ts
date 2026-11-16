@@ -204,7 +204,7 @@ export function generatePassEmailHtml(options: {
           </tr>
           <tr>
             <td class="details-label">Dates & Times</td>
-            <td class="details-value">${datesText} (10:00 AM – 01:10 PM IST)</td>
+            <td class="details-value">${datesText} (10:00 AM – 02:00 PM IST)</td>
           </tr>
           <tr>
             <td class="details-label">Location</td>
@@ -237,7 +237,7 @@ export function generatePassEmailHtml(options: {
   const text = `Google Developer Groups on Campus VCET - Event Pass
 ======================================================
 Event: ${eventTitle}
-Dates: ${datesText} (10:00 AM – 01:10 PM IST)
+Dates: ${datesText} (10:00 AM – 02:00 PM IST)
 Location: ${venueText}
 
 Attendee: ${registration.fullName}

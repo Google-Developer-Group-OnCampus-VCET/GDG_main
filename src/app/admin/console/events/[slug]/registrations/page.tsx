@@ -7,6 +7,7 @@ import type { RegistrationRecord } from "@/types";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { EventStatusToggle } from "@/components/admin/event-status-toggle";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
   return [{ slug: "dev-to-cloud" }];
@@ -108,13 +109,7 @@ export default async function AdminRegistrationsPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading registrations…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading registrations…" />}>
       <AdminRegistrationsContent slug={slug} />
     </Suspense>
   );

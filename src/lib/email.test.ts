@@ -28,7 +28,7 @@ describe("Email Communication System", () => {
 
   it("generates a complete GDG-branded pass HTML email with QR code and reference ID", () => {
     const { subject, html, text } = generatePassEmailHtml({
-      eventTitle: "Dev to Cloud: Zero to Hero",
+      eventTitle: "Zero to Hero: Dev to Cloud",
       registration: mockRegistration,
       datesText: "Dec 1–4, 2026",
       venueText: "VCET Seminar Hall",
@@ -53,7 +53,7 @@ describe("Email Communication System", () => {
 
   it("generates broadcast announcement HTML with custom message and pass link", () => {
     const { html, text } = generateAnnouncementEmailHtml({
-      eventTitle: "Dev to Cloud: Zero to Hero",
+      eventTitle: "Zero to Hero: Dev to Cloud",
       subject: "Day 1 Starts Tomorrow at 10 AM",
       message: "Please arrive 15 minutes early and bring your personal laptop.",
       recipientName: "Atharva Joshi",
@@ -87,7 +87,7 @@ describe("Email Communication System", () => {
 
   it("dispatches attendee pass and logs the transaction in database", async () => {
     const result = await sendAttendeePassEmail({
-      eventTitle: "Dev to Cloud: Zero to Hero",
+      eventTitle: "Zero to Hero: Dev to Cloud",
       registration: mockRegistration,
       origin: "http://localhost:3000",
     });

@@ -1,7 +1,7 @@
 import type { WorkshopDetails } from "@/types";
 
 export const devToCloudWorkshopData: WorkshopDetails = {
-  headline: "Dev to Cloud: Zero to Hero",
+  headline: "Zero to Hero: Dev to Cloud",
   subheading:
     "A four-day intensive, hands-on workshop series organized by Google Developer Groups on Campus VCET. Take your application from local code to a smart, containerized, serverless AI agent deployed on Google Cloud.",
   datesText: "Dec 1–4, 2026",
@@ -165,7 +165,7 @@ export const devToCloudWorkshopData: WorkshopDetails = {
     {
       question: "Is this workshop free to attend?",
       answer:
-        "Yes! Dev to Cloud: Zero to Hero is 100% free for all selected participants, organized by GDG on Campus VCET with hands-on mentoring.",
+        "Yes! Zero to Hero: Dev to Cloud is 100% free for all selected participants, organized by GDG on Campus VCET with hands-on mentoring.",
       category: "General",
     },
     {
@@ -192,7 +192,7 @@ export const devToCloudWorkshopData: WorkshopDetails = {
     {
       id: "d1-s1",
       day: 1,
-      time: "10:00 AM – 10:30 AM",
+      time: "10:00 AM – 10:45 AM",
       title: "Concept Primer: Anatomy of Modern Web Applications",
       description:
         "Deconstructing frontend, REST APIs, and databases. How requests flow end-to-end, REST conventions, and how to structure data models for AI agents.",
@@ -201,12 +201,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Web Architecture", "REST", "Git", "30 min"],
+      tags: ["Web Architecture", "REST", "Git", "45 min"],
     },
     {
       id: "d1-s2",
       day: 1,
-      time: "10:30 AM – 11:30 AM",
+      time: "10:45 AM – 12:00 PM",
       title: "Guided Build: Workspace Setup & Core Screens",
       description:
         "Clone starter repo, install dependencies, run locally, and construct the chat panel, file upload form, and notes view.",
@@ -215,23 +215,23 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["React", "API Routes", "UI Components", "60 min"],
+      tags: ["React", "API Routes", "UI Components", "75 min"],
     },
     {
       id: "d1-s3",
       day: 1,
-      time: "11:30 AM – 11:40 AM",
+      time: "12:00 PM – 12:15 PM",
       title: "Mid-Session Refreshment Break",
       description: "Quick coffee and networking break.",
       track: "break",
       trackLabel: "Break",
       location: "Seminar Foyer",
-      tags: ["Refreshments", "10 min"],
+      tags: ["Refreshments", "15 min"],
     },
     {
       id: "d1-s4",
       day: 1,
-      time: "11:40 AM – 12:50 PM",
+      time: "12:15 PM – 01:30 PM",
       title: "Hands-on Lab: Feature Implementation & Agent Documents Table",
       description:
         "Build notes search, event filter queries, and create the documents table and upload endpoint that the AI agent will consume on Day 2.",
@@ -240,12 +240,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["Database", "CRUD", "Documents Table", "70 min"],
+      tags: ["Database", "CRUD", "Documents Table", "75 min"],
     },
     {
       id: "d1-s5",
       day: 1,
-      time: "12:50 PM – 01:10 PM",
+      time: "01:30 PM – 02:00 PM",
       title: "Day 1 Checkpoint & Day 2 Preview",
       description:
         "Commit changes to Git, push day1-complete branch to GitHub, verify running local application with mentors, and preview AI concepts.",
@@ -254,14 +254,14 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Git Push", "Verification", "Day 2 Preview", "20 min"],
+      tags: ["Git Push", "Verification", "Day 2 Preview", "30 min"],
     },
 
     // DAY 2
     {
       id: "d2-s1",
       day: 2,
-      time: "10:00 AM – 10:30 AM",
+      time: "10:00 AM – 10:45 AM",
       title: "Concept Primer: LLMs, Embeddings, RAG & Autonomous Agents",
       description:
         "How large language models work, dense embeddings vs keyword search, vector distance metrics, agent tool dispatching, and safety guardrails.",
@@ -270,12 +270,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["GenAI", "Embeddings", "RAG", "Guardrails", "30 min"],
+      tags: ["GenAI", "Embeddings", "RAG", "Guardrails", "45 min"],
     },
     {
       id: "d2-s2",
       day: 2,
-      time: "10:30 AM – 11:30 AM",
+      time: "10:45 AM – 12:00 PM",
       title: "Guided Build: Firestore Vector Store & Tool-Calling Agent",
       description:
         "Ingest campus notices and FAQs into vector storage, implement Grounded RAG with citations, and bind actions (search_notes, list_events, set_reminder).",
@@ -284,23 +284,23 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["Google ADK", "LangGraph", "Vector Search", "60 min"],
+      tags: ["Google ADK", "LangGraph", "Vector Search", "75 min"],
     },
     {
       id: "d2-s3",
       day: 2,
-      time: "11:30 AM – 11:40 AM",
+      time: "12:00 PM – 12:15 PM",
       title: "Mid-Session Refreshment Break",
       description: "Quick break and lab synchronization.",
       track: "break",
       trackLabel: "Break",
       location: "Seminar Foyer",
-      tags: ["Refreshments", "10 min"],
+      tags: ["Refreshments", "15 min"],
     },
     {
       id: "d2-s4",
       day: 2,
-      time: "11:40 AM – 12:50 PM",
+      time: "12:15 PM – 01:30 PM",
       title: "Hands-on Lab: Custom Agent Tools & Prompt-Injection Evals",
       description:
         "Add a custom tool, write 10-15 test evaluation queries, benchmark answer quality, and run prompt-injection attacks to test safety guardrails.",
@@ -309,12 +309,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["Custom Tools", "Evals", "Prompt Injection", "70 min"],
+      tags: ["Custom Tools", "Evals", "Prompt Injection", "75 min"],
     },
     {
       id: "d2-s5",
       day: 2,
-      time: "12:50 PM – 01:10 PM",
+      time: "01:30 PM – 02:00 PM",
       title: "Day 2 Checkpoint & Stretch Preview",
       description:
         "Live demo answering queries with citations and executing tool actions. Preview Day 3 Cloud deployment and explore local Gemma/Ollama stretch goals.",
@@ -323,14 +323,14 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Demo", "Gemma", "Day 3 Preview", "20 min"],
+      tags: ["Demo", "Gemma", "Day 3 Preview", "30 min"],
     },
 
     // DAY 3
     {
       id: "d3-s1",
       day: 3,
-      time: "10:00 AM – 10:30 AM",
+      time: "10:00 AM – 10:45 AM",
       title: "Concept Primer: Containers, Serverless & Production CI/CD",
       description:
         "Containers vs virtual machines, why serverless scales to zero, IAM least privilege, why secrets never go into Git, and continuous delivery flows.",
@@ -339,12 +339,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Cloud Run", "Docker", "IAM", "Secrets", "30 min"],
+      tags: ["Cloud Run", "Docker", "IAM", "Secrets", "45 min"],
     },
     {
       id: "d3-s2",
       day: 3,
-      time: "10:30 AM – 11:30 AM",
+      time: "10:45 AM – 12:00 PM",
       title: "Guided Build: Multi-Stage Dockerfile & Cloud Run Deployment",
       description:
         "Write minimal multi-stage Dockerfiles, configure GCP project, establish budget alerts, deploy to Google Cloud Run, and mount Secret Manager keys.",
@@ -353,23 +353,23 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["Cloud Run", "Secret Manager", "Budget Alerts", "60 min"],
+      tags: ["Cloud Run", "Secret Manager", "Budget Alerts", "75 min"],
     },
     {
       id: "d3-s3",
       day: 3,
-      time: "11:30 AM – 11:40 AM",
+      time: "12:00 PM – 12:15 PM",
       title: "Mid-Session Refreshment Break",
       description: "Quick break and deployment check.",
       track: "break",
       trackLabel: "Break",
       location: "Seminar Foyer",
-      tags: ["Refreshments", "10 min"],
+      tags: ["Refreshments", "15 min"],
     },
     {
       id: "d3-s4",
       day: 3,
-      time: "11:40 AM – 12:50 PM",
+      time: "12:15 PM – 01:30 PM",
       title: "Hands-on Lab: GitHub Actions CI/CD & Production Vector Store",
       description:
         "Configure automated redeployments on push, connect hosted Firestore vector database in production, inspect Cloud Logging, and test revision rollback.",
@@ -378,12 +378,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["GitHub Actions", "CI/CD", "Cloud Logging", "Rollback", "70 min"],
+      tags: ["GitHub Actions", "CI/CD", "Cloud Logging", "Rollback", "75 min"],
     },
     {
       id: "d3-s5",
       day: 3,
-      time: "12:50 PM – 01:10 PM",
+      time: "01:30 PM – 02:00 PM",
       title: "Day 3 Checkpoint: Live Public URLs Verification",
       description:
         "Live check of each attendee's public Cloud Run URL and /health endpoint. Preview Day 4 production audit.",
@@ -392,14 +392,14 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Live URL", "Health Check", "Day 4 Preview", "20 min"],
+      tags: ["Live URL", "Health Check", "Day 4 Preview", "30 min"],
     },
 
     // DAY 4
     {
       id: "d4-s1",
       day: 4,
-      time: "10:00 AM – 10:30 AM",
+      time: "10:00 AM – 10:45 AM",
       title: "Briefing: What AI Agents & Rapid Prototypes Miss",
       description:
         "Reviewing the 13-point audit checklist: secret leakage, prompt injection vulnerabilities, rate limits, token quotas, CORS headers, and error masking.",
@@ -408,12 +408,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Production Hardening", "Security", "Checklist", "30 min"],
+      tags: ["Production Hardening", "Security", "Checklist", "45 min"],
     },
     {
       id: "d4-s2",
       day: 4,
-      time: "10:30 AM – 11:30 AM",
+      time: "10:45 AM – 12:00 PM",
       title: "Hands-on Audit: Checklist Execution & Refactoring",
       description:
         "Audit the agent-built app against the checklist, compare against the reviewed reference architecture, and patch security and reliability gaps.",
@@ -422,23 +422,23 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Computer Labs",
-      tags: ["Audit", "Vulnerability Patching", "Refactoring", "60 min"],
+      tags: ["Audit", "Vulnerability Patching", "Refactoring", "75 min"],
     },
     {
       id: "d4-s3",
       day: 4,
-      time: "11:30 AM – 11:40 AM",
+      time: "12:00 PM – 12:15 PM",
       title: "Mid-Session Refreshment Break",
       description: "Quick break before final demo showcase.",
       track: "break",
       trackLabel: "Break",
       location: "Seminar Foyer",
-      tags: ["Refreshments", "10 min"],
+      tags: ["Refreshments", "15 min"],
     },
     {
       id: "d4-s4",
       day: 4,
-      time: "11:40 AM – 12:50 PM",
+      time: "12:15 PM – 01:20 PM",
       title: "Project Showcase & Live Peer Demos",
       description:
         "Attendees demonstrate their live, cloud-deployed campus assistants answering from campus notes and executing tool commands.",
@@ -447,12 +447,12 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall & Labs",
-      tags: ["Live Demos", "Showcase", "Peer Review", "70 min"],
+      tags: ["Live Demos", "Showcase", "Peer Review", "65 min"],
     },
     {
       id: "d4-s5",
       day: 4,
-      time: "12:50 PM – 01:20 PM",
+      time: "01:20 PM – 02:00 PM",
       title: "Closing Ceremony & Certification for Working Deployments",
       description:
         "Official GDG on Campus VCET Certificates of Completion distributed for verified working deployments, plus flagship hackathon preview.",
@@ -461,7 +461,7 @@ export const devToCloudWorkshopData: WorkshopDetails = {
       speaker: "TBD",
       speakerRole: "TBD",
       location: "Seminar Hall",
-      tags: ["Certificates", "Awards", "Ceremony", "30 min"],
+      tags: ["Certificates", "Awards", "Ceremony", "40 min"],
     },
   ],
   speakers: [],

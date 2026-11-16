@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getRegistrationsAsync, getEmailLogsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { EmailHub } from "@/components/admin/email-hub";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 import type { RegistrationRecord, EmailLog } from "@/types";
 
 export function generateStaticParams() {
@@ -78,13 +79,7 @@ export default async function AdminEmailPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading email and communication hub…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading email and communication hub…" />}>
       <AdminEmailContent slug={slug} />
     </Suspense>
   );
