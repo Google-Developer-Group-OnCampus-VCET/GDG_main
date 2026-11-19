@@ -25,7 +25,7 @@ export const events: ChapterEvent[] = [
   {
     id: "dev-to-cloud",
     slug: "dev-to-cloud",
-    title: "Dev to Cloud: Zero to Hero",
+    title: "Zero to Hero: Dev to Cloud",
     startsAt: "2026-12-01",
     endsAt: "2026-12-04",
     timezone: "Asia/Kolkata",
@@ -34,6 +34,7 @@ export const events: ChapterEvent[] = [
     topics: ["web", "cloud", "ai-ml"],
     summary:
       "A four-day intensive, hands-on workshop series taking developers from foundational web engineering to building, containerizing, deploying, and hardening an AI-powered campus assistant on Google Cloud.",
+    capacity: 120,
     priceNote: "Free event (Registration required)",
     registrationUrl: "/events/dev-to-cloud/register",
     workshop: devToCloudWorkshopData,

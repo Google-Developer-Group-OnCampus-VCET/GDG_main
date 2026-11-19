@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
+import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
   return [{ slug: "dev-to-cloud" }];
@@ -29,10 +30,11 @@ async function AdminAnalyticsContent({ slug }: { slug: string }) {
   try {
     stats = await getEventStatsAsync(slug);
   } catch {
+    const fallbackCap = event.capacity ?? event.workshop?.capacity ?? 120;
     stats = {
       totalRegistered: 0,
-      capacity: 150,
-      remaining: 150,
+      capacity: fallbackCap,
+      remaining: fallbackCap,
       percentFilled: 0,
       isOpen: true,
       checkedInCount: 0,
@@ -61,13 +63,7 @@ export default async function AdminAnalyticsPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-surface-container-low p-8 text-sm text-foreground-muted">
-          Loading event analytics…
-        </div>
-      }
-    >
+    <Suspense fallback={<AdminPageSkeleton label="Loading event analytics…" />}>
       <AdminAnalyticsContent slug={slug} />
     </Suspense>
   );

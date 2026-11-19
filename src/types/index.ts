@@ -92,10 +92,10 @@ export interface WorkshopRegistrationConfig {
   deadline?: string;
   price: number; // 0 for free
   currency: string;
-  tracks: WorkshopTrack[];
-  departments: string[];
-  yearsOfStudy: string[];
-  experienceLevels: string[];
+  tracks?: WorkshopTrack[];
+  departments?: string[];
+  yearsOfStudy?: string[];
+  experienceLevels?: string[];
 }
 
 export interface WorkshopDetails {
@@ -148,6 +148,9 @@ export interface ChapterEvent {
   lastVerifiedAt?: string;
   transcribedFrom?: string;
   transcribedAt?: string;
+  capacity?: number;
+  isRegistrationOpen?: boolean;
+  registeredCount?: number;
   /** When present, enables the rich multi-page workshop experience */
   workshop?: WorkshopDetails;
 }
@@ -162,13 +165,15 @@ export interface RegistrationRecord {
   college: string;
   department: string;
   yearOfStudy: string;
-  track: string;
+  track?: string;
   experienceLevel: string;
   portfolioUrl?: string;
   notes?: string;
   status: "confirmed" | "waitlisted" | "cancelled";
   checkedIn: boolean;
   checkedInAt?: string;
+  checkedInDays?: number[];
+  checkIns?: Record<number, string>;
   createdAt: string;
 }
 
@@ -179,7 +184,7 @@ export interface RegistrationInput {
   college?: string;
   department?: string;
   yearOfStudy?: string;
-  track: string;
+  track?: string;
   experienceLevel?: string;
   portfolioUrl?: string;
   notes?: string;
@@ -197,6 +202,7 @@ export interface EventInput {
   topics?: EventTopic[];
   summary?: string;
   capacity?: number;
+  priceNote?: string;
   isRegistrationOpen?: boolean;
 }
 
@@ -238,4 +244,17 @@ export interface ChapterConfig {
   nav: NavLink[];
   sourceUrl: string;
   lastVerifiedAt: string;
+}
+
+export interface EmailLog {
+  id: string;
+  eventSlug: string;
+  type: "pass" | "announcement";
+  subject: string;
+  recipientCount: number;
+  recipients: string[];
+  sentAt: string;
+  status: "sent" | "simulated" | "failed";
+  sender?: string;
+  previewText?: string;
 }

@@ -4,6 +4,7 @@ import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import type {
   ChapterEvent,
+  EmailLog,
   EventInput,
   EventUpdateInput,
   RegistrationInput,
@@ -90,7 +91,8 @@ export async function createFirestoreEvent(
 
     const docPayload = {
       ...eventRecord,
-      capacity: input.capacity ?? 150,
+      capacity: input.capacity ?? 120,
+      priceNote: input.priceNote?.trim() || undefined,
       isRegistrationOpen: input.isRegistrationOpen ?? true,
       registeredCount: 0,
       createdAt: now,
@@ -150,7 +152,13 @@ export async function updateFirestoreEvent(
       updates.topics = input.topics.length > 0 ? input.topics : ["general"];
     }
     if (input.summary !== undefined) updates.summary = input.summary.trim() || null;
-    if (input.capacity !== undefined) updates.capacity = Math.floor(input.capacity);
+    if (input.priceNote !== undefined) updates.priceNote = input.priceNote.trim() || null;
+    if (input.capacity !== undefined) {
+      const cap = Math.floor(input.capacity);
+      updates.capacity = cap;
+      updates["workshop.capacity"] = cap;
+      updates["workshop.seatsText"] = `Limited to ${cap} Seats`;
+    }
     if (input.isRegistrationOpen !== undefined) {
       updates.isRegistrationOpen = Boolean(input.isRegistrationOpen);
     }
@@ -186,7 +194,12 @@ export async function updateFirestoreEvent(
 
     const updatedEvent = await getFirestoreEvent(slug);
     if (updatedEvent && defaultMatch?.workshop && !updatedEvent.workshop) {
-      updatedEvent.workshop = defaultMatch.workshop;
+      const cap = updatedEvent.capacity ?? defaultMatch.capacity ?? defaultMatch.workshop.capacity;
+      updatedEvent.workshop = {
+        ...defaultMatch.workshop,
+        capacity: cap,
+        seatsText: `Limited to ${cap} Seats`,
+      };
     }
 
     return updatedEvent
@@ -209,6 +222,35 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
     const list: ChapterEvent[] = [];
     snapshot.forEach((doc) => {
       const d = doc.data();
+      const capacity =
+        typeof d.capacity === "number"
+          ? d.capacity
+          : typeof d.workshop?.capacity === "number"
+          ? d.workshop.capacity
+          : undefined;
+
+      const workshop = d.workshop
+        ? {
+            ...d.workshop,
+            ...(capacity !== undefined
+              ? {
+                  capacity,
+                  seatsText: `Limited to ${capacity} Seats`,
+                }
+              : {}),
+            ...(d.location ? { venueText: d.location } : {}),
+            ...(typeof d.registeredCount === "number"
+              ? { initialRegisteredCount: d.registeredCount }
+              : {}),
+            registrationConfig: {
+              ...(d.workshop.registrationConfig || {}),
+              ...(typeof d.isRegistrationOpen === "boolean"
+                ? { isOpen: d.isRegistrationOpen }
+                : {}),
+            },
+          }
+        : undefined;
+
       list.push({
         id: d.id || doc.id,
         slug: d.slug || doc.id,
@@ -220,8 +262,12 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
         location: d.location,
         topics: d.topics || ["general"],
         summary: d.summary || undefined,
+        capacity,
+        priceNote: d.priceNote || undefined,
+        isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+        registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
         registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-        workshop: d.workshop || undefined,
+        workshop,
       });
     });
 
@@ -243,6 +289,35 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
     const d = doc.data();
     if (!d) return null;
 
+    const capacity =
+      typeof d.capacity === "number"
+        ? d.capacity
+        : typeof d.workshop?.capacity === "number"
+        ? d.workshop.capacity
+        : undefined;
+
+    const workshop = d.workshop
+      ? {
+          ...d.workshop,
+          ...(capacity !== undefined
+            ? {
+                capacity,
+                seatsText: `Limited to ${capacity} Seats`,
+              }
+            : {}),
+          ...(d.location ? { venueText: d.location } : {}),
+          ...(typeof d.registeredCount === "number"
+            ? { initialRegisteredCount: d.registeredCount }
+            : {}),
+          registrationConfig: {
+            ...(d.workshop.registrationConfig || {}),
+            ...(typeof d.isRegistrationOpen === "boolean"
+              ? { isOpen: d.isRegistrationOpen }
+              : {}),
+          },
+        }
+      : undefined;
+
     return {
       id: d.id || doc.id,
       slug: d.slug || doc.id,
@@ -254,8 +329,12 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
       location: d.location,
       topics: d.topics || ["general"],
       summary: d.summary || undefined,
+      capacity,
+      priceNote: d.priceNote || undefined,
+      isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+      registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
       registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-      workshop: d.workshop || undefined,
+      workshop,
     };
   } catch (err) {
     console.warn("Firestore getEvent failed:", (err as Error).message);
@@ -305,7 +384,12 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const eventDoc = await db.collection("events").doc(slug).get();
     const eventData = eventDoc.data();
     const defaultMatch = defaultEvents.find((e) => e.slug === slug);
-    const capacity = eventData?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+    const capacity =
+      typeof eventData?.capacity === "number"
+        ? eventData.capacity
+        : typeof eventData?.workshop?.capacity === "number"
+        ? eventData.workshop.capacity
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
     const isRegistrationOpen =
       eventData?.isRegistrationOpen ??
       eventData?.is_registration_open ??
@@ -319,6 +403,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
 
     let totalRegistered = 0;
     let checkedInCount = 0;
+    const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    let multiDayCompletionCount = 0;
     const trackCounts: Record<string, number> = {};
     const yearCounts: Record<string, number> = {};
     const departmentCounts: Record<string, number> = {};
@@ -328,6 +414,18 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       if (data.status === "cancelled") return;
       totalRegistered++;
       if (data.checkedIn) checkedInCount++;
+
+      const days: number[] = Array.isArray(data.checkedInDays)
+        ? data.checkedInDays
+        : data.checkedIn
+        ? [1]
+        : [];
+      days.forEach((d) => {
+        dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
+      });
+      if (days.length >= 4) {
+        multiDayCompletionCount++;
+      }
 
       if (data.track) {
         trackCounts[data.track] = (trackCounts[data.track] || 0) + 1;
@@ -352,6 +450,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       isOpen: Boolean(isRegistrationOpen) && remaining > 0,
       isRegistrationOpen: Boolean(isRegistrationOpen),
       checkedInCount,
+      dailyCheckedInCounts,
+      multiDayCompletionCount,
       trackCounts,
       yearCounts,
       departmentCounts,
@@ -402,14 +502,42 @@ export async function getFirestoreRegistrations(
         status: d.status || "confirmed",
         checkedIn: Boolean(d.checkedIn),
         checkedInAt: d.checkedInAt || undefined,
+        checkedInDays: Array.isArray(d.checkedInDays)
+          ? d.checkedInDays
+          : d.checkedIn
+          ? [1]
+          : [],
+        checkIns:
+          typeof d.checkIns === "object" && d.checkIns !== null
+            ? d.checkIns
+            : d.checkedIn && d.checkedInAt
+            ? { 1: d.checkedInAt }
+            : {},
         createdAt: d.createdAt || new Date().toISOString(),
       });
     });
 
     // Client-side filtering for search & checkedIn filter
     if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
-      const isChecked = options.checkedIn === "true" || options.checkedIn === "1";
-      records = records.filter((r) => r.checkedIn === isChecked);
+      if (options.checkedIn.startsWith("day-")) {
+        const targetDay = Number(options.checkedIn.replace("day-", ""));
+        records = records.filter((r) => r.checkedInDays?.includes(targetDay));
+      } else if (options.checkedIn === "all-days") {
+        records = records.filter((r) => (r.checkedInDays?.length ?? 0) >= 4);
+      } else if (
+        options.checkedIn === "absent" ||
+        options.checkedIn === "not-checked-in" ||
+        options.checkedIn === "false" ||
+        options.checkedIn === "0"
+      ) {
+        records = records.filter((r) => !r.checkedIn || (r.checkedInDays?.length ?? 0) === 0);
+      } else {
+        const isChecked =
+          options.checkedIn === "true" ||
+          options.checkedIn === "1" ||
+          options.checkedIn === "checked-in";
+        records = records.filter((r) => r.checkedIn === isChecked);
+      }
     }
 
     if (options?.search) {
@@ -479,7 +607,12 @@ export async function createFirestoreRegistration(
       }
 
       const eventData = eventDoc.data();
-      const capacity = eventData?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+      const capacity =
+      typeof eventData?.capacity === "number"
+        ? eventData.capacity
+        : typeof eventData?.workshop?.capacity === "number"
+        ? eventData.workshop.capacity
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
       const isRegistrationOpen = Boolean(
         eventData?.isRegistrationOpen ??
           eventData?.is_registration_open ??
@@ -603,7 +736,8 @@ export async function createFirestoreRegistration(
 
 export async function checkInFirestoreAttendee(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day?: number
 ): Promise<{ success: boolean; message: string; registration?: RegistrationRecord } | null> {
   const db = getAdminDb();
   if (!db) return null;
@@ -625,33 +759,113 @@ export async function checkInFirestoreAttendee(
     const doc = snap.docs[0];
     const data = doc.data() as RegistrationRecord;
 
-    if (data.checkedIn) {
-      return {
-        success: false,
-        message: `${data.fullName} was ALREADY checked in at ${data.checkedInAt}.`,
-        registration: data,
-      };
+    const existingDays: number[] = Array.isArray(data.checkedInDays)
+      ? data.checkedInDays
+      : data.checkedIn
+      ? [1]
+      : [];
+    const existingCheckIns: Record<number, string> =
+      typeof data.checkIns === "object" && data.checkIns !== null
+        ? data.checkIns
+        : data.checkedIn && data.checkedInAt
+        ? { 1: data.checkedInAt }
+        : {};
+
+    const targetDay = day !== undefined && day >= 1 ? day : 1;
+
+    if (day !== undefined) {
+      if (existingDays.includes(targetDay)) {
+        return {
+          success: false,
+          message: `${data.fullName} is ALREADY checked in for Day ${targetDay} at ${existingCheckIns[targetDay] || data.checkedInAt}.`,
+          registration: {
+            ...data,
+            checkedInDays: existingDays,
+            checkIns: existingCheckIns,
+          },
+        };
+      }
+    } else {
+      if (data.checkedIn) {
+        return {
+          success: false,
+          message: `${data.fullName} was ALREADY checked in at ${data.checkedInAt}.`,
+          registration: {
+            ...data,
+            checkedInDays: existingDays,
+            checkIns: existingCheckIns,
+          },
+        };
+      }
     }
 
     const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    const updatedDays = Array.from(new Set([...existingDays, targetDay])).sort((a, b) => a - b);
+    const updatedCheckIns = { ...existingCheckIns, [targetDay]: now };
+
     await doc.ref.update({
       checkedIn: true,
       checkedInAt: now,
+      checkedInDays: updatedDays,
+      checkIns: updatedCheckIns,
     });
 
     const updated: RegistrationRecord = {
       ...data,
       checkedIn: true,
       checkedInAt: now,
+      checkedInDays: updatedDays,
+      checkIns: updatedCheckIns,
     };
+
+    const dayText = day !== undefined ? ` for Day ${targetDay}` : "";
+    const progressText = updatedDays.length > 1 ? ` (${updatedDays.length}/4 Days Attended)` : "";
 
     return {
       success: true,
-      message: `Successfully checked in ${data.fullName} for ${data.track}!`,
+      message: `Successfully checked in ${data.fullName}${dayText}!${progressText}`,
       registration: updated,
     };
   } catch (err) {
     console.warn("Firestore checkInAttendee failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function logFirestoreEmail(log: EmailLog): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+  try {
+    await db.collection("email_logs").doc(log.id).set({
+      ...log,
+      createdAt: log.sentAt || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.warn("Failed to write email log to Firestore:", (err as Error).message);
+    return false;
+  }
+}
+
+export async function getFirestoreEmailLogs(eventSlug: string): Promise<EmailLog[] | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+  try {
+    const snap = await db
+      .collection("email_logs")
+      .where("eventSlug", "==", eventSlug)
+      .limit(50)
+      .get();
+
+    const logs: EmailLog[] = [];
+    snap.forEach((doc) => {
+      const d = doc.data() as EmailLog;
+      logs.push(d);
+    });
+    logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+    return logs;
+  } catch (err) {
+    console.warn("Failed to fetch email logs from Firestore:", (err as Error).message);
     return null;
   }
 }

@@ -35,9 +35,9 @@ export async function POST(
     }
 
     const { slug } = await params;
-    let body: { referenceId?: string };
+    let body: { referenceId?: string; day?: number };
     try {
-      body = (await request.json()) as { referenceId?: string };
+      body = (await request.json()) as { referenceId?: string; day?: number };
     } catch {
       return NextResponse.json(
         { error: "INVALID_REQUEST", message: "Invalid JSON payload." },
@@ -52,7 +52,8 @@ export async function POST(
       );
     }
 
-    const result = await checkInAttendeeAsync(slug, body.referenceId.trim());
+    const day = typeof body.day === "number" && !isNaN(body.day) && body.day >= 1 ? Math.floor(body.day) : undefined;
+    const result = await checkInAttendeeAsync(slug, body.referenceId.trim(), day);
 
     if (!result.success) {
       const isAlreadyCheckedIn = result.message.includes("ALREADY checked in");

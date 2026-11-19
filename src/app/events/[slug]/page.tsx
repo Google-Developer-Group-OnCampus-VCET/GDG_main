@@ -6,10 +6,12 @@ import type { Metadata } from "next";
 import { events as staticEvents } from "@/content/events";
 import { formatEventDateRange } from "@/lib/events";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventDetailsView } from "@/components/workshop/event-details-view";
+import { EventDetailSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   if (staticEvents.length === 0) return [{ slug: "__placeholder__" }];
@@ -57,10 +59,12 @@ async function EventDetailContent({
       // Fallback to static numbers if db is initializing
     }
 
+    const workshop = resolveWorkshopDetails(event, stats);
+
     return (
       <div className="w-full flex flex-col">
         <EventSubNav event={event} />
-        <EventDetailsView event={event} workshop={event.workshop} stats={stats} />
+        <EventDetailsView event={event} workshop={workshop} stats={stats} />
       </div>
     );
   }
@@ -136,13 +140,7 @@ export default function EventDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
-          Loading event details…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventDetailSkeleton />}>
       <EventDetailContent params={params} />
     </Suspense>
   );

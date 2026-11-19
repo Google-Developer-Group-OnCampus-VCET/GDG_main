@@ -89,7 +89,7 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
   });
 
   // Header
-  page.drawText("GDG ON CAMPUS VCET  |  OFFICIAL ENTRY PASS", {
+  page.drawText("GDG ON CAMPUS VCET  |  4-DAY WORKSHOP ALL-ACCESS PASS", {
     x: 34,
     y: height - 48,
     size: 9,
@@ -155,12 +155,12 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
     width: qrSize,
     height: qrSize,
   });
-  page.drawText("SCAN AT ENTRANCE", {
-    x: qrX + 12,
+  page.drawText("VALID FOR ALL 4 DAYS", {
+    x: qrX + 8,
     y: qrY - 12,
-    size: 8,
+    size: 7.5,
     font: fontMono,
-    color: rgb(0.42, 0.47, 0.54),
+    color: rgb(0.1, 0.5, 0.3),
   });
 
   // Attendee details on the left
@@ -198,7 +198,7 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
   );
   infoY -= 12;
   drawField("College / Institute", registration.college);
-  drawField("Assigned Track", registration.track);
+  drawField("Assigned Track", registration.track || "General Admission");
 
   return pdfDoc.save();
 }

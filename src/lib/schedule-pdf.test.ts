@@ -4,7 +4,7 @@ import { generateSchedulePdfBytes } from "./schedule-pdf";
 describe("Schedule PDF Generator", () => {
   it("generates a multi-page valid PDF schedule with all agenda days", async () => {
     const bytes = await generateSchedulePdfBytes({
-      eventTitle: "Dev to Cloud: Zero to Hero",
+      eventTitle: "Zero to Hero: Dev to Cloud",
       headline: "Flagship Technical Summit & Syllabus",
       datesText: "December 1–4, 2026",
       venueText: "VCET Vasai · Departments of IT & Computer Engineering",

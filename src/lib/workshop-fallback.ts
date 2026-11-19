@@ -17,15 +17,42 @@ export function resolveWorkshopDetails(
   event: ChapterEvent,
   stats?: Pick<EventStats, "capacity" | "isOpen" | "totalRegistered">
 ): WorkshopDetails {
-  if (event.workshop) {
-    return event.workshop;
-  }
-
-  const capacity = stats?.capacity ?? 150;
+  const capacity =
+    stats?.capacity ??
+    event.capacity ??
+    event.workshop?.capacity ??
+    150;
+  const seatsText = `Limited to ${capacity} Seats`;
   const isOpen = stats?.isOpen ?? !event.cancelled;
   const datesText = formatEventDateRange(event);
   const venueText =
     event.location || "Vidyavardhini's College of Engineering and Technology, Vasai";
+
+  if (event.workshop) {
+    return {
+      ...event.workshop,
+      capacity,
+      seatsText,
+      initialRegisteredCount:
+        stats?.totalRegistered ??
+        event.registeredCount ??
+        event.workshop.initialRegisteredCount,
+      venueText: event.location || event.workshop.venueText || venueText,
+      datesText: event.startsAt ? formatEventDateRange(event) : event.workshop.datesText || datesText,
+      registrationConfig: {
+        ...(event.workshop.registrationConfig || {}),
+        tracks: event.workshop.registrationConfig?.tracks || [],
+        departments: event.workshop.registrationConfig?.departments || DEFAULT_DEPARTMENTS,
+        yearsOfStudy: event.workshop.registrationConfig?.yearsOfStudy || DEFAULT_YEARS,
+        experienceLevels: event.workshop.registrationConfig?.experienceLevels || ["Beginner", "Intermediate", "Advanced"],
+        isOpen:
+          stats?.isOpen ??
+          (typeof event.isRegistrationOpen === "boolean"
+            ? event.isRegistrationOpen
+            : event.workshop.registrationConfig?.isOpen ?? true),
+      },
+    };
+  }
 
   return {
     headline: event.title,
@@ -34,7 +61,7 @@ export function resolveWorkshopDetails(
       "Official chapter session by GDG on Campus VCET. Reserve your seat to receive an instant QR entry pass.",
     datesText,
     venueText,
-    seatsText: `Limited to ${capacity} seats`,
+    seatsText,
     badgeText: "GDG on Campus VCET",
     capacity,
     initialRegisteredCount: stats?.totalRegistered ?? 0,

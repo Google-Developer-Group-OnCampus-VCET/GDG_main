@@ -8,6 +8,7 @@ import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventRegistrationView } from "@/components/workshop/event-registration-view";
+import { EventRegistrationSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   return staticEvents
@@ -21,6 +22,19 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  await connection();
+  try {
+    const event = await getEventBySlugAsync(slug);
+    if (event) {
+      return {
+        title: `Register · ${event.title}`,
+        description: `Official registration for ${event.title} at GDG on Campus VCET.`,
+      };
+    }
+  } catch {
+    // fallback
+  }
+
   const staticMatch = staticEvents.find((e) => e.slug === slug);
   if (staticMatch) {
     return {
@@ -28,13 +42,7 @@ export async function generateMetadata({
       description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
     };
   }
-  await connection();
-  const event = await getEventBySlugAsync(slug);
-  if (!event) return { title: "Register" };
-  return {
-    title: `Register · ${event.title}`,
-    description: `Official registration for ${event.title} at GDG on Campus VCET.`,
-  };
+  return { title: "Register" };
 }
 
 async function EventRegisterContent({
@@ -88,13 +96,7 @@ export default function EventRegisterPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-(--container-max) px-4 py-16 text-sm text-foreground-muted">
-          Loading registration form…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventRegistrationSkeleton />}>
       <EventRegisterContent params={params} />
     </Suspense>
   );

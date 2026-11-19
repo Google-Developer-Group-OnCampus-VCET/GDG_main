@@ -75,6 +75,13 @@ function validateUpdatePayload(
     data.summary = body.summary;
   }
 
+  if (body.priceNote !== undefined) {
+    if (typeof body.priceNote !== "string") {
+      return { valid: false, message: "priceNote must be a string." };
+    }
+    data.priceNote = body.priceNote;
+  }
+
   if (body.capacity !== undefined) {
     if (typeof body.capacity !== "number" || !Number.isFinite(body.capacity) || body.capacity < 1) {
       return { valid: false, message: "Capacity must be a number greater than or equal to 1." };

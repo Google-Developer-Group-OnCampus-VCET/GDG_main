@@ -21,7 +21,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
 
   const totalRegistered = stats?.totalRegistered ?? workshop.initialRegisteredCount;
-  const capacity = stats?.capacity ?? workshop.capacity;
+  const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
   const remaining = stats?.remaining ?? Math.max(0, capacity - totalRegistered);
   const percentFilled = stats?.percentFilled ?? Math.round((totalRegistered / capacity) * 100);
 
@@ -74,10 +74,10 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
               <div className="lg:col-span-8 flex flex-col gap-3">
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
-                  {workshop.headline}
+                  {event.title || workshop.headline}
                 </h1>
                 <p className="text-base sm:text-lg text-foreground-muted max-w-3xl leading-relaxed">
-                  {workshop.subheading}
+                  {event.summary || workshop.subheading}
                 </p>
               </div>
 
@@ -449,7 +449,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                 Ready to Architect at Scale?
               </h2>
               <p className="text-sm sm:text-base text-foreground-muted">
-                Join 150 student developers, industry architects, and Google Developer Experts for four days of building real production systems.
+                Join {capacity} student developers, industry architects, and Google Developer Experts for four days of building real production systems.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">

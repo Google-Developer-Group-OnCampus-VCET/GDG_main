@@ -3,9 +3,11 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
-import { getEventBySlugAsync } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventAgendaView } from "@/components/workshop/event-agenda-view";
+import { EventAgendaSkeleton } from "@/components/skeletons/event-skeletons";
 
 export function generateStaticParams() {
   return events
@@ -14,9 +16,6 @@ export function generateStaticParams() {
 }
 
 async function findEvent(slug: string) {
-  const staticMatch = events.find((event) => event.slug === slug);
-  if (staticMatch?.workshop) return staticMatch;
-
   await connection();
   try {
     const dbEvent = await getEventBySlugAsync(slug);
@@ -24,7 +23,9 @@ async function findEvent(slug: string) {
   } catch {
     // fallback
   }
-  return staticMatch;
+
+  const staticMatch = events.find((event) => event.slug === slug);
+  return staticMatch ?? null;
 }
 
 export async function generateMetadata({
@@ -50,10 +51,19 @@ async function EventAgendaContent({
   const event = await findEvent(slug);
   if (!event || !event.workshop) notFound();
 
+  let stats;
+  try {
+    stats = await getEventStatsAsync(slug);
+  } catch {
+    // fallback
+  }
+
+  const workshop = resolveWorkshopDetails(event, stats);
+
   return (
     <div className="w-full flex flex-col">
       <EventSubNav event={event} />
-      <EventAgendaView event={event} workshop={event.workshop} />
+      <EventAgendaView event={event} workshop={workshop} />
     </div>
   );
 }
@@ -64,13 +74,7 @@ export default function EventAgendaPage({
   params: Promise<{ slug: string }>;
 }) {
   return (
-    <Suspense
-      fallback={
-        <div className="mx-auto max-w-3xl px-5 py-16 text-sm text-foreground-muted">
-          Loading agenda…
-        </div>
-      }
-    >
+    <Suspense fallback={<EventAgendaSkeleton />}>
       <EventAgendaContent params={params} />
     </Suspense>
   );

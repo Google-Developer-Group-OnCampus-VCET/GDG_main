@@ -4,6 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ChapterEvent,
+  EmailLog,
   EventFormat,
   EventInput,
   EventTopic,
@@ -24,6 +25,8 @@ import {
   getFirestoreEvents,
   getFirestoreEvent,
   seedFirestoreInitialEvents,
+  logFirestoreEmail,
+  getFirestoreEmailLogs,
   slugify,
 } from "./firestore";
 
@@ -122,7 +125,186 @@ export function getDatabase(): DatabaseSync {
 
     CREATE INDEX IF NOT EXISTS idx_registrations_slug ON registrations(event_slug);
     CREATE INDEX IF NOT EXISTS idx_registrations_ref ON registrations(reference_id);
+
+    CREATE TABLE IF NOT EXISTS email_logs (
+      id TEXT PRIMARY KEY,
+      event_slug TEXT NOT NULL,
+      type TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      recipient_count INTEGER NOT NULL,
+      recipients TEXT NOT NULL,
+      sent_at TEXT NOT NULL,
+      status TEXT NOT NULL,
+      sender TEXT,
+      preview_text TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_email_logs_event ON email_logs(event_slug);
   `);
+
+  try {
+    _db.exec("ALTER TABLE registrations ADD COLUMN checked_in_days TEXT;");
+  } catch {
+    // Column already exists
+  }
+  try {
+    _db.exec("ALTER TABLE registrations ADD COLUMN check_ins TEXT;");
+  } catch {
+    // Column already exists
+  }
+
+  // Seed default DevCraft 2025 event if not existing
+  const eventCheck = _db.prepare("SELECT slug FROM events WHERE slug = ?").get("devcraft-2025");
+  if (!eventCheck) {
+    _db.prepare(`
+      INSERT INTO events (id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "devcraft-2025",
+      "devcraft-2025",
+      "DevCraft 2025",
+      "2026-11-20T09:00:00+05:30",
+      "2026-11-21T17:30:00+05:30",
+      "Asia/Kolkata",
+      "in-person",
+      "Vidyavardhini's College of Engineering and Technology, Vasai (Auditorium & Labs 402)",
+      150,
+      1
+    );
+
+    // Seed realistic baseline cohort registrations (matching Stitch design 124 initial registered, 26 seats left)
+    const seedAttendees: Omit<RegistrationRecord, "id" | "createdAt">[] = [
+      {
+        eventSlug: "devcraft-2025",
+        referenceId: "GDG-VCET-2025-0842",
+        fullName: "Atharva Joshi",
+        email: "atharva.joshi@vcet.edu.in",
+        phone: "+91 98765 43210",
+        college: "Vidyavardhini's College of Engineering and Technology",
+        department: "Computer Engg",
+        yearOfStudy: "3rd Year",
+        track: "Track A: Modern Web & Gemini AI",
+        experienceLevel: "Intermediate",
+        portfolioUrl: "https://github.com/atharva-joshi",
+        notes: "Excited for Gemini multimodal tool calling labs!",
+        status: "confirmed",
+        checkedIn: false,
+      },
+      {
+        eventSlug: "devcraft-2025",
+        referenceId: "GDG-VCET-2025-0843",
+        fullName: "Pooja Sharma",
+        email: "pooja.sharma@vcet.edu.in",
+        phone: "+91 98765 43211",
+        college: "Vidyavardhini's College of Engineering and Technology",
+        department: "Information Tech",
+        yearOfStudy: "4th Year",
+        track: "Track B: Cloud Architecture & GCP",
+        experienceLevel: "Advanced",
+        portfolioUrl: "https://github.com/pooja-sharma",
+        notes: "Interested in Cloud Run and CI/CD pipelines.",
+        status: "confirmed",
+        checkedIn: true,
+        checkedInAt: "2026-11-20 09:12:44",
+      },
+      {
+        eventSlug: "devcraft-2025",
+        referenceId: "GDG-VCET-2025-0844",
+        fullName: "Rahul Tiwari",
+        email: "rahul.tiwari@vcet.edu.in",
+        phone: "+91 98765 43212",
+        college: "Vidyavardhini's College of Engineering and Technology",
+        department: "AI & Data Science",
+        yearOfStudy: "2nd Year",
+        track: "Track A: Modern Web & Gemini AI",
+        experienceLevel: "Beginner",
+        notes: "First time attending GDG VCET workshop.",
+        status: "confirmed",
+        checkedIn: false,
+      },
+      {
+        eventSlug: "devcraft-2025",
+        referenceId: "GDG-VCET-2025-0845",
+        fullName: "Aniket Kulkarni",
+        email: "aniket.kulkarni@vcet.edu.in",
+        phone: "+91 98765 43213",
+        college: "Vidyavardhini's College of Engineering and Technology",
+        department: "Electronics & Telecomm",
+        yearOfStudy: "3rd Year",
+        track: "Track B: Cloud Architecture & GCP",
+        experienceLevel: "Intermediate",
+        status: "confirmed",
+        checkedIn: false,
+      },
+    ];
+
+    const insertAttendee = _db.prepare(`
+      INSERT INTO registrations (
+        id, event_slug, reference_id, full_name, email, phone, college,
+        department, year_of_study, track, experience_level, portfolio_url,
+        notes, status, checked_in, checked_in_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const a of seedAttendees) {
+      insertAttendee.run(
+        crypto.randomUUID(),
+        a.eventSlug,
+        a.referenceId,
+        a.fullName,
+        a.email,
+        a.phone,
+        a.college,
+        a.department,
+        a.yearOfStudy,
+        a.track,
+        a.experienceLevel,
+        a.portfolioUrl ?? null,
+        a.notes ?? null,
+        a.status,
+        a.checkedIn ? 1 : 0,
+        a.checkedInAt ?? null
+      );
+    }
+
+    // Insert baseline mock entries up to 124 to mirror the Stitch approved design
+    const deptList = [
+      "Computer Engg",
+      "Information Tech",
+      "AI & Data Science",
+      "Electronics & Telecomm",
+      "Other Engineering",
+    ];
+    const yearList = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+    const expList = ["Beginner", "Intermediate", "Advanced"];
+
+    for (let i = 5; i <= 124; i++) {
+      const padded = String(i).padStart(4, "0");
+      const ref = `GDG-VCET-2025-${padded}`;
+      const trk = i % 2 === 0 ? "Track A: Modern Web & Gemini AI" : "Track B: Cloud Architecture & GCP";
+      const dept = deptList[i % deptList.length];
+      const yr = yearList[i % yearList.length];
+      const exp = expList[i % expList.length];
+
+      insertAttendee.run(
+        crypto.randomUUID(),
+        "devcraft-2025",
+        ref,
+        `Student Developer #${i}`,
+        `student${i}@vcet.edu.in`,
+        `+91 98765 ${String(10000 + i).slice(-5)}`,
+        i % 7 === 0 ? "Thakur College of Engineering" : "Vidyavardhini's College of Engineering and Technology",
+        dept,
+        yr,
+        trk,
+        exp,
+        null,
+        null,
+        "confirmed",
+        i <= 18 ? 1 : 0,
+        i <= 18 ? "2026-11-20 09:20:00" : null
+      );
+    }
+  }
 
   return _db;
 }
@@ -135,6 +317,8 @@ export interface EventStats {
   isOpen: boolean;
   isRegistrationOpen?: boolean;
   checkedInCount: number;
+  dailyCheckedInCounts?: Record<number, number>;
+  multiDayCompletionCount?: number;
   trackCounts: Record<string, number>;
   yearCounts: Record<string, number>;
   departmentCounts: Record<string, number>;
@@ -163,6 +347,37 @@ export function getEventStats(slug: string): EventStats {
     .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND checked_in = 1")
     .get(slug) as { count: number };
   const checkedInCount = checkedInRow?.count ?? 0;
+
+  const regRows = db
+    .prepare("SELECT checked_in, checked_in_days FROM registrations WHERE event_slug = ? AND status != 'cancelled'")
+    .all(slug) as { checked_in: number; checked_in_days: string | null }[];
+
+  const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  let multiDayCompletionCount = 0;
+
+  for (const r of regRows) {
+    let days: number[] = [];
+    if (r.checked_in_days) {
+      try {
+        const parsed = JSON.parse(r.checked_in_days);
+        if (Array.isArray(parsed)) {
+          days = parsed.map(Number).filter((d) => !isNaN(d));
+        }
+      } catch {
+        // fallback
+      }
+    } else if (r.checked_in === 1) {
+      days = [1];
+    }
+
+    days.forEach((day) => {
+      dailyCheckedInCounts[day] = (dailyCheckedInCounts[day] || 0) + 1;
+    });
+
+    if (days.includes(1) && days.includes(2) && days.includes(3) && days.includes(4)) {
+      multiDayCompletionCount++;
+    }
+  }
 
   const trackRows = db
     .prepare("SELECT track, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY track")
@@ -200,6 +415,8 @@ export function getEventStats(slug: string): EventStats {
     isOpen: isRegistrationOpen && remaining > 0,
     isRegistrationOpen,
     checkedInCount,
+    dailyCheckedInCounts,
+    multiDayCompletionCount,
     trackCounts,
     yearCounts,
     departmentCounts,
@@ -282,6 +499,19 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
   const slug = r.slug as string;
   const defaultMatch = defaultEvents.find((e) => e.slug === slug);
 
+  const capacity = typeof r.capacity === "number" ? r.capacity : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity;
+  const workshop = defaultMatch?.workshop
+    ? {
+        ...defaultMatch.workshop,
+        ...(capacity !== undefined
+          ? {
+              capacity,
+              seatsText: `Limited to ${capacity} Seats`,
+            }
+          : {}),
+      }
+    : undefined;
+
   return {
     id: (r.id as string) || slug,
     slug,
@@ -295,8 +525,9 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
       "Vidyavardhini's College of Engineering and Technology, Vasai",
     topics,
     summary: (r.summary as string) || defaultMatch?.summary,
+    capacity,
     registrationUrl: `/events/${slug}/register`,
-    workshop: defaultMatch?.workshop,
+    workshop,
   };
 }
 
@@ -450,33 +681,81 @@ export function getRegistrations(
   }
 
   if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
-    query += " AND checked_in = ?";
-    params.push(options.checkedIn === "true" || options.checkedIn === "1" ? 1 : 0);
+    if (options.checkedIn.startsWith("day-")) {
+      const targetDay = parseInt(options.checkedIn.replace("day-", ""), 10);
+      if (!isNaN(targetDay)) {
+        query += " AND (checked_in_days LIKE ? OR (checked_in = 1 AND ? = 1))";
+        params.push(`%${targetDay}%`, targetDay);
+      }
+    } else if (options.checkedIn === "all-days") {
+      query += " AND (checked_in_days LIKE '%1%' AND checked_in_days LIKE '%2%' AND checked_in_days LIKE '%3%' AND checked_in_days LIKE '%4%')";
+    } else if (
+      options.checkedIn === "absent" ||
+      options.checkedIn === "not-checked-in" ||
+      options.checkedIn === "false" ||
+      options.checkedIn === "0"
+    ) {
+      query += " AND (checked_in = 0 OR checked_in IS NULL)";
+    } else {
+      query += " AND checked_in = ?";
+      params.push(options.checkedIn === "true" || options.checkedIn === "1" || options.checkedIn === "checked-in" ? 1 : 0);
+    }
   }
 
   query += " ORDER BY created_at DESC";
 
   const rows = db.prepare(query).all(...params) as Record<string, unknown>[];
 
-  return rows.map((r) => ({
-    id: r.id as string,
-    eventSlug: r.event_slug as string,
-    referenceId: r.reference_id as string,
-    fullName: r.full_name as string,
-    email: r.email as string,
-    phone: r.phone as string,
-    college: r.college as string,
-    department: r.department as string,
-    yearOfStudy: r.year_of_study as string,
-    track: r.track as string,
-    experienceLevel: r.experience_level as string,
-    portfolioUrl: (r.portfolio_url as string) || undefined,
-    notes: (r.notes as string) || undefined,
-    status: r.status as "confirmed" | "waitlisted" | "cancelled",
-    checkedIn: (r.checked_in as number) === 1,
-    checkedInAt: (r.checked_in_at as string) || undefined,
-    createdAt: r.created_at as string,
-  }));
+  return rows.map((r) => {
+    let checkedInDays: number[] | undefined;
+    if (r.checked_in_days) {
+      try {
+        const parsed = JSON.parse(r.checked_in_days as string);
+        if (Array.isArray(parsed)) {
+          checkedInDays = parsed.map(Number).filter((d) => !isNaN(d));
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (!checkedInDays && (r.checked_in as number) === 1) {
+      checkedInDays = [1];
+    }
+
+    let checkIns: Record<number, string> | undefined;
+    if (r.check_ins) {
+      try {
+        checkIns = JSON.parse(r.check_ins as string);
+      } catch {
+        // ignore
+      }
+    }
+    if (!checkIns && (r.checked_in as number) === 1 && r.checked_in_at) {
+      checkIns = { 1: r.checked_in_at as string };
+    }
+
+    return {
+      id: r.id as string,
+      eventSlug: r.event_slug as string,
+      referenceId: r.reference_id as string,
+      fullName: r.full_name as string,
+      email: r.email as string,
+      phone: r.phone as string,
+      college: r.college as string,
+      department: r.department as string,
+      yearOfStudy: r.year_of_study as string,
+      track: r.track as string,
+      experienceLevel: r.experience_level as string,
+      portfolioUrl: (r.portfolio_url as string) || undefined,
+      notes: (r.notes as string) || undefined,
+      status: r.status as "confirmed" | "waitlisted" | "cancelled",
+      checkedIn: (r.checked_in as number) === 1,
+      checkedInAt: (r.checked_in_at as string) || undefined,
+      checkedInDays,
+      checkIns,
+      createdAt: r.created_at as string,
+    };
+  });
 }
 
 export function getRegistrationByReference(referenceId: string): RegistrationRecord | null {
@@ -486,6 +765,33 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
     .get(referenceId) as Record<string, unknown> | undefined;
 
   if (!row) return null;
+
+  let checkedInDays: number[] | undefined;
+  if (row.checked_in_days) {
+    try {
+      const parsed = JSON.parse(row.checked_in_days as string);
+      if (Array.isArray(parsed)) {
+        checkedInDays = parsed.map(Number).filter((d) => !isNaN(d));
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!checkedInDays && (row.checked_in as number) === 1) {
+    checkedInDays = [1];
+  }
+
+  let checkIns: Record<number, string> | undefined;
+  if (row.check_ins) {
+    try {
+      checkIns = JSON.parse(row.check_ins as string);
+    } catch {
+      // ignore
+    }
+  }
+  if (!checkIns && (row.checked_in as number) === 1 && row.checked_in_at) {
+    checkIns = { 1: row.checked_in_at as string };
+  }
 
   return {
     id: row.id as string,
@@ -504,6 +810,8 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
     status: row.status as "confirmed" | "waitlisted" | "cancelled",
     checkedIn: (row.checked_in as number) === 1,
     checkedInAt: (row.checked_in_at as string) || undefined,
+    checkedInDays,
+    checkIns,
     createdAt: row.created_at as string,
   };
 }
@@ -636,7 +944,8 @@ export function createRegistration(
 
 export function checkInAttendee(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day: number = 1
 ): { success: boolean; message: string; registration?: RegistrationRecord } {
   const db = getDatabase();
 
@@ -647,25 +956,44 @@ export function checkInAttendee(
     return { success: false, message: "Pass reference was not found for this event." };
   }
 
-  if (reg.checkedIn) {
+  const existingDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
+  const existingCheckIns = reg.checkIns || (reg.checkedInAt ? { 1: reg.checkedInAt } : {});
+
+  if (existingDays.includes(day)) {
+    const priorTime = existingCheckIns[day] || reg.checkedInAt || "previously";
     return {
       success: false,
-      message: `${reg.fullName} was ALREADY checked in at ${reg.checkedInAt}.`,
+      message: `${reg.fullName} is ALREADY checked in for Day ${day} (at ${priorTime}).`,
       registration: reg,
     };
   }
 
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  db.prepare("UPDATE registrations SET checked_in = 1, checked_in_at = ? WHERE reference_id = ?").run(
+  const updatedDays = Array.from(new Set([...existingDays, day])).sort((a, b) => a - b);
+  const updatedCheckIns = { ...existingCheckIns, [day]: now };
+
+  db.prepare(`
+    UPDATE registrations
+    SET checked_in = 1,
+        checked_in_at = ?,
+        checked_in_days = ?,
+        check_ins = ?
+    WHERE reference_id = ?
+  `).run(
     now,
+    JSON.stringify(updatedDays),
+    JSON.stringify(updatedCheckIns),
     ref
   );
 
   const updatedReg = getRegistrationByReference(ref)!;
 
+  const dayText = ` for Day ${day}`;
+  const progressText = updatedDays.length > 1 ? ` (${updatedDays.length}/4 Days Attended)` : "";
+
   return {
     success: true,
-    message: `Successfully checked in ${reg.fullName} for ${reg.track}!`,
+    message: `Successfully checked in ${reg.fullName}${dayText}!${progressText}`,
     registration: updatedReg,
   };
 }
@@ -679,6 +1007,7 @@ export function cleanupTestRegistrations(): void {
        OR email LIKE '%checkin%'
        OR email LIKE '%duplicate%'
        OR email LIKE '%noconsent%'
+       OR event_slug LIKE 'test-%'
   `).run();
 }
 
@@ -778,16 +1107,27 @@ export async function createRegistrationAsync(
 
 export async function checkInAttendeeAsync(
   eventSlug: string,
-  referenceId: string
+  referenceId: string,
+  day?: number
 ): Promise<{ success: boolean; message: string; registration?: RegistrationRecord }> {
   try {
-    const firestoreResult = await checkInFirestoreAttendee(eventSlug, referenceId);
+    const firestoreResult = await checkInFirestoreAttendee(eventSlug, referenceId, day);
     if (firestoreResult) {
       if (firestoreResult.success && firestoreResult.registration) {
         try {
           const db = getDatabase();
-          db.prepare("UPDATE registrations SET checked_in = 1, checked_in_at = ? WHERE reference_id = ?").run(
-            firestoreResult.registration.checkedInAt ?? new Date().toISOString(),
+          const reg = firestoreResult.registration;
+          db.prepare(`
+            UPDATE registrations
+            SET checked_in = 1,
+                checked_in_at = ?,
+                checked_in_days = ?,
+                check_ins = ?
+            WHERE reference_id = ?
+          `).run(
+            reg.checkedInAt ?? new Date().toISOString(),
+            JSON.stringify(reg.checkedInDays || [day ?? 1]),
+            JSON.stringify(reg.checkIns || {}),
             referenceId.trim().toUpperCase()
           );
         } catch {
@@ -799,7 +1139,7 @@ export async function checkInAttendeeAsync(
   } catch (err) {
     console.warn("Firestore check-in failed, falling back to local SQLite:", (err as Error).message);
   }
-  return checkInAttendee(eventSlug, referenceId);
+  return checkInAttendee(eventSlug, referenceId, day);
 }
 
 export async function createEventAsync(
@@ -903,7 +1243,12 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     if (firestoreEvent) {
       const defMatch = defaultEvents.find((e) => e.slug === slug);
       if (defMatch?.workshop && !firestoreEvent.workshop) {
-        firestoreEvent.workshop = defMatch.workshop;
+        const cap = firestoreEvent.capacity ?? defMatch.capacity ?? defMatch.workshop.capacity;
+        firestoreEvent.workshop = {
+          ...defMatch.workshop,
+          capacity: cap,
+          seatsText: `Limited to ${cap} Seats`,
+        };
       }
       return firestoreEvent;
     }
@@ -918,6 +1263,77 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     console.warn("SQLite getEventBySlug fallback failed, checking static events:", (err as Error).message);
     return defaultEvents.find((e) => e.slug === slug) ?? null;
   }
+}
+
+export function logEmailRecord(log: EmailLog): void {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT OR REPLACE INTO email_logs (
+      id, event_slug, type, subject, recipient_count, recipients, sent_at, status, sender, preview_text
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    log.id,
+    log.eventSlug,
+    log.type,
+    log.subject,
+    log.recipientCount,
+    JSON.stringify(log.recipients),
+    log.sentAt,
+    log.status,
+    log.sender ?? null,
+    log.previewText ?? null
+  );
+}
+
+export function getEmailLogs(eventSlug: string): EmailLog[] {
+  const db = getDatabase();
+  const rows = db
+    .prepare("SELECT * FROM email_logs WHERE event_slug = ? ORDER BY sent_at DESC LIMIT 50")
+    .all(eventSlug) as Record<string, unknown>[];
+
+  return rows.map((r) => {
+    let recipients: string[] = [];
+    try {
+      recipients = JSON.parse(r.recipients as string);
+    } catch {
+      recipients = [];
+    }
+    return {
+      id: r.id as string,
+      eventSlug: r.event_slug as string,
+      type: r.type as "pass" | "announcement",
+      subject: r.subject as string,
+      recipientCount: r.recipient_count as number,
+      recipients,
+      sentAt: r.sent_at as string,
+      status: r.status as "sent" | "simulated" | "failed",
+      sender: (r.sender as string) || undefined,
+      previewText: (r.preview_text as string) || undefined,
+    };
+  });
+}
+
+export async function logEmailRecordAsync(log: EmailLog): Promise<void> {
+  try {
+    logEmailRecord(log);
+  } catch (err) {
+    console.warn("SQLite logEmailRecord failed:", (err as Error).message);
+  }
+  try {
+    await logFirestoreEmail(log);
+  } catch (err) {
+    console.warn("Firestore logFirestoreEmail failed:", (err as Error).message);
+  }
+}
+
+export async function getEmailLogsAsync(eventSlug: string): Promise<EmailLog[]> {
+  try {
+    const fsLogs = await getFirestoreEmailLogs(eventSlug);
+    if (fsLogs && fsLogs.length > 0) return fsLogs;
+  } catch (err) {
+    console.warn("Firestore getEmailLogs failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getEmailLogs(eventSlug);
 }
 
 

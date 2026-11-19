@@ -5,6 +5,7 @@ import { events as staticEvents } from "@/content/events";
 import { getAllEventsAsync } from "@/lib/db";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EventsExplorer } from "@/components/events-explorer";
+import { EventsExplorerSkeleton } from "@/components/skeletons/event-skeletons";
 
 export const metadata: Metadata = {
   title: "Events",
@@ -33,7 +34,7 @@ export default function EventsPage() {
         />
       </div>
 
-      <Suspense fallback={<p className="text-sm text-foreground-muted">Loading events…</p>}>
+      <Suspense fallback={<EventsExplorerSkeleton />}>
         <EventsListContent />
       </Suspense>
     </div>

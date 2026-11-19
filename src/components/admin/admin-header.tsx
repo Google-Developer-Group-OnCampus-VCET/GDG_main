@@ -6,7 +6,7 @@ import { useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics";
+  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email";
   eventSlug?: string;
 }
 
@@ -82,6 +82,16 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             >
               Analytics
             </Link>
+            <Link
+              href={`/admin/console/events/${eventSlug}/email`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                currentTab === "email"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground"
+              }`}
+            >
+              Email &amp; Broadcast
+            </Link>
           </nav>
         ) : null}
 
@@ -135,6 +145,67 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
           </button>
         </div>
       </div>
+
+      {eventSlug ? (
+        <div className="md:hidden border-t border-border/60 bg-surface-container-low/60 px-3 py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5">
+          <Link
+            href="/admin/console"
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "overview"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Dashboard
+          </Link>
+          <Link
+            href={`/admin/console/events/${eventSlug}/registrations`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "registrations"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Registrations
+          </Link>
+          <Link
+            href={`/admin/console/events/${eventSlug}/check-in`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "check-in"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Check-in
+          </Link>
+          <Link
+            href={`/admin/console/events/${eventSlug}/analytics`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "analytics"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Analytics
+          </Link>
+          <Link
+            href={`/admin/console/events/${eventSlug}/email`}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              currentTab === "email"
+                ? "bg-primary text-on-primary font-bold shadow-xs"
+                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+            }`}
+          >
+            Email
+          </Link>
+          <Link
+            href={`/events/${eventSlug}`}
+            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium text-primary hover:text-primary-hover bg-white border border-border/50"
+          >
+            Public View ↗
+          </Link>
+        </div>
+      ) : null}
     </header>
   );
 }
