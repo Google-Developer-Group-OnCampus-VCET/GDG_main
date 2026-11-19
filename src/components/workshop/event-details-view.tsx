@@ -80,29 +80,6 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                   {event.summary || workshop.subheading}
                 </p>
               </div>
-
-              {/* Live Capacity Card */}
-              <div className="lg:col-span-4 flex flex-col gap-3 bg-surface-container-low p-5 rounded-2xl border border-border shadow-xs">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="font-semibold text-foreground-muted uppercase tracking-wider">
-                    Cohort Capacity
-                  </span>
-                  <span className="font-bold text-tertiary">{percentFilled}% Filled</span>
-                </div>
-                <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-primary h-2.5 rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${percentFilled}%` }}
-                  ></div>
-                </div>
-                <div className="flex items-center justify-between text-xs text-foreground-muted pt-1">
-                  <span className="flex items-center gap-1 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-secondary inline-block animate-pulse"></span>{" "}
-                    {totalRegistered} Confirmed
-                  </span>
-                  <span className="font-semibold text-foreground">{remaining} Seats Remaining</span>
-                </div>
-              </div>
             </div>
 
             {/* Quick Stats Grid */}
