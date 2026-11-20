@@ -71,7 +71,7 @@ export default function CreateEventPage() {
     setErrorMessage(null);
 
     if (canEdit === false) {
-      setErrorMessage("Event creation is restricted. Only Master Admin (dev@admin26) can create new events.");
+      setErrorMessage("Event creation is restricted. Only Master Admin accounts can create new events.");
       return;
     }
 
@@ -163,7 +163,7 @@ export default function CreateEventPage() {
                     Restricted Access (Core Member Login)
                   </span>
                   <span className="leading-relaxed">
-                    You are signed in with the Core Member login (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">vcet@gdg26</code>). Only Master Admin (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">dev@admin26</code>) can create new events.
+                    You are signed in with a read-only role. Only Master Admin accounts can create new events.
                   </span>
                 </div>
               </div>

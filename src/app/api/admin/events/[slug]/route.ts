@@ -152,7 +152,7 @@ export async function PATCH(
       return NextResponse.json(
         {
           error: "FORBIDDEN",
-          message: "Event details are ineditable with this login. Only master admin (dev@admin26) can modify event settings.",
+          message: "Event details are ineditable with this login. Only master admin can modify event settings.",
         },
         { status: 403 }
       );

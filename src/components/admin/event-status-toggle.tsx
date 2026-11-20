@@ -36,7 +36,7 @@ export function EventStatusToggle({
   async function handleToggle() {
     if (loading) return;
     if (canEdit === false) {
-      setError("Read-only: only master admin (dev@admin26) can change registration status.");
+      setError("Read-only: only master admin can change registration status.");
       setTimeout(() => setError(null), 3500);
       return;
     }
@@ -85,7 +85,7 @@ export function EventStatusToggle({
         onClick={handleToggle}
         disabled={loading || canEdit === false}
         aria-pressed={isOpen}
-        title={error || (canEdit === false ? "Read-only: only master admin (dev@admin26) can toggle status" : (isOpen ? "Click to close registration" : "Click to open registration"))}
+        title={error || (canEdit === false ? "Read-only: only master admin can toggle status" : (isOpen ? "Click to close registration" : "Click to open registration"))}
         className={`inline-flex items-center rounded-full border font-semibold transition-all whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${sizeClasses} ${stateClasses}`}
       >
         {loading ? (

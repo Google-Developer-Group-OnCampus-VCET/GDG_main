@@ -109,7 +109,7 @@ export function EventEditForm({
     setSuccessMessage(null);
 
     if (canEdit === false) {
-      setErrorMessage("Event details cannot be edited with the Core Member login (vcet@gdg26). Please sign in with dev@admin26.");
+      setErrorMessage("Event details cannot be edited with this login. Please sign in with a Master Admin account.");
       return;
     }
 
@@ -237,7 +237,7 @@ export function EventEditForm({
                   Read-Only Mode (Core Member Access)
                 </span>
                 <span className="leading-relaxed">
-                  You are signed in with the Core Member login (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">vcet@gdg26</code>). Event configuration details cannot be edited with this account. Please sign in with Master Admin (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">dev@admin26</code>) to modify event settings.
+                  You are signed in with a read-only role. Event configuration details cannot be edited with this account. Please sign in with a Master Admin account to modify event settings.
                 </span>
               </div>
             </div>
@@ -520,7 +520,7 @@ export function EventEditForm({
               <button
                 type="submit"
                 disabled={loading || canEdit === false}
-                title={canEdit === false ? "Core Member login is read-only. Use dev@admin26 to edit." : "Save Changes"}
+                title={canEdit === false ? "This login is read-only. Use a Master Admin account to edit." : "Save Changes"}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-semibold hover:bg-primary-hover shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {loading ? (

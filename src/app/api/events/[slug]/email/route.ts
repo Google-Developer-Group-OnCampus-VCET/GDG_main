@@ -185,7 +185,7 @@ export async function POST(
         return NextResponse.json(
           {
             error: "FORBIDDEN",
-            message: "Broadcast announcements can only be dispatched by master admin (dev@admin26).",
+            message: "Broadcast announcements can only be dispatched by master admin.",
           },
           { status: 403 }
         );

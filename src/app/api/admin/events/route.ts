@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "FORBIDDEN",
-          message: "Event creation is restricted. Only master admin (dev@admin26) can create new events.",
+          message: "Event creation is restricted. Only master admin can create new events.",
         },
         { status: 403 }
       );
