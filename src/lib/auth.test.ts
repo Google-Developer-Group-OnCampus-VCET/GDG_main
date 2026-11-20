@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ADMIN_COOKIE_NAME,
+  DEFAULT_CORE_PASSCODE,
+  DEFAULT_MASTER_PASSCODE,
+  DEFAULT_VOLUNTEER_PASSCODE,
   createAdminSessionToken,
   getAdminCookieOptions,
   getAdminEmail,
   getAdminPasscode,
+  getAdminRoleFromRequest,
   isAdminRequestAuthenticated,
   isAuthorizedAdminEmail,
+  isMasterAdminAuthenticated,
+  resolveAdminCredentials,
   sanitizeAdminNextUrl,
   verifyAdminEmailPassword,
   verifyAdminPassword,
@@ -14,6 +20,9 @@ import {
 } from "./auth";
 import { POST as checkInPost } from "@/app/api/events/[slug]/check-in/route";
 import { POST as loginPost } from "@/app/api/admin/login/route";
+import { PATCH as eventPatch } from "@/app/api/admin/events/[slug]/route";
+import { POST as eventPost } from "@/app/api/admin/events/route";
+import { POST as emailPost } from "@/app/api/events/[slug]/email/route";
 import { cleanupTestRegistrations, createRegistration } from "@/lib/db";
 
 describe("Admin Authentication Layer", () => {
@@ -237,5 +246,211 @@ describe("Admin Authentication Layer", () => {
     expect(sanitizeAdminNextUrl("/admin/console-spoof")).toBe("/admin/console");
     expect(sanitizeAdminNextUrl("/events")).toBe("/admin/console");
     expect(sanitizeAdminNextUrl(null)).toBe("/admin/console");
+  });
+
+  describe("Role-Based Access Control (RBAC) & Multi-Role Logins", () => {
+    it("resolves the 3 designated console logins accurately", () => {
+      // 1. Master Admin (dev@admin26)
+      const masterPasscode = resolveAdminCredentials({ passcode: "dev@admin26" });
+      expect(masterPasscode.authenticated).toBe(true);
+      expect(masterPasscode.role).toBe("admin");
+
+      const masterEmail = resolveAdminCredentials({ email: "dev@admin26" });
+      expect(masterEmail.authenticated).toBe(true);
+      expect(masterEmail.role).toBe("admin");
+
+      // 2. Core Members (vcet@gdg26)
+      const corePasscode = resolveAdminCredentials({ passcode: "vcet@gdg26" });
+      expect(corePasscode.authenticated).toBe(true);
+      expect(corePasscode.role).toBe("core");
+
+      const coreEmail = resolveAdminCredentials({ email: "vcet@gdg26" });
+      expect(coreEmail.authenticated).toBe(true);
+      expect(coreEmail.role).toBe("core");
+
+      // 3. Volunteers (team@vcet26)
+      const volPasscode = resolveAdminCredentials({ passcode: "team@vcet26" });
+      expect(volPasscode.authenticated).toBe(true);
+      expect(volPasscode.role).toBe("volunteer");
+
+      const volEmail = resolveAdminCredentials({ email: "team@vcet26" });
+      expect(volEmail.authenticated).toBe(true);
+      expect(volEmail.role).toBe("volunteer");
+
+      // Invalid credentials
+      expect(resolveAdminCredentials({ passcode: "random-attacker-pass" }).authenticated).toBe(false);
+    });
+
+    it("logs in via /api/admin/login and returns appropriate role and redirect targets", async () => {
+      // Volunteer login redirects straight to check-in terminal
+      const volLoginRes = await loginPost(
+        new Request("http://localhost/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: "team@vcet26" }),
+        })
+      );
+      expect(volLoginRes.status).toBe(200);
+      const volBody = await volLoginRes.json();
+      expect(volBody.role).toBe("volunteer");
+      expect(volBody.redirectUrl).toBe("/admin/console/events/dev-to-cloud/check-in");
+
+      // Core login redirects to console dashboard
+      const coreLoginRes = await loginPost(
+        new Request("http://localhost/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: "vcet@gdg26" }),
+        })
+      );
+      expect(coreLoginRes.status).toBe(200);
+      const coreBody = await coreLoginRes.json();
+      expect(coreBody.role).toBe("core");
+      expect(coreBody.redirectUrl).toBe("/admin/console");
+
+      // Master admin login
+      const masterLoginRes = await loginPost(
+        new Request("http://localhost/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: "dev@admin26" }),
+        })
+      );
+      expect(masterLoginRes.status).toBe(200);
+      const masterBody = await masterLoginRes.json();
+      expect(masterBody.role).toBe("admin");
+    });
+
+    it("enforces that Core Members (vcet@gdg26) cannot edit event details, while Master Admin can", async () => {
+      const coreToken = await createAdminSessionToken("core");
+      const masterToken = await createAdminSessionToken("admin");
+
+      // Core Member attempting to edit event details: must receive 403 Forbidden
+      const coreEditRes = await eventPatch(
+        new Request("http://localhost/api/admin/events/dev-to-cloud", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({ title: "Unauthorized Edit Attempt" }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(coreEditRes.status).toBe(403);
+      const coreEditBody = await coreEditRes.json();
+      expect(coreEditBody.error).toBe("FORBIDDEN");
+      expect(coreEditBody.message).toContain("ineditable");
+
+      // Master Admin editing event details: succeeds (200)
+      const masterEditRes = await eventPatch(
+        new Request("http://localhost/api/admin/events/dev-to-cloud", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}`,
+          },
+          body: JSON.stringify({ priceNote: "Free Entry · VCET Workshop" }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(masterEditRes.status).toBe(200);
+      const masterEditBody = await masterEditRes.json();
+      expect(masterEditBody.success).toBe(true);
+    });
+
+    it("allows Volunteers (team@vcet26) to check in attendees and mark attendance", async () => {
+      cleanupTestRegistrations();
+      const reg = createRegistration("dev-to-cloud", {
+        fullName: "Volunteer Test Attendee",
+        email: `volunteer.tester.${Date.now()}@vcet.edu.in`,
+        phone: "+91 98765 44433",
+        track: "4-Day All-Access",
+        agreedToCoc: true,
+      });
+      expect(reg.success).toBe(true);
+      if (!reg.success) return;
+
+      const volunteerToken = await createAdminSessionToken("volunteer");
+
+      const checkInRes = await checkInPost(
+        new Request("http://localhost/api/events/dev-to-cloud/check-in", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(volunteerToken)}`,
+          },
+          body: JSON.stringify({ referenceId: reg.registration.referenceId, day: 1 }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+
+      expect(checkInRes.status).toBe(200);
+      const checkInBody = await checkInRes.json();
+      expect(checkInBody.success).toBe(true);
+      expect(checkInBody.registration.checkedIn).toBe(true);
+
+      cleanupTestRegistrations();
+    });
+
+    it("restricts broadcast emails to Master Admin only", async () => {
+      const coreToken = await createAdminSessionToken("core");
+      const volunteerToken = await createAdminSessionToken("volunteer");
+      const masterToken = await createAdminSessionToken("admin");
+
+      // Core Member blocked from broadcast
+      const coreBroadcastRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({
+            action: "broadcast",
+            subject: "Core Test",
+            message: "Testing broadcast permissions",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(coreBroadcastRes.status).toBe(403);
+
+      // Volunteer blocked from broadcast
+      const volBroadcastRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(volunteerToken)}`,
+          },
+          body: JSON.stringify({
+            action: "broadcast",
+            subject: "Volunteer Test",
+            message: "Testing broadcast permissions",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(volBroadcastRes.status).toBe(403);
+
+      // Master Admin allowed to broadcast
+      const masterBroadcastRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}`,
+          },
+          body: JSON.stringify({
+            action: "broadcast",
+            subject: "Master Broadcast Test",
+            message: "Testing broadcast permissions",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(masterBroadcastRes.status).toBe(200);
+    });
   });
 });

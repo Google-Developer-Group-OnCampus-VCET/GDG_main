@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdminRequestAuthenticated } from "@/lib/auth";
+import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
 import { createEventAsync, getAllEventsAsync } from "@/lib/db";
 import type { EventInput } from "@/types";
 
@@ -26,13 +26,23 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // 1. Verify admin session token
-    const isAuthenticated = await isAdminRequestAuthenticated(request);
+    // 1. Verify master admin session token
+    const role = await getAdminRoleFromRequest(request);
 
-    if (!isAuthenticated) {
+    if (!role) {
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: "Admin authorization required to create events." },
         { status: 401 }
+      );
+    }
+
+    if (role !== "admin") {
+      return NextResponse.json(
+        {
+          error: "FORBIDDEN",
+          message: "Event creation is restricted. Only master admin (dev@admin26) can create new events.",
+        },
+        { status: 403 }
       );
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminHeader } from "@/components/admin/admin-header";
@@ -34,6 +34,14 @@ export default function CreateEventPage() {
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [canEdit, setCanEdit] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/session")
+      .then((r) => r.json())
+      .then((d) => setCanEdit(Boolean(d.canEdit)))
+      .catch(() => setCanEdit(false));
+  }, []);
 
   function handleTitleChange(val: string) {
     setTitle(val);
@@ -61,6 +69,11 @@ export default function CreateEventPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
+
+    if (canEdit === false) {
+      setErrorMessage("Event creation is restricted. Only Master Admin (dev@admin26) can create new events.");
+      return;
+    }
 
     if (!title.trim() || !startsAt.trim()) {
       setErrorMessage("Please provide both an event title and start date/time.");
@@ -138,6 +151,23 @@ export default function CreateEventPage() {
                 Publish a workshop, hackathon, or seminar connected directly to Cloud Firestore.
               </p>
             </div>
+
+            {canEdit === false ? (
+              <div
+                role="alert"
+                className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium"
+              >
+                <span className="text-base shrink-0">🔒</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-amber-950">
+                    Restricted Access (Core Member Login)
+                  </span>
+                  <span className="leading-relaxed">
+                    You are signed in with the Core Member login (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">vcet@gdg26</code>). Only Master Admin (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">dev@admin26</code>) can create new events.
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             {errorMessage ? (
               <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
@@ -357,8 +387,8 @@ export default function CreateEventPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a73e8] text-white text-xs sm:text-sm font-semibold hover:bg-[#1557b0] shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+                  disabled={loading || canEdit === false}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a73e8] text-white text-xs sm:text-sm font-semibold hover:bg-[#1557b0] shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <>
@@ -367,6 +397,10 @@ export default function CreateEventPage() {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                       </svg>
                       <span>Publishing to Firestore...</span>
+                    </>
+                  ) : canEdit === false ? (
+                    <>
+                      <span>🔒 Restricted (Master Only)</span>
                     </>
                   ) : (
                     <>

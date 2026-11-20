@@ -3,8 +3,8 @@ import {
   createAdminSessionToken,
   getAdminCookieOptions,
   isAuthorizedAdminEmail,
-  verifyAdminEmailPassword,
-  verifyAdminPassword,
+  resolveAdminCredentials,
+  type AdminRole,
 } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase/admin";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     const idToken = body?.idToken?.trim() ?? "";
 
     let authenticated = false;
+    let role: AdminRole = "admin";
     let authMethod = "passcode";
 
     // 1. Verify Firebase ID Token if provided (requires server-side Firebase Admin Auth + allowlist/claim)
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
         }
 
         authenticated = true;
+        role = "admin";
         authMethod = decoded.firebase?.sign_in_provider || "firebase";
       } catch (err) {
         console.warn("Firebase ID token verification failed:", (err as Error).message);
@@ -96,31 +98,31 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
-    } else if (email && password) {
-      // 2. Direct Email & Password verification (env configuration: ADMIN_EMAIL & ADMIN_PASSWORD)
-      if (verifyAdminEmailPassword(email, password)) {
+    } else if (password || email) {
+      // 2. Multi-role Passcode or Email & Password verification:
+      // Supports dev@admin26 (Master), vcet@gdg26 (Core Member), and team@vcet26 (Volunteer)
+      const cred = resolveAdminCredentials({
+        email,
+        password,
+        passcode: password || email,
+      });
+
+      if (cred.authenticated && cred.role) {
         authenticated = true;
-        authMethod = "email";
+        role = cred.role;
+        authMethod = cred.authMethod;
       } else {
         return NextResponse.json(
-          { error: "INVALID_CREDENTIALS", message: "Invalid email or password." },
-          { status: 401 }
-        );
-      }
-    } else if (password) {
-      // 3. Fallback to Admin Passcode verification
-      if (verifyAdminPassword(password)) {
-        authenticated = true;
-        authMethod = "passcode";
-      } else {
-        return NextResponse.json(
-          { error: "INVALID_CREDENTIALS", message: "Invalid admin passcode." },
+          {
+            error: "INVALID_CREDENTIALS",
+            message: "Invalid credentials. Please verify your passcode or organizer account.",
+          },
           { status: 401 }
         );
       }
     } else {
       return NextResponse.json(
-        { error: "MISSING_CREDENTIALS", message: "Email and password or passcode is required." },
+        { error: "MISSING_CREDENTIALS", message: "Passcode or email credentials are required." },
         { status: 400 }
       );
     }
@@ -134,7 +136,7 @@ export async function POST(request: Request) {
 
     let token: string;
     try {
-      token = await createAdminSessionToken();
+      token = await createAdminSessionToken(role, email || undefined);
     } catch (err) {
       console.error("Admin session signing unavailable: secrets not configured:", (err as Error).message);
       return NextResponse.json(
@@ -147,11 +149,19 @@ export async function POST(request: Request) {
     }
 
     const cookieOptions = getAdminCookieOptions();
+    const defaultRedirect =
+      role === "volunteer"
+        ? "/admin/console/events/dev-to-cloud/check-in"
+        : "/admin/console";
 
     const response = NextResponse.json({
       success: true,
+      role,
       authMethod,
-      message: "Admin authentication successful.",
+      redirectUrl: defaultRedirect,
+      message: `Authenticated successfully as ${
+        role === "admin" ? "Master Admin" : role === "core" ? "Core Member" : "Volunteer Desk"
+      }.`,
     });
 
     response.cookies.set(cookieOptions.name, token, {

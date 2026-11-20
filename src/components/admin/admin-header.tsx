@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
@@ -13,6 +13,18 @@ interface AdminHeaderProps {
 export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud" }: AdminHeaderProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [sessionRole, setSessionRole] = useState<"admin" | "core" | "volunteer" | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.authenticated && data?.role) {
+          setSessionRole(data.role);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -34,9 +46,23 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             <span className="text-sm font-bold text-foreground">
               Chapter Admin
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-bold">
-              VCET Workspace
-            </span>
+            {sessionRole === "admin" ? (
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-bold inline-flex items-center gap-1">
+                <span>👑</span> Master Admin
+              </span>
+            ) : sessionRole === "core" ? (
+              <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold inline-flex items-center gap-1">
+                <span>🛡️</span> Core Member (Read-Only)
+              </span>
+            ) : sessionRole === "volunteer" ? (
+              <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold inline-flex items-center gap-1">
+                <span>📷</span> Volunteer Desk
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-bold">
+                VCET Workspace
+              </span>
+            )}
           </Link>
         </div>
 

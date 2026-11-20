@@ -9,6 +9,13 @@
 export const ADMIN_COOKIE_NAME = "gdg_admin_session";
 const SESSION_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+export type AdminRole = "admin" | "core" | "volunteer";
+
+// Standard designated role credentials
+export const DEFAULT_MASTER_PASSCODE = "dev@admin26";
+export const DEFAULT_CORE_PASSCODE = "vcet@gdg26";
+export const DEFAULT_VOLUNTEER_PASSCODE = "team@vcet26";
+
 // Default development fallbacks (never used when NODE_ENV === "production")
 const DEFAULT_DEV_ADMIN_PASSCODE = "devcraft-vcet-2025";
 const DEFAULT_DEV_ADMIN_EMAIL = "lead@vcet.edu.in";
@@ -24,6 +31,18 @@ export function getAdminPasscode(): string {
     process.env.ADMIN_PASSWORD ||
     (isProductionEnv() ? "" : DEFAULT_DEV_ADMIN_PASSCODE)
   );
+}
+
+export function getMasterPasscode(): string {
+  return process.env.ADMIN_MASTER_PASSCODE || DEFAULT_MASTER_PASSCODE;
+}
+
+export function getCorePasscode(): string {
+  return process.env.ADMIN_CORE_PASSCODE || DEFAULT_CORE_PASSCODE;
+}
+
+export function getVolunteerPasscode(): string {
+  return process.env.ADMIN_VOLUNTEER_PASSCODE || DEFAULT_VOLUNTEER_PASSCODE;
 }
 
 export function getAdminEmail(): string {
@@ -60,7 +79,9 @@ export function getSessionSigningSecret(): string {
 }
 
 export interface AdminSessionPayload {
-  role: "admin";
+  role: AdminRole;
+  email?: string;
+  authMethod?: string;
   issuedAt: number;
   expiresAt: number;
 }
@@ -124,9 +145,12 @@ function fromBase64<T>(str: string): T | null {
 }
 
 /**
- * Generates an HMAC-signed session token for the admin.
+ * Generates an HMAC-signed session token for the admin session.
  */
-export async function createAdminSessionToken(): Promise<string> {
+export async function createAdminSessionToken(
+  role: AdminRole = "admin",
+  email?: string
+): Promise<string> {
   const secret = getSessionSigningSecret();
   if (!secret) {
     throw new Error("ADMIN_SESSION_SECRET (or ADMIN_SECRET) must be configured in production.");
@@ -134,7 +158,8 @@ export async function createAdminSessionToken(): Promise<string> {
 
   const now = Date.now();
   const payload: AdminSessionPayload = {
-    role: "admin",
+    role,
+    email: email || undefined,
     issuedAt: now,
     expiresAt: now + SESSION_DURATION_MS,
   };
@@ -146,47 +171,159 @@ export async function createAdminSessionToken(): Promise<string> {
 }
 
 /**
- * Verifies an admin session token's authenticity and expiration.
+ * Extracts and decodes the verified admin session payload from a token.
  */
-export async function verifyAdminSessionToken(token: string | undefined | null): Promise<boolean> {
-  if (!token || typeof token !== "string") return false;
+export async function getAdminSessionPayload(
+  token: string | undefined | null
+): Promise<AdminSessionPayload | null> {
+  if (!token || typeof token !== "string") return null;
 
   const secret = getSessionSigningSecret();
-  if (!secret) return false;
+  if (!secret) return null;
 
   const parts = token.split(".");
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return null;
 
   const [payloadEncoded, signature] = parts;
-  if (!payloadEncoded || !signature) return false;
+  if (!payloadEncoded || !signature) return null;
 
   const expectedSignature = await hmacSign(payloadEncoded, secret);
 
   if (!constantTimeEqual(signature, expectedSignature)) {
-    return false;
+    return null;
   }
 
   const payload = fromBase64<AdminSessionPayload>(payloadEncoded);
-  if (!payload || payload.role !== "admin") {
-    return false;
+  if (!payload || !["admin", "core", "volunteer"].includes(payload.role)) {
+    return null;
   }
 
   // Check expiration
   if (Date.now() > payload.expiresAt) {
-    return false;
+    return null;
   }
 
-  return true;
+  return payload;
 }
 
 /**
- * Verifies an entered password against the configured admin passcode.
+ * Verifies an admin session token's authenticity and expiration.
+ */
+export async function verifyAdminSessionToken(token: string | undefined | null): Promise<boolean> {
+  const payload = await getAdminSessionPayload(token);
+  return Boolean(payload);
+}
+
+export interface AuthCredentialResult {
+  authenticated: boolean;
+  role?: AdminRole;
+  authMethod: string;
+}
+
+/**
+ * Resolves credentials across the 3 designated console roles:
+ * 1. Master Admin (dev@admin26): Full access to edit event details, broadcasts, registrations, check-in.
+ * 2. Core Members (vcet@gdg26): Read-only view for event details, view roster, attendance stats, and exports.
+ * 3. Volunteers (team@vcet26): Dedicated check-in terminal with camera QR scanner & direct participant attendance marking.
+ */
+export function resolveAdminCredentials(credentials: {
+  email?: string;
+  password?: string;
+  passcode?: string;
+}): AuthCredentialResult {
+  const emailInput = credentials.email?.trim() || "";
+  const passwordInput = credentials.password?.trim() || "";
+  const passcodeInput = credentials.passcode?.trim() || "";
+
+  // 1. Passcode mode or direct single credential
+  const targetCode = passcodeInput || (passwordInput && !emailInput ? passwordInput : "");
+
+  if (targetCode) {
+    if (
+      constantTimeEqual(targetCode, DEFAULT_MASTER_PASSCODE) ||
+      (Boolean(process.env.ADMIN_MASTER_PASSCODE) &&
+        constantTimeEqual(targetCode, process.env.ADMIN_MASTER_PASSCODE!)) ||
+      (Boolean(getAdminPasscode()) && constantTimeEqual(targetCode, getAdminPasscode()))
+    ) {
+      return { authenticated: true, role: "admin", authMethod: "master" };
+    }
+    if (
+      constantTimeEqual(targetCode, DEFAULT_CORE_PASSCODE) ||
+      (Boolean(process.env.ADMIN_CORE_PASSCODE) &&
+        constantTimeEqual(targetCode, process.env.ADMIN_CORE_PASSCODE!))
+    ) {
+      return { authenticated: true, role: "core", authMethod: "core" };
+    }
+    if (
+      constantTimeEqual(targetCode, DEFAULT_VOLUNTEER_PASSCODE) ||
+      (Boolean(process.env.ADMIN_VOLUNTEER_PASSCODE) &&
+        constantTimeEqual(targetCode, process.env.ADMIN_VOLUNTEER_PASSCODE!))
+    ) {
+      return { authenticated: true, role: "volunteer", authMethod: "volunteer" };
+    }
+  }
+
+  // 2. Email & Password mode:
+  if (emailInput || passwordInput) {
+    const cleanEmail = emailInput.toLowerCase();
+    const cleanPass = passwordInput;
+
+    // Check dev@admin26
+    if (
+      cleanEmail === DEFAULT_MASTER_PASSCODE ||
+      cleanPass === DEFAULT_MASTER_PASSCODE ||
+      (Boolean(process.env.ADMIN_MASTER_PASSCODE) &&
+        cleanPass === process.env.ADMIN_MASTER_PASSCODE)
+    ) {
+      return { authenticated: true, role: "admin", authMethod: "master" };
+    }
+
+    // Check vcet@gdg26
+    if (
+      cleanEmail === DEFAULT_CORE_PASSCODE ||
+      cleanPass === DEFAULT_CORE_PASSCODE ||
+      (Boolean(process.env.ADMIN_CORE_PASSCODE) &&
+        cleanPass === process.env.ADMIN_CORE_PASSCODE)
+    ) {
+      return { authenticated: true, role: "core", authMethod: "core" };
+    }
+
+    // Check team@vcet26
+    if (
+      cleanEmail === DEFAULT_VOLUNTEER_PASSCODE ||
+      cleanPass === DEFAULT_VOLUNTEER_PASSCODE ||
+      (Boolean(process.env.ADMIN_VOLUNTEER_PASSCODE) &&
+        cleanPass === process.env.ADMIN_VOLUNTEER_PASSCODE)
+    ) {
+      return { authenticated: true, role: "volunteer", authMethod: "volunteer" };
+    }
+
+    // Configured admin email and password check
+    if (emailInput && passwordInput && verifyAdminEmailPassword(emailInput, passwordInput)) {
+      return { authenticated: true, role: "admin", authMethod: "email" };
+    }
+  }
+
+  return { authenticated: false, authMethod: "none" };
+}
+
+/**
+ * Verifies an entered password against configured access passcodes.
  */
 export function verifyAdminPassword(input: string): boolean {
   if (!input) return false;
   const target = getAdminPasscode().trim();
-  if (!target) return false;
-  return constantTimeEqual(input.trim(), target);
+  if (target && constantTimeEqual(input.trim(), target)) {
+    return true;
+  }
+  const clean = input.trim();
+  if (constantTimeEqual(clean, DEFAULT_MASTER_PASSCODE)) return true;
+  if (constantTimeEqual(clean, DEFAULT_CORE_PASSCODE)) return true;
+  if (constantTimeEqual(clean, DEFAULT_VOLUNTEER_PASSCODE)) return true;
+  if (process.env.ADMIN_MASTER_PASSCODE && constantTimeEqual(clean, process.env.ADMIN_MASTER_PASSCODE)) return true;
+  if (process.env.ADMIN_CORE_PASSCODE && constantTimeEqual(clean, process.env.ADMIN_CORE_PASSCODE)) return true;
+  if (process.env.ADMIN_VOLUNTEER_PASSCODE && constantTimeEqual(clean, process.env.ADMIN_VOLUNTEER_PASSCODE)) return true;
+  return false;
 }
 
 /**
@@ -194,13 +331,42 @@ export function verifyAdminPassword(input: string): boolean {
  */
 export function verifyAdminEmailPassword(emailInput: string, passwordInput: string): boolean {
   if (!emailInput || !passwordInput) return false;
+  const cleanEmail = emailInput.trim().toLowerCase();
+  const cleanPassword = passwordInput.trim();
+
+  // 1. Configured Admin Email & Password
   const configuredEmail = getAdminEmail().trim().toLowerCase();
   const configuredPassword = (process.env.ADMIN_PASSWORD || getAdminPasscode()).trim();
-  if (!configuredEmail || !configuredPassword) return false;
-  return (
-    constantTimeEqual(emailInput.trim().toLowerCase(), configuredEmail) &&
-    constantTimeEqual(passwordInput.trim(), configuredPassword)
-  );
+  if (
+    configuredEmail &&
+    configuredPassword &&
+    constantTimeEqual(cleanEmail, configuredEmail) &&
+    constantTimeEqual(cleanPassword, configuredPassword)
+  ) {
+    return true;
+  }
+
+  // 2. Role-specific email & password
+  if (
+    (cleanEmail === DEFAULT_MASTER_PASSCODE || cleanEmail === "dev@admin26") &&
+    constantTimeEqual(cleanPassword, DEFAULT_MASTER_PASSCODE)
+  ) {
+    return true;
+  }
+  if (
+    (cleanEmail === DEFAULT_CORE_PASSCODE || cleanEmail === "vcet@gdg26") &&
+    constantTimeEqual(cleanPassword, DEFAULT_CORE_PASSCODE)
+  ) {
+    return true;
+  }
+  if (
+    (cleanEmail === DEFAULT_VOLUNTEER_PASSCODE || cleanEmail === "team@vcet26") &&
+    constantTimeEqual(cleanPassword, DEFAULT_VOLUNTEER_PASSCODE)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -230,11 +396,11 @@ export function sanitizeAdminNextUrl(rawNext: string | null | undefined): string
 }
 
 /**
- * Extracts and verifies the admin session cookie from a standard Request.
+ * Extracts and returns the full admin session from a standard Request.
  */
-export async function isAdminRequestAuthenticated(request: Request): Promise<boolean> {
+export async function getAdminSessionFromRequest(request: Request): Promise<AdminSessionPayload | null> {
   const cookieHeader = request.headers.get("cookie") || "";
-  if (!cookieHeader) return false;
+  if (!cookieHeader) return null;
 
   for (const part of cookieHeader.split(";")) {
     const trimmed = part.trim();
@@ -251,10 +417,34 @@ export async function isAdminRequestAuthenticated(request: Request): Promise<boo
     } catch {
       token = rawVal;
     }
-    return verifyAdminSessionToken(token);
+    return getAdminSessionPayload(token);
   }
 
-  return false;
+  return null;
+}
+
+/**
+ * Extracts the authenticated role from a Request.
+ */
+export async function getAdminRoleFromRequest(request: Request): Promise<AdminRole | null> {
+  const session = await getAdminSessionFromRequest(request);
+  return session?.role ?? null;
+}
+
+/**
+ * Determines whether the request is from a Master Admin (dev@admin26).
+ */
+export async function isMasterAdminAuthenticated(request: Request): Promise<boolean> {
+  const role = await getAdminRoleFromRequest(request);
+  return role === "admin";
+}
+
+/**
+ * Extracts and verifies the admin session cookie from a standard Request.
+ */
+export async function isAdminRequestAuthenticated(request: Request): Promise<boolean> {
+  const session = await getAdminSessionFromRequest(request);
+  return Boolean(session);
 }
 
 /**

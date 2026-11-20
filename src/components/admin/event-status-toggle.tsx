@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface EventStatusToggleProps {
@@ -19,6 +19,14 @@ export function EventStatusToggle({
   const [isOpen, setIsOpen] = useState(initialIsOpen);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [canEdit, setCanEdit] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/session")
+      .then((r) => r.json())
+      .then((d) => setCanEdit(Boolean(d.canEdit)))
+      .catch(() => setCanEdit(false));
+  }, []);
 
   if (initialIsOpen !== prevInitial) {
     setPrevInitial(initialIsOpen);
@@ -27,6 +35,11 @@ export function EventStatusToggle({
 
   async function handleToggle() {
     if (loading) return;
+    if (canEdit === false) {
+      setError("Read-only: only master admin (dev@admin26) can change registration status.");
+      setTimeout(() => setError(null), 3500);
+      return;
+    }
     const nextState = !isOpen;
     setLoading(true);
     setError(null);
@@ -70,10 +83,10 @@ export function EventStatusToggle({
       <button
         type="button"
         onClick={handleToggle}
-        disabled={loading}
+        disabled={loading || canEdit === false}
         aria-pressed={isOpen}
-        title={error || (isOpen ? "Click to close registration" : "Click to open registration")}
-        className={`inline-flex items-center rounded-full border font-semibold transition-all whitespace-nowrap cursor-pointer disabled:opacity-60 ${sizeClasses} ${stateClasses}`}
+        title={error || (canEdit === false ? "Read-only: only master admin (dev@admin26) can toggle status" : (isOpen ? "Click to close registration" : "Click to open registration"))}
+        className={`inline-flex items-center rounded-full border font-semibold transition-all whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${sizeClasses} ${stateClasses}`}
       >
         {loading ? (
           <svg

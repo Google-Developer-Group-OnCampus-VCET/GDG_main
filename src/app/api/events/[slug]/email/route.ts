@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { isAdminRequestAuthenticated } from "@/lib/auth";
+import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
 import {
   getEventBySlugAsync,
   getRegistrationByReference,
@@ -180,6 +180,17 @@ export async function POST(
 
     // 3. Admin: Broadcast Announcement or Batch Passes
     if (body.action === "broadcast") {
+      const role = await getAdminRoleFromRequest(request);
+      if (role !== "admin") {
+        return NextResponse.json(
+          {
+            error: "FORBIDDEN",
+            message: "Broadcast announcements can only be dispatched by master admin (dev@admin26).",
+          },
+          { status: 403 }
+        );
+      }
+
       const subject = body.subject?.trim();
       const message = body.message?.trim();
 

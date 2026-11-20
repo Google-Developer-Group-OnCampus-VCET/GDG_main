@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdminRequestAuthenticated } from "@/lib/auth";
+import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
 import { getEventBySlugAsync, getEventStatsAsync, updateEventAsync } from "@/lib/db";
 import type { EventFormat, EventTopic, EventUpdateInput } from "@/types";
 
@@ -140,10 +140,21 @@ export async function PATCH(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    if (!(await isAdminRequestAuthenticated(request))) {
+    const role = await getAdminRoleFromRequest(request);
+    if (!role) {
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: "Admin authorization required to update events." },
         { status: 401 }
+      );
+    }
+
+    if (role !== "admin") {
+      return NextResponse.json(
+        {
+          error: "FORBIDDEN",
+          message: "Event details are ineditable with this login. Only master admin (dev@admin26) can modify event settings.",
+        },
+        { status: 403 }
       );
     }
 

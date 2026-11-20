@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ChapterEvent, EventFormat, EventTopic } from "@/types";
@@ -84,6 +84,14 @@ export function EventEditForm({
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [canEdit, setCanEdit] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/session")
+      .then((r) => r.json())
+      .then((d) => setCanEdit(Boolean(d.canEdit)))
+      .catch(() => setCanEdit(false));
+  }, []);
 
   function toggleTopic(topic: EventTopic) {
     if (selectedTopics.includes(topic)) {
@@ -99,6 +107,11 @@ export function EventEditForm({
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (canEdit === false) {
+      setErrorMessage("Event details cannot be edited with the Core Member login (vcet@gdg26). Please sign in with dev@admin26.");
+      return;
+    }
 
     if (!title.trim() || !startsAt.trim()) {
       setErrorMessage("Please provide both an event title and start date/time.");
@@ -212,6 +225,23 @@ export function EventEditForm({
               </p>
             </div>
           </div>
+
+          {canEdit === false ? (
+            <div
+              role="alert"
+              className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium"
+            >
+              <span className="text-base shrink-0">🔒</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold text-amber-950">
+                  Read-Only Mode (Core Member Access)
+                </span>
+                <span className="leading-relaxed">
+                  You are signed in with the Core Member login (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">vcet@gdg26</code>). Event configuration details cannot be edited with this account. Please sign in with Master Admin (<code className="font-mono bg-white px-1.5 py-0.5 rounded border border-amber-200">dev@admin26</code>) to modify event settings.
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {errorMessage ? (
             <div
@@ -489,8 +519,9 @@ export function EventEditForm({
 
               <button
                 type="submit"
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-semibold hover:bg-primary-hover shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+                disabled={loading || canEdit === false}
+                title={canEdit === false ? "Core Member login is read-only. Use dev@admin26 to edit." : "Save Changes"}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-xs sm:text-sm font-semibold hover:bg-primary-hover shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>
@@ -499,6 +530,10 @@ export function EventEditForm({
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                     </svg>
                     <span>Saving Changes...</span>
+                  </>
+                ) : canEdit === false ? (
+                  <>
+                    <span>🔒 Ineditable (Core Login)</span>
                   </>
                 ) : (
                   <>
