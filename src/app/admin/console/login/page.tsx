@@ -15,7 +15,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const nextUrl = sanitizeAdminNextUrl(searchParams.get("next"));
 
-  const [authMode, setAuthMode] = useState<"email" | "passcode">("email");
+  const [authMode, setAuthMode] = useState<"passcode" | "email">("passcode");
   const [email, setEmail] = useState("");
   const [emailPassword, setEmailPassword] = useState("");
   const [passcode, setPasscode] = useState("");
@@ -68,7 +68,7 @@ function LoginForm() {
       await completeLogin({ idToken });
     } catch (err: unknown) {
       const error = err as { code?: string; message?: string };
-      // Fallback: Check direct server-side credentials (configured via ADMIN_EMAIL & ADMIN_PASSWORD in .env.local)
+      // Fallback: Check direct server-side credentials (configured via ADMIN_EMAIL & ADMIN_PASSWORD or role credentials)
       try {
         const res = await fetch("/api/admin/login", {
           method: "POST",
@@ -76,7 +76,9 @@ function LoginForm() {
           body: JSON.stringify({ email: email.trim(), password: emailPassword.trim() }),
         });
         if (res.ok) {
-          router.push(nextUrl);
+          const data = await res.json();
+          const target = searchParams.get("next") ? nextUrl : (data.redirectUrl || nextUrl);
+          router.push(target);
           router.refresh();
           return;
         }
@@ -175,20 +177,6 @@ function LoginForm() {
           <button
             type="button"
             onClick={() => {
-              setAuthMode("email");
-              setErrorMessage(null);
-            }}
-            className={`py-2 rounded-lg transition-all cursor-pointer ${
-              authMode === "email"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Email &amp; Password
-          </button>
-          <button
-            type="button"
-            onClick={() => {
               setAuthMode("passcode");
               setErrorMessage(null);
             }}
@@ -200,10 +188,99 @@ function LoginForm() {
           >
             Chapter Passcode
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode("email");
+              setErrorMessage(null);
+            }}
+            className={`py-2 rounded-lg transition-all cursor-pointer ${
+              authMode === "email"
+                ? "bg-white text-slate-900 shadow-xs"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Email &amp; Password
+          </button>
         </div>
 
-        {/* Form: Email & Password */}
-        {authMode === "email" ? (
+        {/* Form: Chapter Passcode (First Preference) */}
+        {authMode === "passcode" ? (
+          <form onSubmit={handlePasscodeSignIn} className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-1 text-left">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="admin-passcode"
+                  className="text-xs font-bold text-slate-700 uppercase tracking-wider"
+                >
+                  Admin Passcode
+                </label>
+                <span className="text-[11px] font-medium text-slate-400">
+                  Confidential
+                </span>
+              </div>
+
+              <div className="relative">
+                <input
+                  id="admin-passcode"
+                  type={showPassword ? "text" : "password"}
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="Enter secret passcode..."
+                  disabled={loading}
+                  autoFocus
+                  required
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50/50 pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide passcode" : "Show passcode"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  {showPassword ? (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-1 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a73e8] px-4 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-[#1557b0] active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  <span>Verifying Passcode...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In with Passcode</span>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </>
+              )}
+            </button>
+          </form>
+        ) : (
+          /* Form: Email & Password (Secondary) */
           <form onSubmit={handleEmailSignIn} className="flex flex-col gap-3.5">
             <div className="flex flex-col gap-1 text-left">
               <label
@@ -259,80 +336,6 @@ function LoginForm() {
               ) : (
                 <>
                   <span>Sign In with Email</span>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
-                </>
-              )}
-            </button>
-          </form>
-        ) : (
-          /* Form: Chapter Passcode */
-          <form onSubmit={handlePasscodeSignIn} className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1 text-left">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="admin-passcode"
-                  className="text-xs font-bold text-slate-700 uppercase tracking-wider"
-                >
-                  Admin Passcode
-                </label>
-                <span className="text-[11px] font-medium text-slate-400">
-                  Confidential
-                </span>
-              </div>
-
-              <div className="relative">
-                <input
-                  id="admin-passcode"
-                  type={showPassword ? "text" : "password"}
-                  value={passcode}
-                  onChange={(e) => setPasscode(e.target.value)}
-                  placeholder="Enter secret passcode..."
-                  disabled={loading}
-                  required
-                  className="w-full rounded-xl border border-slate-300 bg-slate-50/50 pl-4 pr-11 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all font-mono"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide passcode" : "Show passcode"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-lg transition-colors cursor-pointer"
-                >
-                  {showPassword ? (
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a73e8] px-4 py-3 text-sm font-semibold text-white shadow-md shadow-blue-500/20 hover:bg-[#1557b0] active:scale-[0.98] transition-all disabled:opacity-60 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <svg className="w-4 h-4 animate-spin text-white" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                  </svg>
-                  <span>Verifying Passcode...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In with Passcode</span>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="5" y1="12" x2="19" y2="12" />
                     <polyline points="12 5 19 12 12 19" />
