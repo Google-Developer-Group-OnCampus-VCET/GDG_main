@@ -13,8 +13,6 @@ import { EventSubNav } from "@/components/event-sub-nav";
 import { EventDetailsView } from "@/components/workshop/event-details-view";
 import { EventDetailSkeleton } from "@/components/skeletons/event-skeletons";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export function generateStaticParams() {
   if (staticEvents.length === 0) return [{ slug: "__placeholder__" }];

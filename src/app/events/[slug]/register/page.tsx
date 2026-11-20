@@ -10,8 +10,6 @@ import { EventSubNav } from "@/components/event-sub-nav";
 import { EventRegistrationView } from "@/components/workshop/event-registration-view";
 import { EventRegistrationSkeleton } from "@/components/skeletons/event-skeletons";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export async function generateMetadata({
   params,
