@@ -384,12 +384,12 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const eventDoc = await db.collection("events").doc(slug).get();
     const eventData = eventDoc.data();
     const defaultMatch = defaultEvents.find((e) => e.slug === slug);
-    const capacity =
+    const rawCapacity =
       typeof eventData?.capacity === "number"
         ? eventData.capacity
         : typeof eventData?.workshop?.capacity === "number"
         ? eventData.workshop.capacity
-        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
     const isRegistrationOpen =
       eventData?.isRegistrationOpen ??
       eventData?.is_registration_open ??
@@ -437,6 +437,12 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
         departmentCounts[data.department] = (departmentCounts[data.department] || 0) + 1;
       }
     });
+
+    // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+    const capacity =
+      (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
+        ? Math.max(rawCapacity, 150)
+        : rawCapacity;
 
     const remaining = Math.max(0, capacity - totalRegistered);
     const percentFilled =
@@ -607,12 +613,12 @@ export async function createFirestoreRegistration(
       }
 
       const eventData = eventDoc.data();
-      const capacity =
+      const rawCapacity =
       typeof eventData?.capacity === "number"
         ? eventData.capacity
         : typeof eventData?.workshop?.capacity === "number"
         ? eventData.workshop.capacity
-        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
       const isRegistrationOpen = Boolean(
         eventData?.isRegistrationOpen ??
           eventData?.is_registration_open ??
@@ -653,11 +659,17 @@ export async function createFirestoreRegistration(
         currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
       }
 
-      if (currentCount >= capacity) {
+      // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+      const effectiveCapacity =
+        (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount >= rawCapacity
+          ? Math.max(rawCapacity, 150)
+          : rawCapacity;
+
+      if (currentCount >= effectiveCapacity) {
         return {
           success: false,
           error: "CAPACITY_FULL",
-          message: `Workshop capacity has been reached (${currentCount}/${capacity} seats reserved).`,
+          message: `Workshop capacity has been reached (${currentCount}/${effectiveCapacity} seats reserved).`,
         };
       }
 
@@ -695,10 +707,15 @@ export async function createFirestoreRegistration(
       transaction.set(regDocRef, newRegistration);
 
       if (eventDoc.exists) {
-        transaction.update(eventDocRef, {
+        const eventUpdates: Record<string, unknown> = {
           registeredCount: currentCount + 1,
           updatedAt: createdAt,
-        });
+        };
+        if ((eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120) {
+          eventUpdates.capacity = 150;
+          eventUpdates["workshop.capacity"] = 150;
+        }
+        transaction.update(eventDocRef, eventUpdates);
       } else if (defaultMatch) {
         const eventDocPayload: Record<string, unknown> = {
           id: defaultMatch.id,
@@ -712,7 +729,7 @@ export async function createFirestoreRegistration(
             "Vidyavardhini's College of Engineering and Technology, Vasai",
           topics: defaultMatch.topics || ["general"],
           registrationUrl: defaultMatch.registrationUrl || `/events/${defaultMatch.slug}/register`,
-          capacity,
+          capacity: (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120 ? 150 : rawCapacity,
           isRegistrationOpen,
           registeredCount: currentCount + 1,
           createdAt,

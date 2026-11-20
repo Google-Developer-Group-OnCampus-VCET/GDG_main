@@ -6,7 +6,7 @@ export const devToCloudWorkshopData: WorkshopDetails = {
     "A four-day intensive, hands-on workshop series organized by Google Developer Groups on Campus VCET. Take your application from local code to a smart, containerized, serverless AI agent deployed on Google Cloud.",
   datesText: "Dec 1–4, 2026",
   venueText: "VCET Seminar Hall & Computer Labs, Vasai",
-  seatsText: "Limited to 120 Seats",
+  seatsText: "Limited Seats Available",
   badgeText: "GDG VCET Flagship Hands-on Series · Dec 1–4, 2026",
   capacity: 120,
   initialRegisteredCount: 0,

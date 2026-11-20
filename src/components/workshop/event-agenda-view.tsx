@@ -372,7 +372,7 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
       <section className="w-full py-12 bg-white">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center gap-4">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-            Seats are strictly capped at {workshop.capacity} developers
+            Seats are strictly limited for developers
           </h2>
           <p className="text-sm text-foreground-muted max-w-xl">
             Register today to receive your digital attendee pass and confirmed laboratory access.

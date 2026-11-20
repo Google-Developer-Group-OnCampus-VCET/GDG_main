@@ -332,7 +332,7 @@ export function getEventStats(slug: string): EventStats {
     .get(slug) as { capacity: number; is_registration_open: number } | undefined;
 
   const defaultMatch = defaultEvents.find((e) => e.slug === slug);
-  const capacity = eventRow?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
+  const rawCapacity = eventRow?.capacity ?? defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 150;
   const isRegistrationOpen =
     eventRow !== undefined
       ? eventRow.is_registration_open === 1
@@ -402,6 +402,12 @@ export function getEventStats(slug: string): EventStats {
   for (const r of deptRows) {
     departmentCounts[r.department] = r.count;
   }
+
+  // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+  const capacity =
+    (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
+      ? Math.max(rawCapacity, 150)
+      : rawCapacity;
 
   const remaining = Math.max(0, capacity - totalRegistered);
   const percentFilled =
@@ -877,16 +883,29 @@ export function createRegistration(
     return { success: false, error: "REGISTRATION_CLOSED", message: "Registration for this event is currently closed." };
   }
 
-  if (stats.remaining <= 0) {
+  const baseCapacity = stats.capacity;
+  const effectiveCapacity =
+    (eventSlug === "dev-to-cloud" || baseCapacity === 120) && stats.totalRegistered >= baseCapacity
+      ? Math.max(baseCapacity, 150)
+      : baseCapacity;
+
+  if (stats.totalRegistered >= effectiveCapacity) {
     return {
       success: false,
       error: "CAPACITY_FULL",
-      message: `Workshop capacity has been reached (${stats.totalRegistered}/${stats.capacity} seats reserved).`,
+      message: `Workshop capacity has been reached (${stats.totalRegistered}/${effectiveCapacity} seats reserved).`,
     };
   }
 
   // Generate Reference ID (guaranteed collision-free across all events)
   const nextNum = stats.totalRegistered + 1;
+  if ((eventSlug === "dev-to-cloud" || baseCapacity === 120) && nextNum >= 120) {
+    try {
+      db.prepare("UPDATE events SET capacity = 150 WHERE slug = ?").run(eventSlug);
+    } catch {
+      // ignore
+    }
+  }
   let referenceId = buildEventReferenceId(eventSlug, nextNum);
   while (db.prepare("SELECT id FROM registrations WHERE reference_id = ?").get(referenceId)) {
     referenceId = buildEventReferenceId(eventSlug, nextNum, true);

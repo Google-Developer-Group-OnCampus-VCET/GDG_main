@@ -24,7 +24,7 @@ export function EventRegistrationView({
   stats,
 }: EventRegistrationViewProps) {
   const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
-  const seatsText = `Limited to ${capacity} Seats`;
+  const seatsText = "Limited Seats Available";
   const [remainingSeats, setRemainingSeats] = useState(
     stats?.remaining ?? Math.max(0, capacity - workshop.initialRegisteredCount)
   );
@@ -319,7 +319,7 @@ export function EventRegistrationView({
             <div className="text-center flex flex-col items-center gap-2">
               <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
                 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                <span>Fast Registration &bull; Only {remainingSeats} Seats Left</span>
+                <span>Fast Registration &bull; Limited Seats Left</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                 Claim Your Event Pass
@@ -342,7 +342,7 @@ export function EventRegistrationView({
                   <h3 className="text-lg font-bold text-foreground">Registration is Closed</h3>
                   <p className="text-xs text-foreground-muted max-w-sm">
                     {remainingSeats <= 0
-                      ? `Event seating is at full capacity (${capacity}/${capacity}). Reach out to the chapter team for waitlist updates.`
+                      ? "Event seating is at full capacity. Reach out to the chapter team for waitlist updates."
                       : "Registration for this event is currently closed by the organizers."}
                   </p>
                 </div>
@@ -567,7 +567,7 @@ export function EventRegistrationView({
                       className="mt-0.5 h-5 w-5 rounded-md border-slate-300 text-primary focus:ring-0 cursor-pointer shrink-0"
                     />
                     <label htmlFor="coc-agree" className="text-xs text-slate-600 leading-relaxed cursor-pointer select-none">
-                      I agree to the <span className="text-primary font-semibold">GDG Code of Conduct</span>. I understand workshop seats are strictly limited to {capacity}.
+                      I agree to the <span className="text-primary font-semibold">GDG Code of Conduct</span>. I understand workshop seats are strictly limited.
                     </label>
                   </div>
 

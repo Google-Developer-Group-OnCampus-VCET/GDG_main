@@ -448,6 +448,56 @@ describe("Database & Registration Engine", () => {
     expect(missing.error).toBe("EVENT_NOT_FOUND");
   });
 
+  it("automatically expands peak capacity to 150 when an event with capacity 120 reaches 120", () => {
+    const slug = `test-peak-150-${Date.now()}`;
+    createEvent({
+      title: "Peak Test Workshop",
+      slug,
+      startsAt: "2026-12-01",
+      capacity: 120,
+    });
+
+    const db = getDatabase();
+    const insertStmt = db.prepare(`
+      INSERT INTO registrations (id, event_slug, reference_id, full_name, email, phone, college, department, year_of_study, track, experience_level, status, checked_in, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (let i = 1; i <= 120; i++) {
+      insertStmt.run(
+        `reg-${slug}-${i}`,
+        slug,
+        `GDG-PEAK-${i.toString().padStart(4, "0")}`,
+        `Attendee ${i}`,
+        `attendee.${i}.${slug}@vcet.edu.in`,
+        "+91 98765 00000",
+        "VCET",
+        "Computer Engg",
+        "3rd Year",
+        "4-Day All-Access",
+        "Intermediate",
+        "confirmed",
+        0,
+        new Date().toISOString()
+      );
+    }
+
+    const statsAt120 = getEventStats(slug);
+    expect(statsAt120.totalRegistered).toBe(120);
+    expect(statsAt120.capacity).toBe(150);
+    expect(statsAt120.remaining).toBe(30);
+    expect(statsAt120.isOpen).toBe(true);
+
+    const reg121 = createRegistration(slug, {
+      fullName: "Attendee 121",
+      email: `attendee.121.${slug}@vcet.edu.in`,
+      phone: "+91 98765 00121",
+      track: "4-Day All-Access",
+      agreedToCoc: true,
+    });
+    expect(reg121.success).toBe(true);
+  });
+
   it("uses os.tmpdir() for SQLite on read-only Vercel serverless environments", () => {
     vi.stubEnv("VERCEL", "1");
     try {

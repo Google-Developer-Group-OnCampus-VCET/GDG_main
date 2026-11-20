@@ -100,7 +100,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                     <span className="w-2 h-2 rounded-full bg-secondary inline-block animate-pulse"></span>{" "}
                     {totalRegistered} Confirmed
                   </span>
-                  <span className="font-semibold text-foreground">{remaining} Seats Remaining</span>
+                  <span className="font-semibold text-foreground">Limited Seats Available</span>
                 </div>
               </div>
             </div>
@@ -449,7 +449,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
                 Ready to Architect at Scale?
               </h2>
               <p className="text-sm sm:text-base text-foreground-muted">
-                Join {capacity} student developers, industry architects, and Google Developer Experts for four days of building real production systems.
+                Join student developers, industry architects, and Google Developer Experts for four days of building real production systems.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
