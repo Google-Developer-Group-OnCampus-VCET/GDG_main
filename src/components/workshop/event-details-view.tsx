@@ -71,38 +71,13 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
             </div>
 
             {/* Title & Deck */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
-              <div className="lg:col-span-8 flex flex-col gap-3">
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
-                  {event.title || workshop.headline}
-                </h1>
-                <p className="text-base sm:text-lg text-foreground-muted max-w-3xl leading-relaxed">
-                  {event.summary || workshop.subheading}
-                </p>
-              </div>
-
-              {/* Live Capacity Card */}
-              <div className="lg:col-span-4 flex flex-col gap-3 bg-surface-container-low p-5 rounded-2xl border border-border shadow-xs">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="font-semibold text-foreground-muted uppercase tracking-wider">
-                    Cohort Capacity
-                  </span>
-                  <span className="font-bold text-tertiary">{percentFilled}% Filled</span>
-                </div>
-                <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-primary h-2.5 rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${percentFilled}%` }}
-                  ></div>
-                </div>
-                <div className="flex items-center justify-between text-xs text-foreground-muted pt-1">
-                  <span className="flex items-center gap-1 font-medium">
-                    <span className="w-2 h-2 rounded-full bg-secondary inline-block animate-pulse"></span>{" "}
-                    {totalRegistered} Confirmed
-                  </span>
-                  <span className="font-semibold text-foreground">Limited Seats Available</span>
-                </div>
-              </div>
+            <div className="flex flex-col gap-3">
+              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-foreground leading-[1.15]">
+                {event.title || workshop.headline}
+              </h1>
+              <p className="text-base sm:text-lg text-foreground-muted max-w-3xl leading-relaxed">
+                {event.summary || workshop.subheading}
+              </p>
             </div>
 
             {/* Quick Stats Grid */}
