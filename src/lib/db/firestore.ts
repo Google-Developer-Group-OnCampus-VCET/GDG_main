@@ -471,9 +471,11 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const vcetPercent =
       totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
 
-    // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
+    // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
     const capacity =
-      (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
+      slug === "dev-to-cloud"
+        ? Math.max(135, rawCapacity)
+        : rawCapacity === 120 && totalRegistered >= rawCapacity
         ? Math.max(rawCapacity, 135)
         : rawCapacity;
 
@@ -700,9 +702,11 @@ export async function createFirestoreRegistration(
         currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
       }
 
-      // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
+      // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
       const effectiveCapacity =
-        (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount >= rawCapacity
+        eventSlug === "dev-to-cloud"
+          ? Math.max(135, rawCapacity)
+          : rawCapacity === 120 && currentCount >= rawCapacity
           ? Math.max(rawCapacity, 135)
           : rawCapacity;
 

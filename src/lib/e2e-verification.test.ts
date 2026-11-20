@@ -27,7 +27,7 @@ describe("Comprehensive System Verification", () => {
       const devcraft = events.find((e) => e.slug === TEST_SLUG);
       expect(devcraft).toBeDefined();
       expect(devcraft?.workshop).toBeDefined();
-      expect(devcraft?.workshop?.capacity).toBe(120);
+      expect(devcraft?.workshop?.capacity).toBe(135);
       expect(devcraft?.workshop?.agenda.length).toBeGreaterThan(6);
       expect(devcraft?.workshop?.speakersTbd).toBe(true);
       expect(devcraft?.workshop?.showSponsors).toBe(false);
@@ -248,9 +248,9 @@ describe("Comprehensive System Verification", () => {
 
     it("provides accurate aggregate metrics in getEventStats", () => {
       const stats = getEventStats(TEST_SLUG);
-      expect(stats.capacity).toBe(120);
+      expect(stats.capacity).toBe(135);
       expect(stats.totalRegistered).toBeGreaterThanOrEqual(1);
-      expect(stats.remaining).toBeLessThanOrEqual(119);
+      expect(stats.remaining).toBeLessThanOrEqual(134);
       expect(stats.isOpen).toBe(true);
       expect(stats.checkedInCount).toBeGreaterThanOrEqual(1);
       expect(stats.dailyCheckedInCounts).toBeDefined();

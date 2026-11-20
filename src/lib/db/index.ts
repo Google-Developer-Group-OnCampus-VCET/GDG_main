@@ -479,9 +479,11 @@ export function getEventStats(slug: string): EventStats {
     if (r.reg_date) registrationDates[r.reg_date] = r.count;
   }
 
-  // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
+  // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
   const capacity =
-    (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
+    slug === "dev-to-cloud"
+      ? Math.max(135, rawCapacity)
+      : rawCapacity === 120 && totalRegistered >= rawCapacity
       ? Math.max(rawCapacity, 135)
       : rawCapacity;
 
@@ -969,7 +971,9 @@ export function createRegistration(
 
   const baseCapacity = stats.capacity;
   const effectiveCapacity =
-    (eventSlug === "dev-to-cloud" || baseCapacity === 120) && stats.totalRegistered >= baseCapacity
+    eventSlug === "dev-to-cloud"
+      ? Math.max(135, baseCapacity)
+      : baseCapacity === 120 && stats.totalRegistered >= baseCapacity
       ? Math.max(baseCapacity, 135)
       : baseCapacity;
 

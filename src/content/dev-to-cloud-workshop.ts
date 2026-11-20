@@ -8,7 +8,7 @@ export const devToCloudWorkshopData: WorkshopDetails = {
   venueText: "VCET Seminar Hall & Computer Labs, Vasai",
   seatsText: "Limited Seats Available",
   badgeText: "GDG VCET Flagship Hands-on Series · Dec 1–4, 2026",
-  capacity: 120,
+  capacity: 135,
   initialRegisteredCount: 0,
   showSponsors: false,
   speakersTbd: true,
