@@ -438,10 +438,10 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       }
     });
 
-    // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+    // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
     const capacity =
       (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
-        ? Math.max(rawCapacity, 150)
+        ? Math.max(rawCapacity, 135)
         : rawCapacity;
 
     const remaining = Math.max(0, capacity - totalRegistered);
@@ -659,10 +659,10 @@ export async function createFirestoreRegistration(
         currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
       }
 
-      // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+      // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
       const effectiveCapacity =
         (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount >= rawCapacity
-          ? Math.max(rawCapacity, 150)
+          ? Math.max(rawCapacity, 135)
           : rawCapacity;
 
       if (currentCount >= effectiveCapacity) {
@@ -712,8 +712,8 @@ export async function createFirestoreRegistration(
           updatedAt: createdAt,
         };
         if ((eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120) {
-          eventUpdates.capacity = 150;
-          eventUpdates["workshop.capacity"] = 150;
+          eventUpdates.capacity = 135;
+          eventUpdates["workshop.capacity"] = 135;
         }
         transaction.update(eventDocRef, eventUpdates);
       } else if (defaultMatch) {
@@ -729,7 +729,7 @@ export async function createFirestoreRegistration(
             "Vidyavardhini's College of Engineering and Technology, Vasai",
           topics: defaultMatch.topics || ["general"],
           registrationUrl: defaultMatch.registrationUrl || `/events/${defaultMatch.slug}/register`,
-          capacity: (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120 ? 150 : rawCapacity,
+          capacity: (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120 ? 135 : rawCapacity,
           isRegistrationOpen,
           registeredCount: currentCount + 1,
           createdAt,

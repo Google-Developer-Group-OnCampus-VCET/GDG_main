@@ -403,10 +403,10 @@ export function getEventStats(slug: string): EventStats {
     departmentCounts[r.department] = r.count;
   }
 
-  // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 150
+  // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
   const capacity =
     (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
-      ? Math.max(rawCapacity, 150)
+      ? Math.max(rawCapacity, 135)
       : rawCapacity;
 
   const remaining = Math.max(0, capacity - totalRegistered);
@@ -886,7 +886,7 @@ export function createRegistration(
   const baseCapacity = stats.capacity;
   const effectiveCapacity =
     (eventSlug === "dev-to-cloud" || baseCapacity === 120) && stats.totalRegistered >= baseCapacity
-      ? Math.max(baseCapacity, 150)
+      ? Math.max(baseCapacity, 135)
       : baseCapacity;
 
   if (stats.totalRegistered >= effectiveCapacity) {
@@ -901,7 +901,7 @@ export function createRegistration(
   const nextNum = stats.totalRegistered + 1;
   if ((eventSlug === "dev-to-cloud" || baseCapacity === 120) && nextNum >= 120) {
     try {
-      db.prepare("UPDATE events SET capacity = 150 WHERE slug = ?").run(eventSlug);
+      db.prepare("UPDATE events SET capacity = 135 WHERE slug = ?").run(eventSlug);
     } catch {
       // ignore
     }

@@ -486,8 +486,8 @@ describe("Database & Registration Engine", () => {
     expect(missing.error).toBe("EVENT_NOT_FOUND");
   });
 
-  it("automatically expands peak capacity to 150 when an event with capacity 120 reaches 120", () => {
-    const slug = `test-peak-150-${Date.now()}`;
+  it("automatically expands peak capacity to 135 when an event with capacity 120 reaches 120", () => {
+    const slug = `test-peak-135-${Date.now()}`;
     createEvent({
       title: "Peak Test Workshop",
       slug,
@@ -522,8 +522,8 @@ describe("Database & Registration Engine", () => {
 
     const statsAt120 = getEventStats(slug);
     expect(statsAt120.totalRegistered).toBe(120);
-    expect(statsAt120.capacity).toBe(150);
-    expect(statsAt120.remaining).toBe(30);
+    expect(statsAt120.capacity).toBe(135);
+    expect(statsAt120.remaining).toBe(15);
     expect(statsAt120.isOpen).toBe(true);
 
     const reg121 = createRegistration(slug, {
@@ -534,6 +534,44 @@ describe("Database & Registration Engine", () => {
       agreedToCoc: true,
     });
     expect(reg121.success).toBe(true);
+
+    // Fill remaining up to 135
+    for (let i = 122; i <= 135; i++) {
+      insertStmt.run(
+        `reg-${slug}-${i}`,
+        slug,
+        `GDG-PEAK-${i.toString().padStart(4, "0")}`,
+        `Attendee ${i}`,
+        `attendee.${i}.${slug}@vcet.edu.in`,
+        "+91 98765 00000",
+        "VCET",
+        "Computer Engg",
+        "3rd Year",
+        "4-Day All-Access",
+        "Intermediate",
+        "confirmed",
+        0,
+        new Date().toISOString()
+      );
+    }
+
+    const statsAt135 = getEventStats(slug);
+    expect(statsAt135.totalRegistered).toBe(135);
+    expect(statsAt135.remaining).toBe(0);
+    expect(statsAt135.isOpen).toBe(false);
+
+    // Registration #136 should be blocked with CAPACITY_FULL
+    const reg136 = createRegistration(slug, {
+      fullName: "Attendee 136",
+      email: `attendee.136.${slug}@vcet.edu.in`,
+      phone: "+91 98765 00136",
+      track: "4-Day All-Access",
+      agreedToCoc: true,
+    });
+    expect(reg136.success).toBe(false);
+    if (!reg136.success) {
+      expect(reg136.error).toBe("CAPACITY_FULL");
+    }
   });
 
   it("uses os.tmpdir() for SQLite on read-only Vercel serverless environments", () => {
