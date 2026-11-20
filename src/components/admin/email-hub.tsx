@@ -84,6 +84,29 @@ See you at 10:00 AM sharp!
     ctaText: "Review 13-Point Security Checklist",
     ctaUrl: "https://gdg-vcet.edu.in/events/dev-to-cloud/agenda",
   },
+  {
+    name: "1st Year Permission & Pass Notice",
+    subject: "[Important Update] GDG Dev to Cloud Workshop: Registration Status for First Year Students",
+    message: `Dear Attendee,
+
+Thank you for your enthusiasm and proactive interest in registering for "Zero to Hero: Dev to Cloud", the 4-day flagship workshop organized by Google Developer Groups on Campus VCET (Dec 1 – Dec 4, 2026).
+
+We are writing to communicate an important update regarding your registration.
+
+Due to strict academic schedules, ongoing mandatory lecture and lab hours, and departmental attendance regulations, official institutional permission from the First Year Department could not be secured for first-year students to attend full-day sessions during college hours.
+
+In compliance with college administration guidelines, we regret to inform you that we are required to revoke all workshop passes issued to First Year students for this edition. Your pass has been cancelled in the system, and entry will not be permitted at the gate check-in desk.
+
+We sincerely apologize for this inconvenience. All workshop lecture slides, GitHub starter repositories, cloud codelabs, and project walkthroughs will be shared publicly after the event so you can learn self-paced. Furthermore, our team is designing weekend and evening sessions outside lecture hours specifically so First Year students can participate fully.
+
+If you have any questions, feel free to reply directly to this email at vcet_gdg@vcet.edu.in.
+
+Warm regards,
+Organizing Team
+Google Developer Groups on Campus VCET`,
+    ctaText: "View Public Chapter Resources",
+    ctaUrl: "https://gdg-vcet.edu.in/events/dev-to-cloud",
+  },
 ];
 
 export function EmailHub({
@@ -102,6 +125,7 @@ export function EmailHub({
   const [ctaText, setCtaText] = useState(EMAIL_TEMPLATES[0].ctaText);
   const [ctaUrl, setCtaUrl] = useState(EMAIL_TEMPLATES[0].ctaUrl);
   const [includePassLink, setIncludePassLink] = useState(true);
+  const [revokePasses, setRevokePasses] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [broadcastFeedback, setBroadcastFeedback] = useState<{
@@ -122,6 +146,18 @@ export function EmailHub({
   const targetCount = registrations.filter((r) => {
     if (r.status === "cancelled") return false;
     if (audience === "all") return true;
+    if (audience === "year-1" || audience === "1st-year") {
+      return r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1");
+    }
+    if (audience === "year-2" || audience === "2nd-year") {
+      return r.yearOfStudy === "2nd Year" || r.yearOfStudy?.includes("2");
+    }
+    if (audience === "year-3" || audience === "3rd-year") {
+      return r.yearOfStudy === "3rd Year" || r.yearOfStudy?.includes("3");
+    }
+    if (audience === "year-4" || audience === "4th-year") {
+      return r.yearOfStudy === "4th Year" || r.yearOfStudy?.includes("4");
+    }
     if (audience.startsWith("day-")) {
       const dayNum = parseInt(audience.replace("day-", ""), 10);
       return r.checkedInDays?.includes(dayNum) || (dayNum === 1 && r.checkedIn);
@@ -143,6 +179,12 @@ export function EmailHub({
       setMessage(tmpl.message);
       setCtaText(tmpl.ctaText);
       setCtaUrl(tmpl.ctaUrl);
+
+      if (tmpl.name.includes("1st Year")) {
+        setAudience("year-1");
+        setIncludePassLink(false);
+        setRevokePasses(true);
+      }
     }
   }
 
@@ -174,6 +216,7 @@ export function EmailHub({
           message: message.trim(),
           audience,
           includePassLink,
+          revokePasses,
           ctaText: ctaText.trim() || undefined,
           ctaUrl: ctaUrl.trim() || undefined,
         }),
@@ -382,13 +425,23 @@ export function EmailHub({
                     onChange={(e) => setAudience(e.target.value)}
                     className="flex-1 h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
                   >
-                    <option value="all">All Confirmed Attendees ({registrations.length})</option>
-                    <option value="day-1">Day 1 Attendees (Dec 1)</option>
-                    <option value="day-2">Day 2 Attendees (Dec 2)</option>
-                    <option value="day-3">Day 3 Attendees (Dec 3)</option>
-                    <option value="day-4">Day 4 Attendees (Dec 4)</option>
-                    <option value="all-days">All 4 Days Completed (Perfect Attendance)</option>
-                    <option value="absent">Pending Check-in (Absent So Far)</option>
+                    <optgroup label="Entire Cohort">
+                      <option value="all">All Confirmed Attendees ({registrations.filter(r => r.status !== 'cancelled').length})</option>
+                    </optgroup>
+                    <optgroup label="Academic Year Cohort">
+                      <option value="year-1">First Year Students (1st Year)</option>
+                      <option value="year-2">Second Year Students (2nd Year)</option>
+                      <option value="year-3">Third Year Students (3rd Year)</option>
+                      <option value="year-4">Final Year Students (4th Year)</option>
+                    </optgroup>
+                    <optgroup label="Daily Workshop Attendance">
+                      <option value="day-1">Day 1 Attendees (Dec 1)</option>
+                      <option value="day-2">Day 2 Attendees (Dec 2)</option>
+                      <option value="day-3">Day 3 Attendees (Dec 3)</option>
+                      <option value="day-4">Day 4 Attendees (Dec 4)</option>
+                      <option value="all-days">All 4 Days Completed (Perfect Attendance)</option>
+                      <option value="absent">Pending Check-in (Absent So Far)</option>
+                    </optgroup>
                   </select>
                   <span className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold shrink-0">
                     {targetCount} Recipients
@@ -464,6 +517,19 @@ export function EmailHub({
                 />
                 <span className="text-foreground">
                   Include each attendee&apos;s personal <strong>4-day pass link &amp; QR reference ID</strong> at the bottom of the email.
+                </span>
+              </label>
+
+              {/* Revoke Pass Option */}
+              <label className="flex items-center gap-2.5 p-3 rounded-xl border border-rose-200 bg-rose-50/50 text-xs font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={revokePasses}
+                  onChange={(e) => setRevokePasses(e.target.checked)}
+                  className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+                <span className="text-rose-950">
+                  <strong>Automatically mark targeted attendees as Cancelled</strong> in the database and audit trail.
                 </span>
               </label>
 

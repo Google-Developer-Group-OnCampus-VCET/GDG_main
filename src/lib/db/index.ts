@@ -30,6 +30,7 @@ import {
   seedFirestoreInitialEvents,
   logFirestoreEmail,
   getFirestoreEmailLogs,
+  cancelFirestoreRegistration,
   logFirestoreAudit,
   getFirestoreAuditLogs,
   slugify,
@@ -1103,6 +1104,23 @@ export function checkInAttendee(
     message: `Successfully checked in ${reg.fullName}${dayText}!${progressText}`,
     registration: updatedReg,
   };
+}
+
+export function cancelRegistration(referenceId: string): boolean {
+  const db = getDatabase();
+  const ref = referenceId.trim().toUpperCase();
+  const res = db.prepare("UPDATE registrations SET status = 'cancelled' WHERE reference_id = ?").run(ref);
+  return res.changes > 0;
+}
+
+export async function cancelRegistrationAsync(referenceId: string): Promise<boolean> {
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    await cancelFirestoreRegistration(ref);
+  } catch (err) {
+    console.warn("Firestore cancel failed:", err);
+  }
+  return cancelRegistration(ref);
 }
 
 export function cleanupTestRegistrations(): void {

@@ -6,6 +6,7 @@ import {
   getRegistrationByReference,
   getRegistrationsAsync,
   getEmailLogsAsync,
+  cancelRegistrationAsync,
   logAuditEventAsync,
   logEmailRecordAsync,
 } from "@/lib/db";
@@ -78,6 +79,7 @@ export async function POST(
       audience?: string;
       track?: string;
       includePassLink?: boolean;
+      revokePasses?: boolean;
       ctaText?: string;
       ctaUrl?: string;
     };
@@ -208,7 +210,23 @@ export async function POST(
       // Filter audience
       let recipientsList = allRegistrations.filter((r) => r.status !== "cancelled");
 
-      if (audience.startsWith("day-")) {
+      if (audience === "year-1" || audience === "1st-year") {
+        recipientsList = recipientsList.filter(
+          (r) => r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1")
+        );
+      } else if (audience === "year-2" || audience === "2nd-year") {
+        recipientsList = recipientsList.filter(
+          (r) => r.yearOfStudy === "2nd Year" || r.yearOfStudy?.includes("2")
+        );
+      } else if (audience === "year-3" || audience === "3rd-year") {
+        recipientsList = recipientsList.filter(
+          (r) => r.yearOfStudy === "3rd Year" || r.yearOfStudy?.includes("3")
+        );
+      } else if (audience === "year-4" || audience === "4th-year") {
+        recipientsList = recipientsList.filter(
+          (r) => r.yearOfStudy === "4th Year" || r.yearOfStudy?.includes("4")
+        );
+      } else if (audience.startsWith("day-")) {
         const dayNum = parseInt(audience.replace("day-", ""), 10);
         recipientsList = recipientsList.filter(
           (r) => r.checkedInDays?.includes(dayNum) || (dayNum === 1 && r.checkedIn)
@@ -230,6 +248,30 @@ export async function POST(
           { error: "NO_RECIPIENTS", message: "No attendees found matching the selected audience." },
           { status: 400 }
         );
+      }
+
+      // If requested, revoke/cancel passes in database
+      if (body.revokePasses) {
+        for (const recipient of recipientsList) {
+          try {
+            await cancelRegistrationAsync(recipient.referenceId);
+            await logAuditEventAsync({
+              action: "REGISTRATION_CANCELLED",
+              actorRole: "admin",
+              actorIdentifier: "dev@admin26",
+              eventSlug: slug,
+              details: {
+                referenceId: recipient.referenceId,
+                fullName: recipient.fullName,
+                email: recipient.email,
+                yearOfStudy: recipient.yearOfStudy,
+                reason: "Pass revoked via broadcast email due to lack of departmental permission",
+              },
+            });
+          } catch (cancelErr) {
+            console.warn("Failed to cancel pass for", recipient.referenceId, cancelErr);
+          }
+        }
       }
 
       let simulatedCount = 0;

@@ -266,7 +266,8 @@ export type AuditAction =
   | "CHECK_IN_DUPLICATE_BLOCKED"
   | "EVENT_UPDATE"
   | "EVENT_CREATE"
-  | "EMAIL_BROADCAST";
+  | "EMAIL_BROADCAST"
+  | "REGISTRATION_CANCELLED";
 
 export type AuditActorRole = "admin" | "core" | "volunteer" | "system";
 

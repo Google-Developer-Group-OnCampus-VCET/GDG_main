@@ -62,6 +62,13 @@ const ACTION_CONFIG: Record<
     text: "text-sky-800",
     border: "border-sky-200",
   },
+  REGISTRATION_CANCELLED: {
+    label: "Pass Revoked / Cancelled",
+    icon: "🚫",
+    bg: "bg-rose-50",
+    text: "text-rose-800",
+    border: "border-rose-200",
+  },
 };
 
 const ROLE_BADGES: Record<

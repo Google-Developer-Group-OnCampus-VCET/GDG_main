@@ -796,6 +796,31 @@ export async function createFirestoreRegistration(
   }
 }
 
+export async function cancelFirestoreRegistration(
+  referenceId: string
+): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    const snap = await db
+      .collection("registrations")
+      .where("referenceId", "==", ref)
+      .limit(1)
+      .get();
+    if (snap.empty) return false;
+    await snap.docs[0].ref.update({
+      status: "cancelled",
+      cancelledAt: new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.warn("Firestore cancel error:", (err as Error).message);
+    return false;
+  }
+}
+
 export async function checkInFirestoreAttendee(
   eventSlug: string,
   referenceId: string,
