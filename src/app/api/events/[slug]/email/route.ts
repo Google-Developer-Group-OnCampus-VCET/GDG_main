@@ -7,6 +7,7 @@ import {
   getRegistrationsAsync,
   getEmailLogsAsync,
   cancelRegistrationAsync,
+  deleteRegistrationAsync,
   logAuditEventAsync,
   logEmailRecordAsync,
 } from "@/lib/db";
@@ -36,6 +37,9 @@ export async function GET(
 
     return NextResponse.json({ success: true, logs });
   } catch (err) {
+    if ((err as { digest?: string })?.digest?.startsWith("NEXT_")) {
+      throw err;
+    }
     console.error("GET email logs error:", err);
     return NextResponse.json(
       { error: "SERVER_ERROR", message: "Failed to load email logs." },
@@ -80,6 +84,7 @@ export async function POST(
       track?: string;
       includePassLink?: boolean;
       revokePasses?: boolean;
+      hardDelete?: boolean;
       recipientRef?: string;
       recipientEmail?: string;
       ctaText?: string;
@@ -263,11 +268,15 @@ export async function POST(
         );
       }
 
-      // If requested, revoke/cancel passes in database
+      // If requested, revoke/cancel passes in database and release seats
       if (body.revokePasses) {
         for (const recipient of recipientsList) {
           try {
-            await cancelRegistrationAsync(recipient.referenceId);
+            if (body.hardDelete) {
+              await deleteRegistrationAsync(recipient.referenceId);
+            } else {
+              await cancelRegistrationAsync(recipient.referenceId);
+            }
             await logAuditEventAsync({
               action: "REGISTRATION_CANCELLED",
               actorRole: "admin",
@@ -278,6 +287,7 @@ export async function POST(
                 fullName: recipient.fullName,
                 email: recipient.email,
                 yearOfStudy: recipient.yearOfStudy,
+                mode: body.hardDelete ? "hard-deleted" : "pass-cancelled",
                 reason: "Pass revoked via broadcast email due to lack of departmental permission",
               },
             });
@@ -357,10 +367,12 @@ export async function POST(
       return NextResponse.json({
         success: true,
         count: recipientsList.length,
+        revokedCount: body.revokePasses ? recipientsList.length : 0,
+        revokedReferenceIds: body.revokePasses ? recipientsList.map((r) => r.referenceId) : [],
         simulated: isSimulated,
         message: `Successfully broadcasted to ${recipientsList.length} attendees${
-          isSimulated ? " (Simulated Mode)" : ""
-        }!`,
+          body.revokePasses ? ` (${recipientsList.length} passes cancelled & seats freed)` : ""
+        }${isSimulated ? " (Simulated Mode)" : ""}!`,
       });
     }
 
@@ -369,6 +381,9 @@ export async function POST(
       { status: 400 }
     );
   } catch (err) {
+    if ((err as { digest?: string })?.digest?.startsWith("NEXT_")) {
+      throw err;
+    }
     console.error("Email API error:", err);
     return NextResponse.json(
       { error: "SERVER_ERROR", message: "Failed to process email request." },

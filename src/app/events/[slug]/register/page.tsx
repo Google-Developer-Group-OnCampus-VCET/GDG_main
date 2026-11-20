@@ -11,6 +11,14 @@ import { EventRegistrationView } from "@/components/workshop/event-registration-
 import { EventRegistrationSkeleton } from "@/components/skeletons/event-skeletons";
 
 
+export const instant = false;
+
+export function generateStaticParams() {
+  return staticEvents
+    .filter((e) => Boolean(e.workshop))
+    .map((event) => ({ slug: event.slug }));
+}
+
 export async function generateMetadata({
   params,
 }: {

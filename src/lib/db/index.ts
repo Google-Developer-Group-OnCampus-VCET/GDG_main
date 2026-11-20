@@ -31,6 +31,7 @@ import {
   logFirestoreEmail,
   getFirestoreEmailLogs,
   cancelFirestoreRegistration,
+  deleteFirestoreRegistration,
   logFirestoreAudit,
   getFirestoreAuditLogs,
   slugify,
@@ -1121,6 +1122,23 @@ export async function cancelRegistrationAsync(referenceId: string): Promise<bool
     console.warn("Firestore cancel failed:", err);
   }
   return cancelRegistration(ref);
+}
+
+export function deleteRegistration(referenceId: string): boolean {
+  const db = getDatabase();
+  const ref = referenceId.trim().toUpperCase();
+  const res = db.prepare("DELETE FROM registrations WHERE reference_id = ?").run(ref);
+  return res.changes > 0;
+}
+
+export async function deleteRegistrationAsync(referenceId: string): Promise<boolean> {
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    await deleteFirestoreRegistration(ref);
+  } catch (err) {
+    console.warn("Firestore delete failed:", err);
+  }
+  return deleteRegistration(ref);
 }
 
 export function cleanupTestRegistrations(): void {

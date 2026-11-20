@@ -14,6 +14,8 @@ import { EventDetailsView } from "@/components/workshop/event-details-view";
 import { EventDetailSkeleton } from "@/components/skeletons/event-skeletons";
 
 
+export const instant = false;
+
 export function generateStaticParams() {
   if (staticEvents.length === 0) return [{ slug: "__placeholder__" }];
   return staticEvents.map((event) => ({ slug: event.slug }));

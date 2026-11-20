@@ -805,13 +805,99 @@ export async function cancelFirestoreRegistration(
       .limit(1)
       .get();
     if (snap.empty) return false;
-    await snap.docs[0].ref.update({
+
+    const docRef = snap.docs[0].ref;
+    const regData = snap.docs[0].data();
+    const eventSlug = regData.eventSlug;
+
+    await docRef.update({
       status: "cancelled",
       cancelledAt: new Date().toISOString(),
     });
+
+    // Automatically recalculate and synchronize the event's registeredCount in Firestore
+    if (eventSlug) {
+      try {
+        const regsSnap = await db
+          .collection("registrations")
+          .where("eventSlug", "==", eventSlug)
+          .get();
+        const activeCount = regsSnap.docs.filter(
+          (d) => d.data().status !== "cancelled"
+        ).length;
+
+        await db
+          .collection("events")
+          .doc(eventSlug)
+          .set(
+            {
+              registeredCount: activeCount,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+      } catch (countErr) {
+        console.warn("Failed to update event registeredCount after cancellation:", countErr);
+      }
+    }
+
     return true;
   } catch (err) {
     console.warn("Firestore cancel error:", (err as Error).message);
+    return false;
+  }
+}
+
+export async function deleteFirestoreRegistration(
+  referenceId: string
+): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    const snap = await db
+      .collection("registrations")
+      .where("referenceId", "==", ref)
+      .limit(1)
+      .get();
+    if (snap.empty) return false;
+
+    const docRef = snap.docs[0].ref;
+    const regData = snap.docs[0].data();
+    const eventSlug = regData.eventSlug;
+
+    await docRef.delete();
+
+    // Recalculate event seat count
+    if (eventSlug) {
+      try {
+        const regsSnap = await db
+          .collection("registrations")
+          .where("eventSlug", "==", eventSlug)
+          .get();
+        const activeCount = regsSnap.docs.filter(
+          (d) => d.data().status !== "cancelled"
+        ).length;
+
+        await db
+          .collection("events")
+          .doc(eventSlug)
+          .set(
+            {
+              registeredCount: activeCount,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+      } catch (countErr) {
+        console.warn("Failed to update event registeredCount after deletion:", countErr);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("Firestore delete error:", (err as Error).message);
     return false;
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { RegistrationRecord, EmailLog } from "@/types";
 
 interface EmailHubProps {
@@ -112,9 +113,11 @@ Google Developer Groups on Campus VCET`,
 export function EmailHub({
   eventSlug,
   eventTitle,
-  registrations,
+  registrations: initialRegistrations,
   initialLogs,
 }: EmailHubProps) {
+  const router = useRouter();
+  const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialRegistrations);
   const [activeTab, setActiveTab] = useState<"broadcast" | "individual" | "history">("broadcast");
   const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
 
@@ -128,6 +131,7 @@ export function EmailHub({
   const [includePassLink, setIncludePassLink] = useState(true);
   const [revokePasses, setRevokePasses] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
+  const [recipientSearchTerm, setRecipientSearchTerm] = useState("");
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [broadcastFeedback, setBroadcastFeedback] = useState<{
     type: "success" | "error";
@@ -143,40 +147,56 @@ export function EmailHub({
     text: string;
   } | null>(null);
 
-  // Calculate target audience size
-  const targetCount = registrations.filter((r) => {
-    if (r.status === "cancelled" && !revokePasses) return false;
-    if (audience.startsWith("ref-")) {
-      return r.referenceId === audience.replace("ref-", "");
-    }
-    if (audience === "individual" && selectedIndividual) {
-      return r.referenceId === selectedIndividual.referenceId;
-    }
-    if (audience === "all") return true;
-    if (audience === "year-1" || audience === "1st-year") {
-      return r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1");
-    }
-    if (audience === "year-2" || audience === "2nd-year") {
-      return r.yearOfStudy === "2nd Year" || r.yearOfStudy?.includes("2");
-    }
-    if (audience === "year-3" || audience === "3rd-year") {
-      return r.yearOfStudy === "3rd Year" || r.yearOfStudy?.includes("3");
-    }
-    if (audience === "year-4" || audience === "4th-year") {
-      return r.yearOfStudy === "4th Year" || r.yearOfStudy?.includes("4");
-    }
-    if (audience.startsWith("day-")) {
-      const dayNum = parseInt(audience.replace("day-", ""), 10);
-      return r.checkedInDays?.includes(dayNum) || (dayNum === 1 && r.checkedIn);
-    }
-    if (audience === "absent") {
-      return !r.checkedIn && (!r.checkedInDays || r.checkedInDays.length === 0);
-    }
-    if (audience === "all-days") {
-      return (r.checkedInDays?.length || 0) >= 4;
-    }
-    return true;
-  }).length;
+  // Target audience recipients
+  const targetRecipients = useMemo(() => {
+    return registrations.filter((r) => {
+      if (r.status === "cancelled" && !revokePasses) return false;
+      if (audience.startsWith("ref-")) {
+        return r.referenceId === audience.replace("ref-", "");
+      }
+      if (audience === "individual" && selectedIndividual) {
+        return r.referenceId === selectedIndividual.referenceId;
+      }
+      if (audience === "all") return true;
+      if (audience === "year-1" || audience === "1st-year") {
+        return r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1");
+      }
+      if (audience === "year-2" || audience === "2nd-year") {
+        return r.yearOfStudy === "2nd Year" || r.yearOfStudy?.includes("2");
+      }
+      if (audience === "year-3" || audience === "3rd-year") {
+        return r.yearOfStudy === "3rd Year" || r.yearOfStudy?.includes("3");
+      }
+      if (audience === "year-4" || audience === "4th-year") {
+        return r.yearOfStudy === "4th Year" || r.yearOfStudy?.includes("4");
+      }
+      if (audience.startsWith("day-")) {
+        const dayNum = parseInt(audience.replace("day-", ""), 10);
+        return r.checkedInDays?.includes(dayNum) || (dayNum === 1 && r.checkedIn);
+      }
+      if (audience === "absent") {
+        return !r.checkedIn && (!r.checkedInDays || r.checkedInDays.length === 0);
+      }
+      if (audience === "all-days") {
+        return (r.checkedInDays?.length || 0) >= 4;
+      }
+      return true;
+    });
+  }, [registrations, audience, selectedIndividual, revokePasses]);
+
+  const filteredRecipients = useMemo(() => {
+    if (!recipientSearchTerm.trim()) return targetRecipients;
+    const q = recipientSearchTerm.toLowerCase().trim();
+    return targetRecipients.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.referenceId.toLowerCase().includes(q) ||
+        (r.department && r.department.toLowerCase().includes(q))
+    );
+  }, [targetRecipients, recipientSearchTerm]);
+
+  const targetCount = targetRecipients.length;
 
   function handleComposeToIndividual(reg: RegistrationRecord) {
     setSelectedIndividual(reg);
@@ -221,11 +241,11 @@ export function EmailHub({
       return;
     }
 
-    if (
-      !confirm(
-        `Are you sure you want to broadcast this announcement to ${targetCount} recipients?`
-      )
-    ) {
+    const confirmMessage = revokePasses
+      ? `⚠️ CAUTION: Pass Revocation & Seat Release Active!\n\nAre you sure you want to broadcast this update to ${targetCount} recipients?\n\nThis will permanently CANCEL their passes in the database, synchronize the Firestore counter, and instantly release their seats for other students.`
+      : `Are you sure you want to broadcast this announcement to ${targetCount} recipients?`;
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -255,6 +275,21 @@ export function EmailHub({
           type: "success",
           text: data.message || `Broadcast successfully sent to ${targetCount} attendees!`,
         });
+
+        // If passes were revoked, update registration statuses in state immediately
+        if (data.revokedReferenceIds && data.revokedReferenceIds.length > 0) {
+          const revokedSet = new Set(
+            data.revokedReferenceIds.map((id: string) => id.toUpperCase())
+          );
+          setRegistrations((prev) =>
+            prev.map((r) =>
+              revokedSet.has(r.referenceId.toUpperCase())
+                ? { ...r, status: "cancelled" }
+                : r
+            )
+          );
+          router.refresh();
+        }
 
         // Add to logs state
         const newLog: EmailLog = {
@@ -685,6 +720,137 @@ export function EmailHub({
                   Google Developer Groups on Campus &middot; VCET Vasai
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Target Audience Recipient Directory */}
+          <div className="lg:col-span-12 bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">
+                    Target Audience Recipient Directory
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                    {targetRecipients.length} Recipients
+                  </span>
+                </div>
+                <p className="text-xs text-foreground-muted mt-0.5">
+                  Live preview of verified attendees who will receive this broadcast dispatch.
+                </p>
+              </div>
+
+              {/* Quick Filter */}
+              <div className="w-full sm:w-72">
+                <input
+                  type="text"
+                  value={recipientSearchTerm}
+                  onChange={(e) => setRecipientSearchTerm(e.target.value)}
+                  placeholder="Filter by name, pass ID, or email..."
+                  className="w-full h-9 px-3 rounded-xl border border-border bg-slate-50 text-xs text-foreground focus:bg-white focus:outline-hidden font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Revocation Warning Alert if checked */}
+            {revokePasses ? (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-950 flex items-start gap-3 shadow-xs">
+                <span className="text-rose-600 font-bold text-base shrink-0 mt-0.5">⚠️</span>
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-rose-900">
+                    Active Pass Cancellation &amp; Immediate Seat Release Enabled:
+                  </span>
+                  <span className="text-rose-800 leading-relaxed">
+                    Broadcasting this announcement will permanently mark all listed active passes as <code className="bg-rose-100 text-rose-900 px-1 py-0.5 rounded font-mono font-bold">cancelled</code> in the database, recalculate the live seat counter in Firestore, and instantly return their seats to the public registration pool.
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Recipient Directory Table */}
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border bg-slate-50 text-slate-700 font-bold text-[11px] uppercase tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-3">Attendee</th>
+                    <th className="py-2.5 px-3">Email Address</th>
+                    <th className="py-2.5 px-3">Academic Year</th>
+                    <th className="py-2.5 px-3">Department</th>
+                    <th className="py-2.5 px-3">DB Status</th>
+                    <th className="py-2.5 px-3">Projected Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredRecipients.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-foreground-muted">
+                        No attendees match the selected audience filter &quot;{audience}&quot;.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRecipients.map((rec) => (
+                      <tr
+                        key={rec.referenceId}
+                        className={`hover:bg-slate-50/70 transition-colors ${
+                          rec.status === "cancelled" ? "opacity-60 bg-slate-50/40" : ""
+                        }`}
+                      >
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-foreground">{rec.fullName}</div>
+                          <div className="font-mono text-[11px] text-primary">{rec.referenceId}</div>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-foreground-muted">
+                          {rec.email}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              rec.yearOfStudy?.includes("1") || rec.yearOfStudy?.toLowerCase().includes("first")
+                                ? "bg-amber-100 text-amber-900"
+                                : rec.yearOfStudy?.includes("2") || rec.yearOfStudy?.toLowerCase().includes("second")
+                                ? "bg-blue-100 text-blue-900"
+                                : rec.yearOfStudy?.includes("3") || rec.yearOfStudy?.toLowerCase().includes("third")
+                                ? "bg-purple-100 text-purple-900"
+                                : "bg-slate-100 text-slate-800"
+                            }`}
+                          >
+                            {rec.yearOfStudy || "Year N/A"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-foreground-muted text-[11px]">
+                          {rec.department || "VCET"}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {rec.status === "cancelled" ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                              Cancelled in DB
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              Active Pass
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {revokePasses && rec.status !== "cancelled" ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-1 rounded-lg border border-rose-200">
+                              <span>❌</span> Cancel Pass &amp; Release Seat
+                            </span>
+                          ) : rec.status === "cancelled" ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                              <span>ℹ️</span> Already Cancelled
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                              <span>📩</span> Deliver Broadcast
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

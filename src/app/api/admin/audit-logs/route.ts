@@ -42,6 +42,9 @@ export async function GET(request: Request) {
       logs,
     });
   } catch (err) {
+    if ((err as { digest?: string })?.digest?.startsWith("NEXT_")) {
+      throw err;
+    }
     console.error("Audit logs API error:", err);
     return NextResponse.json(
       { error: "SERVER_ERROR", message: "Failed to retrieve audit logs." },
