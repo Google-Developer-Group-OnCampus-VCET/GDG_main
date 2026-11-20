@@ -24,11 +24,12 @@ export function EventRegistrationView({
   stats,
 }: EventRegistrationViewProps) {
   const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
-  const seatsText = "Limited Seats Available";
+  const isFilled = (stats ? stats.remaining <= 0 || stats.isOpen === false : false);
+  const seatsText = isFilled ? "Seats Are Filled" : "Limited Seats Available";
   const [remainingSeats, setRemainingSeats] = useState(
     stats?.remaining ?? Math.max(0, capacity - workshop.initialRegisteredCount)
   );
-  const isRegistrationOpen = (stats?.isOpen ?? workshop.registrationConfig.isOpen) && remainingSeats > 0;
+  const isRegistrationOpen = (stats?.isOpen ?? workshop.registrationConfig.isOpen) && remainingSeats > 0 && !isFilled;
 
   // Form State — Streamlined & Mobile-Native
   const [fullName, setFullName] = useState("");
@@ -96,7 +97,12 @@ export function EventRegistrationView({
       const data = await res.json();
 
       if (!res.ok) {
-        setSubmitError(data.message || "Registration failed. Please check your inputs.");
+        if (data.error === "CAPACITY_FULL") {
+          setRemainingSeats(0);
+          setSubmitError("Seats are filled! Registration for this workshop has reached full capacity.");
+        } else {
+          setSubmitError(data.message || "Registration failed. Please check your inputs.");
+        }
         setSubmitting(false);
         return;
       }
@@ -251,8 +257,17 @@ export function EventRegistrationView({
                   <span>{workshop.venueText}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-surface-container px-3.5 py-1.5 rounded-full">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-foreground font-semibold">{seatsText}</span>
+                  {isFilled || remainingSeats <= 0 ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                      <span className="text-rose-700 font-semibold">Seats Are Filled</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="text-foreground font-semibold">{seatsText}</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -260,9 +275,13 @@ export function EventRegistrationView({
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-1 w-full sm:w-auto">
                 <a
                   href="#registration-form"
-                  className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-6 py-3.5 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover active:scale-95 transition-all cursor-pointer w-full sm:w-auto text-center"
+                  className={`inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-full text-sm font-semibold shadow-sm active:scale-95 transition-all cursor-pointer w-full sm:w-auto text-center ${
+                    isFilled || remainingSeats <= 0
+                      ? "bg-slate-800 text-white hover:bg-slate-900"
+                      : "bg-primary text-on-primary hover:bg-primary-hover"
+                  }`}
                 >
-                  <span>Register for Workshop</span>
+                  <span>{isFilled || remainingSeats <= 0 ? "Seats Are Filled" : "Register for Workshop"}</span>
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <polyline points="19 12 12 19 5 12" />
@@ -317,10 +336,17 @@ export function EventRegistrationView({
           <div className="flex flex-col gap-5 sm:gap-6">
             {/* Header with live seat counter */}
             <div className="text-center flex flex-col items-center gap-2">
-              <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                <span>Fast Registration &bull; Limited Seats Left</span>
-              </div>
+              {isFilled || remainingSeats <= 0 ? (
+                <div className="inline-flex items-center gap-2 bg-rose-50 text-rose-800 border border-rose-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                  <span>Seats Are Filled</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                  <span>Fast Registration &bull; Limited Seats Left</span>
+                </div>
+              )}
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
                 Claim Your Event Pass
               </h2>
@@ -339,9 +365,9 @@ export function EventRegistrationView({
                       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                     </svg>
                   </div>
-                  <h3 className="text-lg font-bold text-foreground">Registration is Closed</h3>
+                  <h3 className="text-lg font-bold text-foreground">Seats Are Filled</h3>
                   <p className="text-xs text-foreground-muted max-w-sm">
-                    {remainingSeats <= 0
+                    {remainingSeats <= 0 || isFilled
                       ? "Event seating is at full capacity. Reach out to the chapter team for waitlist updates."
                       : "Registration for this event is currently closed by the organizers."}
                   </p>

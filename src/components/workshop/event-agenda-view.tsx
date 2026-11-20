@@ -8,9 +8,14 @@ import { generateSchedulePdfBytes } from "@/lib/schedule-pdf";
 interface EventAgendaViewProps {
   event: ChapterEvent;
   workshop: WorkshopDetails;
+  stats?: {
+    remaining?: number;
+    isOpen?: boolean;
+  };
 }
 
-export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
+export function EventAgendaView({ event, workshop, stats }: EventAgendaViewProps) {
+  const isFilled = (stats ? (stats.remaining !== undefined && stats.remaining <= 0) || stats.isOpen === false : false);
   const availableDays = Array.from(new Set(workshop.agenda.map((s) => s.day))).sort((a, b) => a - b);
   const initialDay = availableDays.length > 0 ? availableDays[0] : 1;
   const [activeDay, setActiveDay] = useState<number>(initialDay);
@@ -372,16 +377,22 @@ export function EventAgendaView({ event, workshop }: EventAgendaViewProps) {
       <section className="w-full py-12 bg-white">
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center gap-4">
           <h2 className="text-xl sm:text-2xl font-bold text-foreground">
-            Seats are strictly limited for developers
+            {isFilled ? "Seats Are Filled" : "Seats are strictly limited for developers"}
           </h2>
           <p className="text-sm text-foreground-muted max-w-xl">
-            Register today to receive your digital attendee pass and confirmed laboratory access.
+            {isFilled
+              ? "All seats for this workshop cohort have been filled. Registration is currently closed."
+              : "Register today to receive your digital attendee pass and confirmed laboratory access."}
           </p>
           <Link
             href={`/events/${event.slug}/register`}
-            className="inline-flex items-center gap-2 bg-primary text-on-primary px-8 py-3 rounded-full text-sm font-semibold shadow-sm hover:bg-primary-hover transition-all mt-2"
+            className={`inline-flex items-center gap-2 px-8 py-3 rounded-full text-sm font-semibold shadow-sm transition-all mt-2 ${
+              isFilled
+                ? "bg-slate-800 text-white hover:bg-slate-900"
+                : "bg-primary text-on-primary hover:bg-primary-hover"
+            }`}
           >
-            <span>Register for Free</span>
+            <span>{isFilled ? "Seats Are Filled" : "Register for Free"}</span>
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
           </Link>
         </div>

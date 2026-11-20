@@ -24,6 +24,7 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
   const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
   const remaining = stats?.remaining ?? Math.max(0, capacity - totalRegistered);
   const percentFilled = stats?.percentFilled ?? Math.round((totalRegistered / capacity) * 100);
+  const isFilled = remaining <= 0 || (stats as { isOpen?: boolean } | undefined)?.isOpen === false;
 
   const faqCategories = ["All", ...Array.from(new Set(workshop.faq.map((f) => f.category ?? "General")))];
 
@@ -417,22 +418,28 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
         <div className="max-w-(--container-max) mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-gradient-to-br from-primary-fixed/40 via-surface-container to-secondary-fixed/30 rounded-3xl p-8 sm:p-12 border border-border flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
             <div className="flex flex-col gap-2 max-w-xl text-center md:text-left">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                Limited Seating Available
+              <span className={`text-xs font-bold uppercase tracking-wider ${isFilled ? "text-rose-600" : "text-primary"}`}>
+                {isFilled ? "Seats Are Filled" : "Limited Seating Available"}
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-                Ready to Architect at Scale?
+                {isFilled ? "Workshop Registration Full" : "Ready to Architect at Scale?"}
               </h2>
               <p className="text-sm sm:text-base text-foreground-muted">
-                Join student developers, industry architects, and Google Developer Experts for four days of building real production systems.
+                {isFilled
+                  ? "All seats for this 4-day cohort have been filled. Registered participants should check their inboxes for pass references and day-wise details."
+                  : "Join student developers, industry architects, and Google Developer Experts for four days of building real production systems."}
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
               <Link
                 href={`/events/${event.slug}/register`}
-                className="inline-flex items-center justify-center gap-2 bg-primary text-on-primary px-8 py-3.5 rounded-full font-semibold text-sm shadow-md hover:bg-primary-hover transition-all"
+                className={`inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full font-semibold text-sm shadow-md transition-all ${
+                  isFilled
+                    ? "bg-slate-800 text-white hover:bg-slate-900"
+                    : "bg-primary text-on-primary hover:bg-primary-hover"
+                }`}
               >
-                <span>Register for Workshop</span>
+                <span>{isFilled ? "Seats Are Filled" : "Register for Workshop"}</span>
                 <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
               </Link>
               <Link

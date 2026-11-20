@@ -63,7 +63,7 @@ async function EventAgendaContent({
   return (
     <div className="w-full flex flex-col">
       <EventSubNav event={event} />
-      <EventAgendaView event={event} workshop={workshop} />
+      <EventAgendaView event={event} workshop={workshop} stats={stats} />
     </div>
   );
 }

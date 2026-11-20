@@ -97,9 +97,13 @@ export function EventCard({
         {event.workshop && status !== "past" ? (
           <Link
             href={`/events/${event.slug}/register`}
-            className="text-xs font-semibold text-on-primary bg-primary hover:bg-primary-hover px-3.5 py-1 rounded-full transition-all"
+            className={`text-xs font-semibold px-3.5 py-1 rounded-full transition-all ${
+              event.isRegistrationOpen === false
+                ? "bg-slate-100 text-slate-600 border border-slate-200"
+                : "text-on-primary bg-primary hover:bg-primary-hover"
+            }`}
           >
-            Register Now
+            {event.isRegistrationOpen === false ? "Seats Are Filled" : "Register Now"}
           </Link>
         ) : null}
       </div>
