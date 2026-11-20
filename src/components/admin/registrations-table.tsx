@@ -30,6 +30,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialRegistrations);
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "cancelled">("active");
   const [checkInFilter, setCheckInFilter] = useState("all");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -57,6 +58,9 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     }
   }
 
+  const totalActive = registrations.filter((r) => r.status !== "cancelled").length;
+  const totalCancelled = registrations.filter((r) => r.status === "cancelled").length;
+
   const filtered = registrations.filter((r) => {
     const matchesSearch =
       search === "" ||
@@ -66,6 +70,13 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       r.college.toLowerCase().includes(search.toLowerCase());
 
     const matchesTrack = trackFilter === "all" || (r.track || "General Admission") === trackFilter;
+
+    let matchesStatus = true;
+    if (statusFilter === "active") {
+      matchesStatus = r.status !== "cancelled";
+    } else if (statusFilter === "cancelled") {
+      matchesStatus = r.status === "cancelled";
+    }
 
     let matchesCheckIn = true;
     if (checkInFilter === "checked-in") {
@@ -84,12 +95,15 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       );
     }
 
-    return matchesSearch && matchesTrack && matchesCheckIn;
+    return matchesSearch && matchesTrack && matchesStatus && matchesCheckIn;
   });
 
-  const checkedInCount = registrations.filter((r) => r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0)).length;
+  const checkedInCount = registrations.filter(
+    (r) => r.status !== "cancelled" && (r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0))
+  ).length;
   const fourDayCompleters = registrations.filter(
     (r) =>
+      r.status !== "cancelled" &&
       r.checkedInDays?.includes(1) &&
       r.checkedInDays?.includes(2) &&
       r.checkedInDays?.includes(3) &&
@@ -275,6 +289,18 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
             ) : null}
 
             <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "active" | "all" | "cancelled")}
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="active">Active Passes ({totalActive})</option>
+              <option value="all">All Registrations ({registrations.length})</option>
+              {totalCancelled > 0 ? (
+                <option value="cancelled">Cancelled / Revoked ({totalCancelled})</option>
+              ) : null}
+            </select>
+
+            <select
               value={checkInFilter}
               onChange={(e) => setCheckInFilter(e.target.value)}
               className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
@@ -352,12 +378,22 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       <div className="flex flex-wrap items-center justify-between text-xs text-foreground-muted px-1 gap-2">
         <span>
           Showing <strong className="text-foreground">{filtered.length}</strong> of{" "}
-          <strong className="text-foreground">{registrations.length}</strong> registered attendees
+          <strong className="text-foreground">{statusFilter === "cancelled" ? totalCancelled : totalActive}</strong>{" "}
+          {statusFilter === "cancelled" ? "cancelled passes" : "active attendees"}
+          {totalCancelled > 0 && statusFilter === "all" ? (
+            <span className="text-foreground-muted ml-1.5 font-normal">
+              ({totalActive} active · {totalCancelled} cancelled)
+            </span>
+          ) : totalCancelled > 0 && statusFilter === "active" ? (
+            <span className="text-foreground-muted ml-1.5 font-normal">
+              ({totalCancelled} cancelled hidden)
+            </span>
+          ) : null}
         </span>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
             <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
-            <span>{checkedInCount} Checked In ({Math.round((checkedInCount / (registrations.length || 1)) * 100)}%)</span>
+            <span>{checkedInCount} Checked In ({Math.round((checkedInCount / (totalActive || 1)) * 100)}%)</span>
           </span>
           <span className="hidden sm:inline text-border">•</span>
           <span className="font-semibold text-primary">

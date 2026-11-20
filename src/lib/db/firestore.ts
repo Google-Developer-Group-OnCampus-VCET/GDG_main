@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
+import { getCached, setCached, invalidateCache } from "./cache";
 import type {
   AuditLogEntry,
   ChapterEvent,
@@ -102,6 +103,7 @@ export async function createFirestoreEvent(
 
     await docRef.set(docPayload);
 
+    invalidateCache("fs:");
     return { success: true, event: eventRecord };
   } catch (err) {
     console.warn("Firestore createEvent failed:", (err as Error).message);
@@ -193,6 +195,7 @@ export async function updateFirestoreEvent(
       await docRef.update(updates);
     }
 
+    invalidateCache("fs:");
     const updatedEvent = await getFirestoreEvent(slug);
     if (updatedEvent && defaultMatch?.workshop && !updatedEvent.workshop) {
       const cap = updatedEvent.capacity ?? defaultMatch.capacity ?? defaultMatch.workshop.capacity;
@@ -213,6 +216,10 @@ export async function updateFirestoreEvent(
 }
 
 export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
+  const cacheKey = "fs:events";
+  const cached = getCached<ChapterEvent[]>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
 
@@ -272,6 +279,7 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
       });
     });
 
+    setCached(cacheKey, list, 60 * 1000);
     return list;
   } catch (err) {
     console.warn("Firestore getEvents failed:", (err as Error).message);
@@ -280,6 +288,10 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
 }
 
 export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | null> {
+  const cacheKey = `fs:event:${slug}`;
+  const cached = getCached<ChapterEvent>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
 
@@ -319,7 +331,7 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
       }
       : undefined;
 
-    return {
+    const eventResult: ChapterEvent = {
       id: d.id || doc.id,
       slug: d.slug || doc.id,
       title: d.title,
@@ -337,6 +349,9 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
       registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
       workshop,
     };
+
+    setCached(cacheKey, eventResult, 60 * 1000);
+    return eventResult;
   } catch (err) {
     console.warn("Firestore getEvent failed:", (err as Error).message);
     return null;
@@ -378,6 +393,10 @@ export async function seedFirestoreInitialEvents(initialEvents: ChapterEvent[]):
 }
 
 export async function getFirestoreEventStats(slug: string): Promise<EventStats | null> {
+  const cacheKey = `fs:stats:${slug}`;
+  const cached = getCached<EventStats>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
 
@@ -483,7 +502,7 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const percentFilled =
       capacity > 0 ? Math.min(100, Math.round((totalRegistered / capacity) * 100)) : 100;
 
-    return {
+    const statsResult: EventStats = {
       totalRegistered,
       capacity,
       remaining,
@@ -505,6 +524,9 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       },
       registrationDates,
     };
+
+    setCached(cacheKey, statsResult, 30 * 1000);
+    return statsResult;
   } catch (err) {
     console.warn("Firestore getEventStats failed:", (err as Error).message);
     return null;
@@ -515,99 +537,110 @@ export async function getFirestoreRegistrations(
   eventSlug: string,
   options?: { search?: string; track?: string; status?: string; checkedIn?: string }
 ): Promise<RegistrationRecord[] | null> {
-  const db = getAdminDb();
-  if (!db) return null;
+  const cacheKey = `fs:regs:${eventSlug}`;
+  let records = getCached<RegistrationRecord[]>(cacheKey);
 
-  try {
-    let query = db.collection("registrations").where("eventSlug", "==", eventSlug);
+  if (!records) {
+    const db = getAdminDb();
+    if (!db) return null;
 
-    if (options?.track && options.track !== "all") {
-      query = query.where("track", "==", options.track);
-    }
+    try {
+      const snapshot = await db
+        .collection("registrations")
+        .where("eventSlug", "==", eventSlug)
+        .get();
 
-    if (options?.status && options.status !== "all") {
-      query = query.where("status", "==", options.status);
-    }
-
-    const snapshot = await query.get();
-    let records: RegistrationRecord[] = [];
-
-    snapshot.forEach((doc) => {
-      const d = doc.data();
-      records.push({
-        id: doc.id,
-        eventSlug: d.eventSlug,
-        referenceId: d.referenceId,
-        fullName: d.fullName,
-        email: d.email,
-        phone: d.phone,
-        college: d.college,
-        department: d.department,
-        yearOfStudy: d.yearOfStudy,
-        track: d.track,
-        experienceLevel: d.experienceLevel,
-        portfolioUrl: d.portfolioUrl || undefined,
-        notes: d.notes || undefined,
-        status: d.status || "confirmed",
-        checkedIn: Boolean(d.checkedIn),
-        checkedInAt: d.checkedInAt || undefined,
-        checkedInDays: Array.isArray(d.checkedInDays)
-          ? d.checkedInDays
-          : d.checkedIn
-            ? [1]
-            : [],
-        checkIns:
-          typeof d.checkIns === "object" && d.checkIns !== null
-            ? d.checkIns
-            : d.checkedIn && d.checkedInAt
-              ? { 1: d.checkedInAt }
-              : {},
-        createdAt: d.createdAt || new Date().toISOString(),
+      const list: RegistrationRecord[] = [];
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        list.push({
+          id: doc.id,
+          eventSlug: d.eventSlug,
+          referenceId: d.referenceId,
+          fullName: d.fullName,
+          email: d.email,
+          phone: d.phone,
+          college: d.college,
+          department: d.department,
+          yearOfStudy: d.yearOfStudy,
+          track: d.track,
+          experienceLevel: d.experienceLevel,
+          portfolioUrl: d.portfolioUrl || undefined,
+          notes: d.notes || undefined,
+          status: d.status || "confirmed",
+          checkedIn: Boolean(d.checkedIn),
+          checkedInAt: d.checkedInAt || undefined,
+          checkedInDays: Array.isArray(d.checkedInDays)
+            ? d.checkedInDays
+            : d.checkedIn
+              ? [1]
+              : [],
+          checkIns:
+            typeof d.checkIns === "object" && d.checkIns !== null
+              ? d.checkIns
+              : d.checkedIn && d.checkedInAt
+                ? { 1: d.checkedInAt }
+                : {},
+          createdAt: d.createdAt || new Date().toISOString(),
+        });
       });
-    });
 
-    // Client-side filtering for search & checkedIn filter
-    if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
-      if (options.checkedIn.startsWith("day-")) {
-        const targetDay = Number(options.checkedIn.replace("day-", ""));
-        records = records.filter((r) => r.checkedInDays?.includes(targetDay));
-      } else if (options.checkedIn === "all-days") {
-        records = records.filter((r) => (r.checkedInDays?.length ?? 0) >= 4);
-      } else if (
-        options.checkedIn === "absent" ||
-        options.checkedIn === "not-checked-in" ||
-        options.checkedIn === "false" ||
-        options.checkedIn === "0"
-      ) {
-        records = records.filter((r) => !r.checkedIn || (r.checkedInDays?.length ?? 0) === 0);
-      } else {
-        const isChecked =
-          options.checkedIn === "true" ||
-          options.checkedIn === "1" ||
-          options.checkedIn === "checked-in";
-        records = records.filter((r) => r.checkedIn === isChecked);
-      }
+      records = list;
+      setCached(cacheKey, records, 15 * 1000);
+    } catch (err) {
+      console.warn("Firestore getRegistrations failed:", (err as Error).message);
+      return null;
     }
-
-    if (options?.search) {
-      const term = options.search.toLowerCase();
-      records = records.filter(
-        (r) =>
-          r.fullName.toLowerCase().includes(term) ||
-          r.email.toLowerCase().includes(term) ||
-          r.referenceId.toLowerCase().includes(term) ||
-          r.college.toLowerCase().includes(term)
-      );
-    }
-
-    // Sort by createdAt desc
-    records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    return records;
-  } catch (err) {
-    console.warn("Firestore getRegistrations failed:", (err as Error).message);
-    return null;
   }
+
+  let filtered = [...records];
+
+  if (options?.track && options.track !== "all") {
+    filtered = filtered.filter((r) => r.track === options.track);
+  }
+
+  if (options?.status && options.status !== "all") {
+    filtered = filtered.filter((r) => r.status === options.status);
+  }
+
+  // Client-side filtering for search & checkedIn filter
+  if (options?.checkedIn !== undefined && options.checkedIn !== "all") {
+    if (options.checkedIn.startsWith("day-")) {
+      const targetDay = Number(options.checkedIn.replace("day-", ""));
+      filtered = filtered.filter((r) => r.checkedInDays?.includes(targetDay));
+    } else if (options.checkedIn === "all-days") {
+      filtered = filtered.filter((r) => (r.checkedInDays?.length ?? 0) >= 4);
+    } else if (
+      options.checkedIn === "absent" ||
+      options.checkedIn === "not-checked-in" ||
+      options.checkedIn === "false" ||
+      options.checkedIn === "0"
+    ) {
+      filtered = filtered.filter((r) => !r.checkedIn || (r.checkedInDays?.length ?? 0) === 0);
+    } else {
+      const isChecked =
+        options.checkedIn === "true" ||
+        options.checkedIn === "1" ||
+        options.checkedIn === "checked-in";
+      filtered = filtered.filter((r) => r.checkedIn === isChecked);
+    }
+  }
+
+  if (options?.search) {
+    const term = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(term) ||
+        r.email.toLowerCase().includes(term) ||
+        r.referenceId.toLowerCase().includes(term) ||
+        r.college.toLowerCase().includes(term)
+    );
+  }
+
+  // Sort by createdAt desc
+  filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return filtered;
 }
 
 export async function createFirestoreRegistration(
@@ -641,7 +674,7 @@ export async function createFirestoreRegistration(
     .digest("hex");
 
   try {
-    return await db.runTransaction(async (transaction) => {
+    const txResult = await db.runTransaction<CreateRegistrationResult>(async (transaction) => {
       // 1. Read events/{eventSlug} (1 read)
       const eventDocRef = db.collection("events").doc(eventSlug);
       const eventDoc = await transaction.get(eventDocRef);
@@ -785,6 +818,11 @@ export async function createFirestoreRegistration(
         registration: newRegistration,
       };
     });
+
+    if (txResult && txResult.success) {
+      invalidateCache("fs:");
+    }
+    return txResult;
   } catch (err) {
     console.warn("Firestore createRegistration failed:", (err as Error).message);
     return null;
@@ -841,6 +879,7 @@ export async function cancelFirestoreRegistration(
       }
     }
 
+    invalidateCache("fs:");
     return true;
   } catch (err) {
     console.warn("Firestore cancel error:", (err as Error).message);
@@ -895,6 +934,7 @@ export async function deleteFirestoreRegistration(
       }
     }
 
+    invalidateCache("fs:");
     return true;
   } catch (err) {
     console.warn("Firestore delete error:", (err as Error).message);
@@ -989,6 +1029,7 @@ export async function checkInFirestoreAttendee(
     const dayText = day !== undefined ? ` for Day ${targetDay}` : "";
     const progressText = updatedDays.length > 1 ? ` (${updatedDays.length}/4 Days Attended)` : "";
 
+    invalidateCache("fs:");
     return {
       success: true,
       message: `Successfully checked in ${data.fullName}${dayText}!${progressText}`,

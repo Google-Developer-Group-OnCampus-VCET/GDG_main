@@ -120,8 +120,9 @@ async function AdminConsoleContent() {
     createFallbackStats(flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 135);
 
   const flagshipRegistrations = await getRegistrationsAsync(flagshipSlug);
-  const recentRegistrations = flagshipRegistrations.slice(0, 5);
-  const velocityStats = computeVelocityStats(flagshipRegistrations);
+  const activeFlagshipRegistrations = flagshipRegistrations.filter((r) => r.status !== "cancelled");
+  const recentRegistrations = activeFlagshipRegistrations.slice(0, 5);
+  const velocityStats = computeVelocityStats(activeFlagshipRegistrations);
 
   // Group events into active vs historical
   const activeEventsList = allEvents.filter((e) => {
