@@ -391,11 +391,10 @@ export function EmailHub({
         <button
           type="button"
           onClick={() => setActiveTab("broadcast")}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "broadcast"
-              ? "bg-primary text-white shadow-xs"
-              : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
-          }`}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === "broadcast"
+            ? "bg-primary text-white shadow-xs"
+            : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
+            }`}
         >
           Broadcast Announcements ({targetCount} Attendees)
         </button>
@@ -403,11 +402,10 @@ export function EmailHub({
         <button
           type="button"
           onClick={() => setActiveTab("individual")}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "individual"
-              ? "bg-primary text-white shadow-xs"
-              : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
-          }`}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === "individual"
+            ? "bg-primary text-white shadow-xs"
+            : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
+            }`}
         >
           Individual Pass Resend
         </button>
@@ -415,11 +413,10 @@ export function EmailHub({
         <button
           type="button"
           onClick={() => setActiveTab("history")}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === "history"
-              ? "bg-primary text-white shadow-xs"
-              : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
-          }`}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === "history"
+            ? "bg-primary text-white shadow-xs"
+            : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
+            }`}
         >
           Dispatch History ({logs.length})
         </button>
@@ -441,11 +438,10 @@ export function EmailHub({
 
             {broadcastFeedback ? (
               <div
-                className={`p-3.5 rounded-xl text-xs font-semibold border ${
-                  broadcastFeedback.type === "success"
-                    ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-                    : "bg-rose-50 text-rose-900 border-rose-200"
-                }`}
+                className={`p-3.5 rounded-xl text-xs font-semibold border ${broadcastFeedback.type === "success"
+                  ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                  : "bg-rose-50 text-rose-900 border-rose-200"
+                  }`}
               >
                 {broadcastFeedback.text}
               </div>
@@ -462,11 +458,10 @@ export function EmailHub({
                     key={idx}
                     type="button"
                     onClick={() => handleSelectTemplate(idx)}
-                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer ${
-                      selectedTemplate === idx
-                        ? "bg-primary/10 border-primary text-primary"
-                        : "bg-surface border-border text-foreground hover:bg-surface-container"
-                    }`}
+                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer ${selectedTemplate === idx
+                      ? "bg-primary/10 border-primary text-primary"
+                      : "bg-surface border-border text-foreground hover:bg-surface-container"
+                      }`}
                   >
                     {tmpl.name}
                   </button>
@@ -921,9 +916,8 @@ export function EmailHub({
                         <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           {feedback ? (
                             <span
-                              className={`text-[11px] font-bold mr-2 ${
-                                feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
-                              }`}
+                              className={`text-[11px] font-bold mr-2 ${feedback.type === "success" ? "text-emerald-700" : "text-rose-600"
+                                }`}
                             >
                               {feedback.text}
                             </span>
@@ -1001,11 +995,10 @@ export function EmailHub({
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            log.type === "pass"
-                              ? "bg-purple-50 text-purple-700 border border-purple-200"
-                              : "bg-blue-50 text-blue-700 border border-blue-200"
-                          }`}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${log.type === "pass"
+                            ? "bg-purple-50 text-purple-700 border border-purple-200"
+                            : "bg-blue-50 text-blue-700 border border-blue-200"
+                            }`}
                         >
                           {log.type}
                         </span>
@@ -1025,13 +1018,12 @@ export function EmailHub({
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            log.status === "sent"
-                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                              : log.status === "simulated"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${log.status === "sent"
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : log.status === "simulated"
                               ? "bg-amber-50 text-amber-800 border border-amber-200"
                               : "bg-rose-50 text-rose-800 border border-rose-200"
-                          }`}
+                            }`}
                         >
                           {log.status === "simulated" ? "Simulated / Logged" : log.status}
                         </span>

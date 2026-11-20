@@ -227,29 +227,29 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
         typeof d.capacity === "number"
           ? d.capacity
           : typeof d.workshop?.capacity === "number"
-          ? d.workshop.capacity
-          : undefined;
+            ? d.workshop.capacity
+            : undefined;
 
       const workshop = d.workshop
         ? {
-            ...d.workshop,
-            ...(capacity !== undefined
-              ? {
-                  capacity,
-                  seatsText: `Limited to ${capacity} Seats`,
-                }
+          ...d.workshop,
+          ...(capacity !== undefined
+            ? {
+              capacity,
+              seatsText: `Limited to ${capacity} Seats`,
+            }
+            : {}),
+          ...(d.location ? { venueText: d.location } : {}),
+          ...(typeof d.registeredCount === "number"
+            ? { initialRegisteredCount: d.registeredCount }
+            : {}),
+          registrationConfig: {
+            ...(d.workshop.registrationConfig || {}),
+            ...(typeof d.isRegistrationOpen === "boolean"
+              ? { isOpen: d.isRegistrationOpen }
               : {}),
-            ...(d.location ? { venueText: d.location } : {}),
-            ...(typeof d.registeredCount === "number"
-              ? { initialRegisteredCount: d.registeredCount }
-              : {}),
-            registrationConfig: {
-              ...(d.workshop.registrationConfig || {}),
-              ...(typeof d.isRegistrationOpen === "boolean"
-                ? { isOpen: d.isRegistrationOpen }
-                : {}),
-            },
-          }
+          },
+        }
         : undefined;
 
       list.push({
@@ -294,29 +294,29 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
       typeof d.capacity === "number"
         ? d.capacity
         : typeof d.workshop?.capacity === "number"
-        ? d.workshop.capacity
-        : undefined;
+          ? d.workshop.capacity
+          : undefined;
 
     const workshop = d.workshop
       ? {
-          ...d.workshop,
-          ...(capacity !== undefined
-            ? {
-                capacity,
-                seatsText: `Limited to ${capacity} Seats`,
-              }
+        ...d.workshop,
+        ...(capacity !== undefined
+          ? {
+            capacity,
+            seatsText: `Limited to ${capacity} Seats`,
+          }
+          : {}),
+        ...(d.location ? { venueText: d.location } : {}),
+        ...(typeof d.registeredCount === "number"
+          ? { initialRegisteredCount: d.registeredCount }
+          : {}),
+        registrationConfig: {
+          ...(d.workshop.registrationConfig || {}),
+          ...(typeof d.isRegistrationOpen === "boolean"
+            ? { isOpen: d.isRegistrationOpen }
             : {}),
-          ...(d.location ? { venueText: d.location } : {}),
-          ...(typeof d.registeredCount === "number"
-            ? { initialRegisteredCount: d.registeredCount }
-            : {}),
-          registrationConfig: {
-            ...(d.workshop.registrationConfig || {}),
-            ...(typeof d.isRegistrationOpen === "boolean"
-              ? { isOpen: d.isRegistrationOpen }
-              : {}),
-          },
-        }
+        },
+      }
       : undefined;
 
     return {
@@ -389,8 +389,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       typeof eventData?.capacity === "number"
         ? eventData.capacity
         : typeof eventData?.workshop?.capacity === "number"
-        ? eventData.workshop.capacity
-        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
+          ? eventData.workshop.capacity
+          : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
     const isRegistrationOpen =
       eventData?.isRegistrationOpen ??
       eventData?.is_registration_open ??
@@ -424,8 +424,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       const days: number[] = Array.isArray(data.checkedInDays)
         ? data.checkedInDays
         : data.checkedIn
-        ? [1]
-        : [];
+          ? [1]
+          : [];
       days.forEach((d) => {
         dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
       });
@@ -476,8 +476,8 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       slug === "dev-to-cloud"
         ? Math.max(135, rawCapacity)
         : rawCapacity === 120 && totalRegistered >= rawCapacity
-        ? Math.max(rawCapacity, 135)
-        : rawCapacity;
+          ? Math.max(rawCapacity, 135)
+          : rawCapacity;
 
     const remaining = Math.max(0, capacity - totalRegistered);
     const percentFilled =
@@ -554,14 +554,14 @@ export async function getFirestoreRegistrations(
         checkedInDays: Array.isArray(d.checkedInDays)
           ? d.checkedInDays
           : d.checkedIn
-          ? [1]
-          : [],
+            ? [1]
+            : [],
         checkIns:
           typeof d.checkIns === "object" && d.checkIns !== null
             ? d.checkIns
             : d.checkedIn && d.checkedInAt
-            ? { 1: d.checkedInAt }
-            : {},
+              ? { 1: d.checkedInAt }
+              : {},
         createdAt: d.createdAt || new Date().toISOString(),
       });
     });
@@ -657,16 +657,16 @@ export async function createFirestoreRegistration(
 
       const eventData = eventDoc.data();
       const rawCapacity =
-      typeof eventData?.capacity === "number"
-        ? eventData.capacity
-        : typeof eventData?.workshop?.capacity === "number"
-        ? eventData.workshop.capacity
-        : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
+        typeof eventData?.capacity === "number"
+          ? eventData.capacity
+          : typeof eventData?.workshop?.capacity === "number"
+            ? eventData.workshop.capacity
+            : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
       const isRegistrationOpen = Boolean(
         eventData?.isRegistrationOpen ??
-          eventData?.is_registration_open ??
-          defaultMatch?.workshop?.registrationConfig?.isOpen ??
-          true
+        eventData?.is_registration_open ??
+        defaultMatch?.workshop?.registrationConfig?.isOpen ??
+        true
       );
 
       if (!isRegistrationOpen) {
@@ -702,8 +702,8 @@ export async function createFirestoreRegistration(
         eventSlug === "dev-to-cloud"
           ? Math.max(135, rawCapacity)
           : rawCapacity === 120 && currentCount >= rawCapacity
-          ? Math.max(rawCapacity, 135)
-          : rawCapacity;
+            ? Math.max(rawCapacity, 135)
+            : rawCapacity;
 
       if (currentCount >= effectiveCapacity) {
         return {
@@ -930,14 +930,14 @@ export async function checkInFirestoreAttendee(
     const existingDays: number[] = Array.isArray(data.checkedInDays)
       ? data.checkedInDays
       : data.checkedIn
-      ? [1]
-      : [];
+        ? [1]
+        : [];
     const existingCheckIns: Record<number, string> =
       typeof data.checkIns === "object" && data.checkIns !== null
         ? data.checkIns
         : data.checkedIn && data.checkedInAt
-        ? { 1: data.checkedInAt }
-        : {};
+          ? { 1: data.checkedInAt }
+          : {};
 
     const targetDay = day !== undefined && day >= 1 ? day : 1;
 
