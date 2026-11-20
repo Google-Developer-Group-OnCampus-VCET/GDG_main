@@ -18,17 +18,6 @@ const VERIFIED_AT = "2026-10-29";
 
 export const team: TeamMember[] = [
   {
-    id: "jatush-hingu",
-    name: "Jatush Hingu",
-    role: "GDGoC Organizer",
-    photo: "/images/team/jatush-hingu.jpg",
-    profileUrl: "https://gdg.community.dev/u/m8fsjk/",
-    sourceUrl: CHAPTER_PAGE_URL,
-    lastVerifiedAt: VERIFIED_AT,
-    transcribedFrom: TRANSCRIBED_FROM,
-    transcribedAt: TRANSCRIBED_AT,
-  },
-  {
     id: "dhruv-jain",
     name: "Dhruv Jain",
     role: "GDGoC Organizer",
