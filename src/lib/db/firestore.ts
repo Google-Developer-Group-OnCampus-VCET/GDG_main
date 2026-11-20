@@ -691,16 +691,11 @@ export async function createFirestoreRegistration(
         }
       }
 
-      // 3. Determine currentCount: O(1) from eventData.registeredCount, else bootstrap once
-      let currentCount: number;
-      if (typeof eventData?.registeredCount === "number") {
-        currentCount = eventData.registeredCount;
-      } else {
-        const regsSnap = await transaction.get(
-          db.collection("registrations").where("eventSlug", "==", eventSlug)
-        );
-        currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
-      }
+      // 3. Determine currentCount: always count actual active uncancelled registrations to prevent counter drift
+      const regsSnap = await transaction.get(
+        db.collection("registrations").where("eventSlug", "==", eventSlug)
+      );
+      const currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
 
       // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
       const effectiveCapacity =

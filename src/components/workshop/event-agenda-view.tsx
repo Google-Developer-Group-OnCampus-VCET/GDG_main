@@ -15,7 +15,12 @@ interface EventAgendaViewProps {
 }
 
 export function EventAgendaView({ event, workshop, stats }: EventAgendaViewProps) {
-  const isFilled = (stats ? (stats.remaining !== undefined && stats.remaining <= 0) || stats.isOpen === false : false);
+  const isExplicitlyClosed =
+    (stats as { isRegistrationOpen?: boolean } | undefined)?.isRegistrationOpen === false ||
+    event.isRegistrationOpen === false ||
+    workshop.registrationConfig?.isOpen === false;
+  const isFilled =
+    (stats?.remaining !== undefined && stats.remaining <= 0) || isExplicitlyClosed;
   const availableDays = Array.from(new Set(workshop.agenda.map((s) => s.day))).sort((a, b) => a - b);
   const initialDay = availableDays.length > 0 ? availableDays[0] : 1;
   const [activeDay, setActiveDay] = useState<number>(initialDay);

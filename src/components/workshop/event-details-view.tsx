@@ -24,7 +24,11 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
   const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
   const remaining = stats?.remaining ?? Math.max(0, capacity - totalRegistered);
   const percentFilled = stats?.percentFilled ?? Math.round((totalRegistered / capacity) * 100);
-  const isFilled = remaining <= 0 || (stats as { isOpen?: boolean } | undefined)?.isOpen === false;
+  const isExplicitlyClosed =
+    (stats as { isRegistrationOpen?: boolean } | undefined)?.isRegistrationOpen === false ||
+    event.isRegistrationOpen === false ||
+    workshop.registrationConfig?.isOpen === false;
+  const isFilled = remaining <= 0 || isExplicitlyClosed;
 
   const faqCategories = ["All", ...Array.from(new Set(workshop.faq.map((f) => f.category ?? "General")))];
 

@@ -15,6 +15,7 @@ interface EventRegistrationViewProps {
     remaining: number;
     percentFilled: number;
     isOpen: boolean;
+    isRegistrationOpen?: boolean;
   };
 }
 
@@ -24,12 +25,19 @@ export function EventRegistrationView({
   stats,
 }: EventRegistrationViewProps) {
   const capacity = stats?.capacity ?? event.capacity ?? workshop.capacity;
-  const isFilled = (stats ? stats.remaining <= 0 || stats.isOpen === false : false);
+  const totalRegistered =
+    stats?.totalRegistered ?? event.registeredCount ?? workshop.initialRegisteredCount ?? 0;
+  const initialRemaining = stats?.remaining ?? Math.max(0, capacity - totalRegistered);
+  const [remainingSeats, setRemainingSeats] = useState(initialRemaining);
+
+  const isExplicitlyClosed =
+    stats?.isRegistrationOpen === false ||
+    event.isRegistrationOpen === false ||
+    workshop.registrationConfig?.isOpen === false;
+
+  const isFilled = remainingSeats <= 0 || isExplicitlyClosed;
+  const isRegistrationOpen = remainingSeats > 0 && !isExplicitlyClosed;
   const seatsText = isFilled ? "Seats Are Filled" : "Limited Seats Available";
-  const [remainingSeats, setRemainingSeats] = useState(
-    stats?.remaining ?? Math.max(0, capacity - workshop.initialRegisteredCount)
-  );
-  const isRegistrationOpen = (stats?.isOpen ?? workshop.registrationConfig.isOpen) && remainingSeats > 0 && !isFilled;
 
   // Form State — Streamlined & Mobile-Native
   const [fullName, setFullName] = useState("");
