@@ -409,6 +409,11 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
     const trackCounts: Record<string, number> = {};
     const yearCounts: Record<string, number> = {};
     const departmentCounts: Record<string, number> = {};
+    const experienceCounts: Record<string, number> = {};
+    const collegeFrequencies: Record<string, number> = {};
+    const registrationDates: Record<string, number> = {};
+    let vcetCount = 0;
+    let otherCount = 0;
 
     regsSnapshot.forEach((doc) => {
       const data = doc.data();
@@ -437,7 +442,34 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       if (data.department) {
         departmentCounts[data.department] = (departmentCounts[data.department] || 0) + 1;
       }
+      if (data.experienceLevel) {
+        experienceCounts[data.experienceLevel] =
+          (experienceCounts[data.experienceLevel] || 0) + 1;
+      }
+      if (data.college) {
+        const col = String(data.college).trim();
+        const isVcet =
+          col.toLowerCase().includes("vcet") ||
+          col.toLowerCase().includes("vidyavardhini");
+        if (isVcet) {
+          vcetCount++;
+        } else {
+          otherCount++;
+          collegeFrequencies[col] = (collegeFrequencies[col] || 0) + 1;
+        }
+      }
+      if (data.createdAt) {
+        const dateStr = String(data.createdAt).slice(0, 10);
+        registrationDates[dateStr] = (registrationDates[dateStr] || 0) + 1;
+      }
     });
+
+    const topColleges = Object.entries(collegeFrequencies)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([college, count]) => ({ college, count }));
+    const vcetPercent =
+      totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
 
     // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
     const capacity =
@@ -462,6 +494,14 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
       trackCounts,
       yearCounts,
       departmentCounts,
+      experienceCounts,
+      collegeStats: {
+        vcetCount,
+        otherCount,
+        vcetPercent,
+        topColleges,
+      },
+      registrationDates,
     };
   } catch (err) {
     console.warn("Firestore getEventStats failed:", (err as Error).message);

@@ -342,6 +342,14 @@ export interface EventStats {
   trackCounts: Record<string, number>;
   yearCounts: Record<string, number>;
   departmentCounts: Record<string, number>;
+  experienceCounts?: Record<string, number>;
+  collegeStats?: {
+    vcetCount: number;
+    otherCount: number;
+    vcetPercent: number;
+    topColleges: { college: string; count: number }[];
+  };
+  registrationDates?: Record<string, number>;
 }
 
 export function getEventStats(slug: string): EventStats {
@@ -423,6 +431,54 @@ export function getEventStats(slug: string): EventStats {
     departmentCounts[r.department] = r.count;
   }
 
+  const expRows = db
+    .prepare(
+      "SELECT experience_level, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY experience_level"
+    )
+    .all(slug) as { experience_level: string; count: number }[];
+  const experienceCounts: Record<string, number> = {};
+  for (const r of expRows) {
+    if (r.experience_level) experienceCounts[r.experience_level] = r.count;
+  }
+
+  const collegeRows = db
+    .prepare(
+      "SELECT college, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY college ORDER BY count DESC"
+    )
+    .all(slug) as { college: string; count: number }[];
+
+  let vcetCount = 0;
+  let otherCount = 0;
+  const topColleges: { college: string; count: number }[] = [];
+
+  for (const r of collegeRows) {
+    const colName = r.college?.trim() || "Unknown";
+    const isVcet =
+      colName.toLowerCase().includes("vcet") ||
+      colName.toLowerCase().includes("vidyavardhini");
+    if (isVcet) {
+      vcetCount += r.count;
+    } else {
+      otherCount += r.count;
+      if (topColleges.length < 5) {
+        topColleges.push({ college: colName, count: r.count });
+      }
+    }
+  }
+
+  const vcetPercent =
+    totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
+
+  const dateRows = db
+    .prepare(
+      "SELECT SUBSTR(created_at, 1, 10) as reg_date, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY reg_date ORDER BY reg_date ASC"
+    )
+    .all(slug) as { reg_date: string; count: number }[];
+  const registrationDates: Record<string, number> = {};
+  for (const r of dateRows) {
+    if (r.reg_date) registrationDates[r.reg_date] = r.count;
+  }
+
   // Auto-peak expansion: if initial capacity (e.g. 120) is reached, internally expand peak to 135
   const capacity =
     (slug === "dev-to-cloud" || rawCapacity === 120) && totalRegistered >= rawCapacity
@@ -446,6 +502,14 @@ export function getEventStats(slug: string): EventStats {
     trackCounts,
     yearCounts,
     departmentCounts,
+    experienceCounts,
+    collegeStats: {
+      vcetCount,
+      otherCount,
+      vcetPercent,
+      topColleges,
+    },
+    registrationDates,
   };
 }
 
