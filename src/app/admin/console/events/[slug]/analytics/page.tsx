@@ -49,7 +49,7 @@ async function AdminAnalyticsContent({ slug }: { slug: string }) {
       <AdminHeader currentTab="analytics" eventSlug={slug} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <AnalyticsView slug={slug} eventTitle={event.title} stats={stats} />
+        <AnalyticsView slug={slug} eventTitle={event.title} stats={stats} event={event} />
       </main>
     </div>
   );
