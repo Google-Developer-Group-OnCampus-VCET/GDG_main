@@ -31,7 +31,7 @@ async function AdminAnalyticsContent({ slug }: { slug: string }) {
   try {
     stats = await getEventStatsAsync(slug);
   } catch {
-    const fallbackCap = event.capacity ?? event.workshop?.capacity ?? 120;
+    const fallbackCap = event.capacity ?? event.workshop?.capacity ?? 135;
     stats = {
       totalRegistered: 0,
       capacity: fallbackCap,

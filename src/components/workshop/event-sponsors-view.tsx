@@ -10,7 +10,7 @@ interface EventSponsorsViewProps {
 }
 
 export function EventSponsorsView({ event, workshop }: EventSponsorsViewProps) {
-  const capacity = event.capacity ?? workshop.capacity ?? 120;
+  const capacity = event.capacity ?? workshop.capacity ?? 135;
   const [inquiryModalOpen, setInquiryModalOpen] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [partnerEmail, setPartnerEmail] = useState("");

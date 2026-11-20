@@ -180,8 +180,8 @@ export function ChapterEventsDirectory({
           {displayedEvents.map((e) => {
             const stats = statsBySlug[e.slug] ?? {
               totalRegistered: 0,
-              capacity: e.capacity ?? 120,
-              remaining: e.capacity ?? 120,
+              capacity: e.capacity ?? 135,
+              remaining: e.capacity ?? 135,
               percentFilled: 0,
               isOpen: true,
               checkedInCount: 0,
