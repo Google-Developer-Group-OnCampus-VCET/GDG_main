@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isAdminRequestAuthenticated } from "@/lib/auth";
-import { checkInAttendeeAsync } from "@/lib/db";
+import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
+import { checkInAttendeeAsync, logAuditEventAsync } from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(
@@ -53,10 +53,35 @@ export async function POST(
     }
 
     const day = typeof body.day === "number" && !isNaN(body.day) && body.day >= 1 ? Math.floor(body.day) : undefined;
+    const role = await getAdminRoleFromRequest(request);
     const result = await checkInAttendeeAsync(slug, body.referenceId.trim(), day);
 
     if (!result.success) {
       const isAlreadyCheckedIn = result.message.includes("ALREADY checked in");
+
+      if (isAlreadyCheckedIn) {
+        await logAuditEventAsync({
+          action: "CHECK_IN_DUPLICATE_BLOCKED",
+          actorRole: role || "volunteer",
+          actorIdentifier:
+            role === "volunteer"
+              ? "Volunteer Desk"
+              : role === "core"
+              ? "Core Member"
+              : "Master Admin",
+          ipAddress: ip,
+          userAgent: request.headers.get("user-agent") || undefined,
+          eventSlug: slug,
+          details: {
+            referenceId: body.referenceId.trim(),
+            day: day ?? 1,
+            attendeeName: result.registration?.fullName,
+            attendeeEmail: result.registration?.email,
+            reason: result.message,
+          },
+        });
+      }
+
       return NextResponse.json(
         {
           error: isAlreadyCheckedIn ? "ALREADY_CHECKED_IN" : "CHECK_IN_FAILED",
@@ -66,6 +91,28 @@ export async function POST(
         { status: isAlreadyCheckedIn ? 409 : 404 }
       );
     }
+
+    await logAuditEventAsync({
+      action: "ATTENDEE_CHECK_IN",
+      actorRole: role || "volunteer",
+      actorIdentifier:
+        role === "volunteer"
+          ? "Volunteer Desk"
+          : role === "core"
+          ? "Core Member"
+          : "Master Admin",
+      ipAddress: ip,
+      userAgent: request.headers.get("user-agent") || undefined,
+      eventSlug: slug,
+      details: {
+        referenceId: body.referenceId.trim(),
+        day: day ?? 1,
+        attendeeName: result.registration?.fullName,
+        attendeeEmail: result.registration?.email,
+        college: result.registration?.college,
+        track: result.registration?.track,
+      },
+    });
 
     return NextResponse.json({
       success: true,

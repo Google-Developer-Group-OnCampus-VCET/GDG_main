@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
-import { createEventAsync, getAllEventsAsync } from "@/lib/db";
+import { createEventAsync, getAllEventsAsync, logAuditEventAsync } from "@/lib/db";
+import { getClientIp } from "@/lib/rate-limit";
 import type { EventInput } from "@/types";
 
 export async function GET(request: Request) {
@@ -69,6 +70,20 @@ export async function POST(request: Request) {
         { status: isDuplicate ? 409 : 400 }
       );
     }
+
+    await logAuditEventAsync({
+      action: "EVENT_CREATE",
+      actorRole: role || "admin",
+      actorIdentifier: "Master Admin",
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent") || undefined,
+      eventSlug: result.event?.slug || body.slug,
+      details: {
+        title: body.title,
+        capacity: body.capacity,
+        startsAt: body.startsAt,
+      },
+    });
 
     return NextResponse.json(
       {

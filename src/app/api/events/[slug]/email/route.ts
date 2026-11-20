@@ -6,14 +6,15 @@ import {
   getRegistrationByReference,
   getRegistrationsAsync,
   getEmailLogsAsync,
+  logAuditEventAsync,
   logEmailRecordAsync,
 } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import {
   sendAttendeePassEmail,
   sendEmail,
   generateAnnouncementEmailHtml,
 } from "@/lib/email";
-import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { EmailLog } from "@/types";
 
 export async function GET(
@@ -281,6 +282,22 @@ export async function POST(
       };
 
       await logEmailRecordAsync(logRecord);
+
+      await logAuditEventAsync({
+        action: "EMAIL_BROADCAST",
+        actorRole: role || "admin",
+        actorIdentifier: "Master Admin",
+        ipAddress: getClientIp(request),
+        userAgent: request.headers.get("user-agent") || undefined,
+        eventSlug: slug,
+        details: {
+          subject,
+          type: "announcement",
+          recipientCount: recipientsList.length,
+          simulated: isSimulated,
+          status: logRecord.status,
+        },
+      });
 
       return NextResponse.json({
         success: true,

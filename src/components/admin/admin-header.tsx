@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email";
+  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit";
   eventSlug?: string;
 }
 
@@ -118,6 +118,18 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             >
               Email &amp; Broadcast
             </Link>
+            {sessionRole !== "volunteer" ? (
+              <Link
+                href={`/admin/console/events/${eventSlug}/audit`}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  currentTab === "audit"
+                    ? "bg-primary text-on-primary font-bold shadow-xs"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+              >
+                Audit Trail
+              </Link>
+            ) : null}
           </nav>
         ) : null}
 
@@ -224,6 +236,18 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
           >
             Email
           </Link>
+          {sessionRole !== "volunteer" ? (
+            <Link
+              href={`/admin/console/events/${eventSlug}/audit`}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                currentTab === "audit"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+              }`}
+            >
+              Audit Trail
+            </Link>
+          ) : null}
           <Link
             href={`/events/${eventSlug}`}
             className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium text-primary hover:text-primary-hover bg-white border border-border/50"

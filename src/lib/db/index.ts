@@ -3,6 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
+  AuditAction,
+  AuditActorRole,
+  AuditLogEntry,
   ChapterEvent,
   EmailLog,
   EventFormat,
@@ -27,6 +30,8 @@ import {
   seedFirestoreInitialEvents,
   logFirestoreEmail,
   getFirestoreEmailLogs,
+  logFirestoreAudit,
+  getFirestoreAuditLogs,
   slugify,
 } from "./firestore";
 
@@ -139,6 +144,21 @@ export function getDatabase(): DatabaseSync {
       preview_text TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_email_logs_event ON email_logs(event_slug);
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY,
+      action TEXT NOT NULL,
+      actor_role TEXT NOT NULL,
+      actor_identifier TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      event_slug TEXT,
+      details TEXT,
+      timestamp TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_event ON audit_logs(event_slug);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_time ON audit_logs(timestamp);
   `);
 
   try {
@@ -1354,6 +1374,115 @@ export async function getEmailLogsAsync(eventSlug: string): Promise<EmailLog[]> 
   }
   return getEmailLogs(eventSlug);
 }
+
+export function logAuditRecord(entry: AuditLogEntry): void {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT OR REPLACE INTO audit_logs (
+      id, action, actor_role, actor_identifier, ip_address, user_agent, event_slug, details, timestamp
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    entry.id,
+    entry.action,
+    entry.actorRole,
+    entry.actorIdentifier ?? null,
+    entry.ipAddress ?? null,
+    entry.userAgent ?? null,
+    entry.eventSlug ?? null,
+    JSON.stringify(entry.details || {}),
+    entry.timestamp
+  );
+}
+
+export function getAuditRecords(options?: {
+  eventSlug?: string;
+  action?: string;
+  limit?: number;
+}): AuditLogEntry[] {
+  const db = getDatabase();
+  const maxLimit = Math.min(options?.limit ?? 100, 200);
+
+  let query = "SELECT * FROM audit_logs";
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (options?.eventSlug && options.eventSlug !== "all") {
+    conditions.push("event_slug = ?");
+    params.push(options.eventSlug);
+  }
+  if (options?.action && options.action !== "all") {
+    conditions.push("action = ?");
+    params.push(options.action);
+  }
+
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  query += " ORDER BY timestamp DESC LIMIT ?";
+  params.push(maxLimit);
+
+  const rows = db.prepare(query).all(...params) as Record<string, unknown>[];
+
+  return rows.map((r) => {
+    let details: Record<string, unknown> = {};
+    try {
+      details = typeof r.details === "string" ? JSON.parse(r.details) : {};
+    } catch {
+      details = {};
+    }
+    return {
+      id: r.id as string,
+      action: r.action as AuditAction,
+      actorRole: r.actor_role as AuditActorRole,
+      actorIdentifier: (r.actor_identifier as string) || undefined,
+      ipAddress: (r.ip_address as string) || undefined,
+      userAgent: (r.user_agent as string) || undefined,
+      eventSlug: (r.event_slug as string) || undefined,
+      details,
+      timestamp: r.timestamp as string,
+    };
+  });
+}
+
+export async function logAuditEventAsync(
+  entry: Omit<AuditLogEntry, "id" | "timestamp"> & { id?: string; timestamp?: string }
+): Promise<AuditLogEntry> {
+  const fullEntry: AuditLogEntry = {
+    ...entry,
+    id: entry.id || crypto.randomUUID(),
+    timestamp: entry.timestamp || new Date().toISOString(),
+  };
+
+  try {
+    logAuditRecord(fullEntry);
+  } catch (err) {
+    console.warn("SQLite logAuditRecord failed:", (err as Error).message);
+  }
+
+  try {
+    await logFirestoreAudit(fullEntry);
+  } catch (err) {
+    console.warn("Firestore logFirestoreAudit failed:", (err as Error).message);
+  }
+
+  return fullEntry;
+}
+
+export async function getAuditLogsAsync(options?: {
+  eventSlug?: string;
+  action?: string;
+  limit?: number;
+}): Promise<AuditLogEntry[]> {
+  try {
+    const fsLogs = await getFirestoreAuditLogs(options);
+    if (fsLogs && fsLogs.length > 0) return fsLogs;
+  } catch (err) {
+    console.warn("Firestore getAuditLogs failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getAuditRecords(options);
+}
+
 
 
 

@@ -258,3 +258,28 @@ export interface EmailLog {
   sender?: string;
   previewText?: string;
 }
+
+export type AuditAction =
+  | "AUTH_LOGIN"
+  | "AUTH_LOGIN_FAILED"
+  | "ATTENDEE_CHECK_IN"
+  | "CHECK_IN_DUPLICATE_BLOCKED"
+  | "REGISTRATION_CREATE"
+  | "EVENT_UPDATE"
+  | "EVENT_CREATE"
+  | "EMAIL_BROADCAST";
+
+export type AuditActorRole = "admin" | "core" | "volunteer" | "attendee" | "system";
+
+export interface AuditLogEntry {
+  id: string;
+  action: AuditAction;
+  actorRole: AuditActorRole;
+  actorIdentifier?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  eventSlug?: string;
+  details: Record<string, unknown>;
+  timestamp: string;
+}
+

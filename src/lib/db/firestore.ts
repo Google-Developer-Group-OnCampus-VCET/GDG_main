@@ -3,6 +3,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import type {
+  AuditLogEntry,
   ChapterEvent,
   EmailLog,
   EventInput,
@@ -886,3 +887,52 @@ export async function getFirestoreEmailLogs(eventSlug: string): Promise<EmailLog
     return null;
   }
 }
+
+export async function logFirestoreAudit(entry: AuditLogEntry): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+  try {
+    await db.collection("audit_logs").doc(entry.id).set({
+      ...entry,
+      createdAt: entry.timestamp || new Date().toISOString(),
+    });
+    return true;
+  } catch (err) {
+    console.warn("Failed to write audit log to Firestore:", (err as Error).message);
+    return false;
+  }
+}
+
+export async function getFirestoreAuditLogs(options?: {
+  eventSlug?: string;
+  action?: string;
+  limit?: number;
+}): Promise<AuditLogEntry[] | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+  try {
+    const maxLimit = Math.min(options?.limit ?? 100, 200);
+    let query: FirebaseFirestore.Query = db.collection("audit_logs");
+
+    if (options?.eventSlug && options.eventSlug !== "all") {
+      query = query.where("eventSlug", "==", options.eventSlug);
+    }
+    if (options?.action && options.action !== "all") {
+      query = query.where("action", "==", options.action);
+    }
+
+    const snap = await query.limit(maxLimit).get();
+    const logs: AuditLogEntry[] = [];
+    snap.forEach((doc) => {
+      const d = doc.data() as AuditLogEntry;
+      logs.push(d);
+    });
+
+    logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return logs;
+  } catch (err) {
+    console.warn("Failed to fetch audit logs from Firestore:", (err as Error).message);
+    return null;
+  }
+}
+

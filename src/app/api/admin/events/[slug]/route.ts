@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
-import { getEventBySlugAsync, getEventStatsAsync, updateEventAsync } from "@/lib/db";
+import { getEventBySlugAsync, getEventStatsAsync, logAuditEventAsync, updateEventAsync } from "@/lib/db";
+import { getClientIp } from "@/lib/rate-limit";
 import type { EventFormat, EventTopic, EventUpdateInput } from "@/types";
 
 const VALID_FORMATS = new Set<EventFormat>(["in-person", "online", "hybrid"]);
@@ -194,6 +195,20 @@ export async function PATCH(
     }
 
     const stats = await getEventStatsAsync(slug);
+
+    await logAuditEventAsync({
+      action: "EVENT_UPDATE",
+      actorRole: role || "admin",
+      actorIdentifier: "Master Admin",
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent") || undefined,
+      eventSlug: slug,
+      details: {
+        updatedFields: Object.keys(validation.data),
+        changes: validation.data,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Event updated successfully.",

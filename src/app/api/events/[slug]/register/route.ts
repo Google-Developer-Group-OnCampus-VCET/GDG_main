@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRegistrationAsync } from "@/lib/db";
+import { createRegistrationAsync, logAuditEventAsync } from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { RegistrationInput } from "@/types";
 
@@ -56,6 +56,21 @@ export async function POST(
         { status: statusMap[result.error] ?? 400 }
       );
     }
+
+    await logAuditEventAsync({
+      action: "REGISTRATION_CREATE",
+      actorRole: "attendee",
+      actorIdentifier: body.email,
+      ipAddress: ip,
+      userAgent: request.headers.get("user-agent") || undefined,
+      eventSlug: slug,
+      details: {
+        referenceId: result.registration.referenceId,
+        fullName: body.fullName,
+        college: body.college,
+        track: body.track,
+      },
+    });
 
     return NextResponse.json(
       {

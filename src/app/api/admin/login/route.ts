@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth";
 import { getAdminAuth } from "@/lib/firebase/admin";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { logAuditEventAsync } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -112,6 +113,15 @@ export async function POST(request: Request) {
         role = cred.role;
         authMethod = cred.authMethod;
       } else {
+        await logAuditEventAsync({
+          action: "AUTH_LOGIN_FAILED",
+          actorRole: "system",
+          actorIdentifier: email || "unknown",
+          ipAddress: ip,
+          userAgent: request.headers.get("user-agent") || undefined,
+          details: { reason: "INVALID_CREDENTIALS" },
+        });
+
         return NextResponse.json(
           {
             error: "INVALID_CREDENTIALS",
@@ -170,6 +180,19 @@ export async function POST(request: Request) {
       sameSite: cookieOptions.sameSite,
       path: cookieOptions.path,
       maxAge: cookieOptions.maxAge,
+    });
+
+    await logAuditEventAsync({
+      action: "AUTH_LOGIN",
+      actorRole: role,
+      actorIdentifier: email || (role === "admin" ? "Master Admin" : role === "core" ? "Core Member" : "Volunteer Desk"),
+      ipAddress: ip,
+      userAgent: request.headers.get("user-agent") || undefined,
+      details: {
+        role,
+        authMethod,
+        redirectUrl: defaultRedirect,
+      },
     });
 
     return response;
