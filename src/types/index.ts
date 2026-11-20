@@ -264,12 +264,11 @@ export type AuditAction =
   | "AUTH_LOGIN_FAILED"
   | "ATTENDEE_CHECK_IN"
   | "CHECK_IN_DUPLICATE_BLOCKED"
-  | "REGISTRATION_CREATE"
   | "EVENT_UPDATE"
   | "EVENT_CREATE"
   | "EMAIL_BROADCAST";
 
-export type AuditActorRole = "admin" | "core" | "volunteer" | "attendee" | "system";
+export type AuditActorRole = "admin" | "core" | "volunteer" | "system";
 
 export interface AuditLogEntry {
   id: string;

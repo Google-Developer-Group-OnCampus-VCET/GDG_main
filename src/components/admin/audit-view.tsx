@@ -41,13 +41,6 @@ const ACTION_CONFIG: Record<
     text: "text-rose-800",
     border: "border-rose-200",
   },
-  REGISTRATION_CREATE: {
-    label: "Registration Submitted",
-    icon: "📝",
-    bg: "bg-teal-50",
-    text: "text-teal-800",
-    border: "border-teal-200",
-  },
   EVENT_UPDATE: {
     label: "Settings Updated",
     icon: "⚙️",
@@ -92,12 +85,6 @@ const ROLE_BADGES: Record<
     bg: "bg-emerald-50",
     text: "text-emerald-800",
     border: "border-emerald-200",
-  },
-  attendee: {
-    label: "👤 Attendee",
-    bg: "bg-slate-50",
-    text: "text-slate-700",
-    border: "border-slate-200",
   },
   system: {
     label: "⚙️ System Engine",
@@ -197,7 +184,7 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
             Security &amp; Operations Audit Trail
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-            Real-time immutable log of admin logins, attendee check-ins, registrations, and setting updates for{" "}
+            Real-time immutable log of admin logins, operator check-ins, broadcasts, and setting updates for{" "}
             <span className="font-semibold text-slate-900">{eventTitle}</span>.
           </p>
         </div>
@@ -302,7 +289,6 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
             { id: "ATTENDEE_CHECK_IN", label: "Check-ins" },
             { id: "CHECK_IN_DUPLICATE_BLOCKED", label: "Duplicate Blocks" },
             { id: "AUTH_LOGIN", label: "Admin Sign-ins" },
-            { id: "REGISTRATION_CREATE", label: "Registrations" },
             { id: "EVENT_UPDATE", label: "Event Updates" },
             { id: "EMAIL_BROADCAST", label: "Broadcasts" },
           ].map((cat) => (
