@@ -1,8 +1,10 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getAllEventsAsync, getEventStatsAsync, type EventStats } from "@/lib/db";
 import { formatEventDateRange } from "@/lib/events";
+import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { ConsoleOverviewExport } from "@/components/admin/console-overview-export";
 import { EventStatusToggle } from "@/components/admin/event-status-toggle";
@@ -38,6 +40,7 @@ function isEventRegistrationOpen(stats?: EventStats): boolean {
 async function AdminConsoleContent() {
   await connection();
 
+  const role = await getAdminRoleFromCookies();
   const allEvents = await getAllEventsAsync();
   const statsEntries = await Promise.all(
     allEvents.map(async (e): Promise<[string, EventStats]> => {
@@ -56,9 +59,15 @@ async function AdminConsoleContent() {
     allEvents.find((e) => Boolean(e.workshop)) ??
     allEvents[0];
   const flagshipSlug = flagshipWorkshop?.slug ?? "dev-to-cloud";
+
+  // Role Rule: Volunteer Desk is restricted to Registrations, Check-in, and Analytics only (no Dashboard)
+  if (role === "volunteer") {
+    redirect(`/admin/console/events/${flagshipSlug}/check-in`);
+  }
+
   const flagshipStats =
     (flagshipWorkshop ? statsBySlug.get(flagshipWorkshop.slug) : undefined) ??
-    createFallbackStats(flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 120);
+    createFallbackStats(flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 135);
   const otherEventsList = allEvents.filter((e) => e.slug !== flagshipSlug);
 
   const totalRegisteredAll = statsEntries.reduce((sum, [, s]) => sum + s.totalRegistered, 0);
@@ -68,7 +77,7 @@ async function AdminConsoleContent() {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="overview" eventSlug={flagshipSlug} />
+      <AdminHeader currentTab="overview" eventSlug={flagshipSlug} initialRole={role} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8">
         {/* Page Heading */}
@@ -82,16 +91,22 @@ async function AdminConsoleContent() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/admin/console/events/new"
-              className="inline-flex items-center gap-2 bg-primary text-on-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold hover:bg-primary-hover shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>Create Event</span>
-            </Link>
+            {role === "admin" ? (
+              <Link
+                href="/admin/console/events/new"
+                className="inline-flex items-center gap-2 bg-primary text-on-primary px-3.5 py-1.5 rounded-xl text-xs font-semibold hover:bg-primary-hover shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Create Event</span>
+              </Link>
+            ) : (
+              <span className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs">
+                <span>🛡️</span> Core Member (Read-Only)
+              </span>
+            )}
             <ConsoleOverviewExport events={allEvents} workshopStats={flagshipStats} />
             <span className="inline-flex items-center gap-1.5 bg-status-success/10 text-status-success px-3 py-1.5 rounded-xl text-xs font-semibold border border-status-success/20">
               <span className="w-2 h-2 rounded-full bg-status-success animate-pulse"></span>
@@ -162,11 +177,23 @@ async function AdminConsoleContent() {
                     <span className="px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant text-[11px] font-bold">
                       FLAGSHIP WORKSHOP
                     </span>
-                    <EventStatusToggle
-                      eventSlug={flagshipSlug}
-                      initialIsOpen={isEventRegistrationOpen(flagshipStats)}
-                      compact
-                    />
+                    {role === "admin" ? (
+                      <EventStatusToggle
+                        eventSlug={flagshipSlug}
+                        initialIsOpen={isEventRegistrationOpen(flagshipStats)}
+                        compact
+                      />
+                    ) : (
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                          isEventRegistrationOpen(flagshipStats)
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : "bg-slate-100 text-slate-600 border border-slate-200"
+                        }`}
+                      >
+                        {isEventRegistrationOpen(flagshipStats) ? "Open" : "Closed"}
+                      </span>
+                    )}
                   </div>
                   <h2 className="text-xl font-bold text-foreground mt-1.5">
                     {flagshipWorkshop.title}
@@ -189,13 +216,15 @@ async function AdminConsoleContent() {
                   <span className="material-symbols-outlined text-[16px] text-secondary">qr_code_scanner</span>
                   <span>Check-in</span>
                 </Link>
-                <Link
-                  href={`/admin/console/events/${flagshipSlug}/email`}
-                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-emerald-600">mail</span>
-                  <span>Email Hub</span>
-                </Link>
+                {role === "admin" ? (
+                  <Link
+                    href={`/admin/console/events/${flagshipSlug}/email`}
+                    className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-emerald-600">mail</span>
+                    <span>Email Hub</span>
+                  </Link>
+                ) : null}
                 <Link
                   href={`/admin/console/events/${flagshipSlug}/analytics`}
                   className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
@@ -203,12 +232,14 @@ async function AdminConsoleContent() {
                   <span className="material-symbols-outlined text-[16px] text-primary">bar_chart</span>
                   <span>Analytics</span>
                 </Link>
-                <Link
-                  href={`/admin/console/events/${flagshipSlug}/edit`}
-                  className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
-                >
-                  <span>Edit</span>
-                </Link>
+                {role === "admin" ? (
+                  <Link
+                    href={`/admin/console/events/${flagshipSlug}/edit`}
+                    className="inline-flex items-center justify-center gap-1.5 bg-surface-container text-foreground px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-surface-container-high transition-all border border-border text-center"
+                  >
+                    <span>Edit</span>
+                  </Link>
+                ) : null}
                 <Link
                   href={`/events/${flagshipSlug}/register`}
                   className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 bg-white text-primary px-3 sm:px-4 py-2 rounded-xl sm:rounded-full text-xs font-semibold hover:bg-primary-fixed/40 transition-all border border-border text-center"
@@ -299,11 +330,23 @@ async function AdminConsoleContent() {
                         <span className="text-foreground-muted"> / {eventStats.capacity}</span>
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <EventStatusToggle
-                          eventSlug={e.slug}
-                          initialIsOpen={eventIsOpen}
-                          compact
-                        />
+                        {role === "admin" ? (
+                          <EventStatusToggle
+                            eventSlug={e.slug}
+                            initialIsOpen={eventIsOpen}
+                            compact
+                          />
+                        ) : (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                              eventIsOpen
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                                : "bg-slate-100 text-slate-600 border border-slate-200"
+                            }`}
+                          >
+                            {eventIsOpen ? "Open" : "Closed"}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="inline-flex items-center gap-3">
@@ -325,12 +368,14 @@ async function AdminConsoleContent() {
                           >
                             Analytics
                           </Link>
-                          <Link
-                            href={`/admin/console/events/${e.slug}/edit`}
-                            className="text-foreground-muted hover:text-foreground font-semibold text-xs"
-                          >
-                            Edit
-                          </Link>
+                          {role === "admin" ? (
+                            <Link
+                              href={`/admin/console/events/${e.slug}/edit`}
+                              className="text-foreground-muted hover:text-foreground font-semibold text-xs"
+                            >
+                              Edit
+                            </Link>
+                          ) : null}
                           <Link
                             href={`/events/${e.slug}/register`}
                             className="text-foreground-muted hover:text-primary font-semibold inline-flex items-center gap-1 text-xs"

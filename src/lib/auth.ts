@@ -468,3 +468,26 @@ export function getAdminCookieOptions(): {
   };
 }
 
+/**
+ * Extracts and decodes the verified admin session payload directly from server component cookies.
+ */
+export async function getAdminSessionFromCookies(): Promise<AdminSessionPayload | null> {
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
+    return getAdminSessionPayload(token);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts the admin role directly from server component cookies.
+ */
+export async function getAdminRoleFromCookies(): Promise<AdminRole | null> {
+  const session = await getAdminSessionFromCookies();
+  return session?.role ?? null;
+}
+
+

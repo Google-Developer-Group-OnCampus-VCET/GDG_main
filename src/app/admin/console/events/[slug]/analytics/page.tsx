@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
 import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
@@ -44,9 +45,11 @@ async function AdminAnalyticsContent({ slug }: { slug: string }) {
     };
   }
 
+  const role = await getAdminRoleFromCookies();
+
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="analytics" eventSlug={slug} />
+      <AdminHeader currentTab="analytics" eventSlug={slug} initialRole={role} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AnalyticsView slug={slug} eventTitle={event.title} stats={stats} event={event} />

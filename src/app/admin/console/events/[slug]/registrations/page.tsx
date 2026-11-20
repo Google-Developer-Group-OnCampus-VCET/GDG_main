@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getEventBySlugAsync, getRegistrationsAsync, getEventStatsAsync } from "@/lib/db";
+import { getAdminRoleFromCookies } from "@/lib/auth";
 import type { RegistrationRecord } from "@/types";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
@@ -29,6 +30,8 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
+  const role = await getAdminRoleFromCookies();
+
   let registrations: RegistrationRecord[] = [];
   let stats;
   try {
@@ -46,7 +49,7 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="registrations" eventSlug={slug} />
+      <AdminHeader currentTab="registrations" eventSlug={slug} initialRole={role} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -70,31 +73,45 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
                 </span>
               </div>
             ) : null}
-            <EventStatusToggle eventSlug={slug} initialIsOpen={initialIsOpen} />
-            <Link
-              href={`/admin/console/events/${slug}/edit`}
-              className="inline-flex items-center gap-1.5 bg-white border border-border px-3.5 py-1.5 rounded-full text-xs font-semibold text-foreground hover:bg-surface-container transition-all"
-            >
-              <svg
-                className="w-3.5 h-3.5 text-foreground-muted"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-              </svg>
-              <span>Edit Event</span>
-            </Link>
+
+            {role === "admin" ? (
+              <>
+                <EventStatusToggle eventSlug={slug} initialIsOpen={initialIsOpen} />
+                <Link
+                  href={`/admin/console/events/${slug}/edit`}
+                  className="inline-flex items-center gap-1.5 bg-white border border-border px-3.5 py-1.5 rounded-full text-xs font-semibold text-foreground hover:bg-surface-container transition-all"
+                >
+                  <svg
+                    className="w-3.5 h-3.5 text-foreground-muted"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                  <span>Edit Event</span>
+                </Link>
+              </>
+            ) : role === "core" ? (
+              <span className="px-3.5 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs">
+                <span>🛡️</span> Core Member · Read-Only Roster
+              </span>
+            ) : (
+              <span className="px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold inline-flex items-center gap-1.5 shadow-2xs">
+                <span>📷</span> Volunteer Desk Active
+              </span>
+            )}
           </div>
         </div>
 
         <RegistrationsTable
           initialRegistrations={registrations}
           eventSlug={slug}
+          role={role}
         />
       </main>
     </div>

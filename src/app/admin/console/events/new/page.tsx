@@ -120,7 +120,7 @@ export default function CreateEventPage() {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="overview" />
+      <AdminHeader currentTab="overview" initialRole="admin" />
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
         {/* Navigation Breadcrumb */}

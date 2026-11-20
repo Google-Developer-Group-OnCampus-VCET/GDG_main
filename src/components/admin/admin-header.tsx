@@ -8,12 +8,19 @@ import { GdgLogo } from "@/components/gdg-logo";
 interface AdminHeaderProps {
   currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit";
   eventSlug?: string;
+  initialRole?: "admin" | "core" | "volunteer" | null;
 }
 
-export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud" }: AdminHeaderProps) {
+export function AdminHeader({
+  currentTab = "overview",
+  eventSlug = "dev-to-cloud",
+  initialRole = null,
+}: AdminHeaderProps) {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [sessionRole, setSessionRole] = useState<"admin" | "core" | "volunteer" | null>(null);
+  const [sessionRole, setSessionRole] = useState<"admin" | "core" | "volunteer" | null>(
+    initialRole
+  );
 
   useEffect(() => {
     fetch("/api/admin/session")
@@ -37,11 +44,16 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
     }
   }
 
+  // Dynamic role-based navigation rules
+  const isVolunteer = sessionRole === "volunteer";
+  const isMaster = sessionRole === "admin";
+  const homeHref = isVolunteer ? `/admin/console/events/${eventSlug}/check-in` : "/admin/console";
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white shadow-xs">
       <div className="mx-auto flex h-16 max-w-(--container-max) items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <Link href="/admin/console" className="flex items-center gap-2">
+          <Link href={homeHref} className="flex items-center gap-2">
             <GdgLogo className="h-5 sm:h-6" />
             <span className="text-sm font-bold text-foreground">
               Chapter Admin
@@ -68,16 +80,21 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
 
         {eventSlug ? (
           <nav className="hidden md:flex items-center gap-1 bg-surface-container-low px-2 py-1 rounded-full border border-border/50">
-            <Link
-              href="/admin/console"
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                currentTab === "overview"
-                  ? "bg-primary text-on-primary font-bold shadow-xs"
-                  : "text-foreground-muted hover:text-foreground"
-              }`}
-            >
-              Dashboard
-            </Link>
+            {/* Dashboard: Hidden for Volunteer Desk */}
+            {!isVolunteer ? (
+              <Link
+                href="/admin/console"
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  currentTab === "overview"
+                    ? "bg-primary text-on-primary font-bold shadow-xs"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+              >
+                Dashboard
+              </Link>
+            ) : null}
+
+            {/* Registrations: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/registrations`}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
@@ -88,6 +105,8 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             >
               Registrations
             </Link>
+
+            {/* Check-in Terminal: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/check-in`}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
@@ -98,6 +117,8 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             >
               Check-in Terminal
             </Link>
+
+            {/* Analytics: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/analytics`}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
@@ -108,17 +129,23 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
             >
               Analytics
             </Link>
-            <Link
-              href={`/admin/console/events/${eventSlug}/email`}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                currentTab === "email"
-                  ? "bg-primary text-on-primary font-bold shadow-xs"
-                  : "text-foreground-muted hover:text-foreground"
-              }`}
-            >
-              Email &amp; Broadcast
-            </Link>
-            {sessionRole !== "volunteer" ? (
+
+            {/* Email & Broadcast: Visible ONLY to Master Admin */}
+            {isMaster ? (
+              <Link
+                href={`/admin/console/events/${eventSlug}/email`}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  currentTab === "email"
+                    ? "bg-primary text-on-primary font-bold shadow-xs"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+              >
+                Email &amp; Broadcast
+              </Link>
+            ) : null}
+
+            {/* Audit Trail: Visible ONLY to Master Admin */}
+            {isMaster ? (
               <Link
                 href={`/admin/console/events/${eventSlug}/audit`}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
@@ -186,16 +213,18 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
 
       {eventSlug ? (
         <div className="md:hidden border-t border-border/60 bg-surface-container-low/60 px-3 py-2 overflow-x-auto no-scrollbar flex items-center gap-1.5">
-          <Link
-            href="/admin/console"
-            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              currentTab === "overview"
-                ? "bg-primary text-on-primary font-bold shadow-xs"
-                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
-            }`}
-          >
-            Dashboard
-          </Link>
+          {!isVolunteer ? (
+            <Link
+              href="/admin/console"
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                currentTab === "overview"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+              }`}
+            >
+              Dashboard
+            </Link>
+          ) : null}
           <Link
             href={`/admin/console/events/${eventSlug}/registrations`}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -226,17 +255,19 @@ export function AdminHeader({ currentTab = "overview", eventSlug = "dev-to-cloud
           >
             Analytics
           </Link>
-          <Link
-            href={`/admin/console/events/${eventSlug}/email`}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              currentTab === "email"
-                ? "bg-primary text-on-primary font-bold shadow-xs"
-                : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
-            }`}
-          >
-            Email
-          </Link>
-          {sessionRole !== "volunteer" ? (
+          {isMaster ? (
+            <Link
+              href={`/admin/console/events/${eventSlug}/email`}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                currentTab === "email"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+              }`}
+            >
+              Email
+            </Link>
+          ) : null}
+          {isMaster ? (
             <Link
               href={`/admin/console/events/${eventSlug}/audit`}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${

@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { EventEditForm } from "@/components/admin/event-edit-form";
 import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
@@ -23,10 +24,17 @@ export async function generateMetadata({
 
 async function AdminEditEventContent({ slug }: { slug: string }) {
   await connection();
+
+  const role = await getAdminRoleFromCookies();
+  // Role Rule: Event editing is restricted strictly to Master Admin (Dev)
+  if (role !== "admin") {
+    redirect(`/admin/console/events/${slug}/analytics`);
+  }
+
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
-  let initialCapacity = event.capacity ?? event.workshop?.capacity ?? 120;
+  let initialCapacity = event.capacity ?? event.workshop?.capacity ?? 135;
   let initialIsOpen = true;
 
   try {
@@ -43,7 +51,7 @@ async function AdminEditEventContent({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="overview" eventSlug={slug} />
+      <AdminHeader currentTab="overview" eventSlug={slug} initialRole={role} />
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col gap-6">
         <EventEditForm

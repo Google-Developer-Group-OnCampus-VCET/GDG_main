@@ -1,7 +1,8 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getEventBySlugAsync, getAuditLogsAsync } from "@/lib/db";
+import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AuditView } from "@/components/admin/audit-view";
 import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
@@ -24,6 +25,13 @@ export async function generateMetadata({
 
 async function AdminAuditContent({ slug }: { slug: string }) {
   await connection();
+
+  const role = await getAdminRoleFromCookies();
+  // Role Rule: Audit Trail is restricted strictly to Master Admin (Dev)
+  if (role !== "admin") {
+    redirect(`/admin/console/events/${slug}/analytics`);
+  }
+
   const event = await getEventBySlugAsync(slug);
   if (!event) notFound();
 
@@ -37,7 +45,7 @@ async function AdminAuditContent({ slug }: { slug: string }) {
 
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
-      <AdminHeader currentTab="audit" eventSlug={slug} />
+      <AdminHeader currentTab="audit" eventSlug={slug} initialRole={role} />
 
       <main className="flex-1 max-w-(--container-max) w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <AuditView slug={slug} eventTitle={event.title} initialLogs={logs} />
