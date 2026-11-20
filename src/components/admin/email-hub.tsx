@@ -120,6 +120,7 @@ export function EmailHub({
 
   // Broadcast state
   const [audience, setAudience] = useState("all");
+  const [selectedIndividual, setSelectedIndividual] = useState<RegistrationRecord | null>(null);
   const [subject, setSubject] = useState(EMAIL_TEMPLATES[0].subject);
   const [message, setMessage] = useState(EMAIL_TEMPLATES[0].message);
   const [ctaText, setCtaText] = useState(EMAIL_TEMPLATES[0].ctaText);
@@ -144,7 +145,13 @@ export function EmailHub({
 
   // Calculate target audience size
   const targetCount = registrations.filter((r) => {
-    if (r.status === "cancelled") return false;
+    if (r.status === "cancelled" && !revokePasses) return false;
+    if (audience.startsWith("ref-")) {
+      return r.referenceId === audience.replace("ref-", "");
+    }
+    if (audience === "individual" && selectedIndividual) {
+      return r.referenceId === selectedIndividual.referenceId;
+    }
     if (audience === "all") return true;
     if (audience === "year-1" || audience === "1st-year") {
       return r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1");
@@ -170,6 +177,25 @@ export function EmailHub({
     }
     return true;
   }).length;
+
+  function handleComposeToIndividual(reg: RegistrationRecord) {
+    setSelectedIndividual(reg);
+    setAudience(`ref-${reg.referenceId}`);
+    setActiveTab("broadcast");
+
+    // If 1st year attendee, auto-load revocation notice preset
+    if (reg.yearOfStudy?.includes("1") || reg.yearOfStudy?.toLowerCase().includes("first")) {
+      const tmpl = EMAIL_TEMPLATES.find((t) => t.name.includes("1st Year"));
+      if (tmpl) {
+        setSubject(tmpl.subject);
+        setMessage(tmpl.message);
+        setCtaText(tmpl.ctaText);
+        setCtaUrl(tmpl.ctaUrl);
+        setIncludePassLink(false);
+        setRevokePasses(true);
+      }
+    }
+  }
 
   function handleSelectTemplate(idx: number) {
     setSelectedTemplate(idx);
@@ -428,6 +454,14 @@ export function EmailHub({
                     <optgroup label="Entire Cohort">
                       <option value="all">All Confirmed Attendees ({registrations.filter(r => r.status !== 'cancelled').length})</option>
                     </optgroup>
+                    <optgroup label="Single Individual">
+                      {selectedIndividual ? (
+                        <option value={`ref-${selectedIndividual.referenceId}`}>
+                          Selected: {selectedIndividual.fullName} ({selectedIndividual.email})
+                        </option>
+                      ) : null}
+                      <option value="individual">Search &amp; Pick Individual Attendee…</option>
+                    </optgroup>
                     <optgroup label="Academic Year Cohort">
                       <option value="year-1">First Year Students (1st Year)</option>
                       <option value="year-2">Second Year Students (2nd Year)</option>
@@ -447,6 +481,49 @@ export function EmailHub({
                     {targetCount} Recipients
                   </span>
                 </div>
+
+                {audience === "individual" ? (
+                  <div className="mt-2 p-3 bg-surface-container-low rounded-xl border border-border flex flex-col gap-2">
+                    <span className="text-xs font-semibold text-foreground">
+                      Search attendee by name, email, or pass ID:
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Type name, email, or pass ref to select..."
+                      onChange={(e) => {
+                        const q = e.target.value.toLowerCase().trim();
+                        if (!q) return;
+                        const match = registrations.find(
+                          (r) =>
+                            r.fullName.toLowerCase().includes(q) ||
+                            r.email.toLowerCase().includes(q) ||
+                            r.referenceId.toLowerCase().includes(q)
+                        );
+                        if (match) {
+                          setSelectedIndividual(match);
+                        }
+                      }}
+                      className="h-10 px-3 rounded-lg border border-border bg-white text-xs text-foreground focus:outline-hidden"
+                    />
+                    {selectedIndividual ? (
+                      <div className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-900">
+                        <div>
+                          <span>Targeting: <strong>{selectedIndividual.fullName}</strong> ({selectedIndividual.email})</span>
+                          <span className="ml-2 px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-800 font-mono text-[10px]">
+                            {selectedIndividual.yearOfStudy} &bull; {selectedIndividual.department}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIndividual(null)}
+                          className="text-xs font-bold text-blue-700 hover:underline"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               {/* Subject */}
@@ -685,18 +762,29 @@ export function EmailHub({
                               {feedback.text}
                             </span>
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => handleSendSinglePass(reg)}
-                            disabled={isSending}
-                            className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <line x1="22" y1="2" x2="11" y2="13" />
-                              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                            </svg>
-                            <span>{isSending ? "Sending..." : "Email Pass"}</span>
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleComposeToIndividual(reg)}
+                              className="px-2.5 py-1.5 rounded-lg bg-surface-container text-foreground hover:bg-surface-container-high text-xs font-semibold border border-border transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                              title={`Compose custom email or revocation notice to ${reg.fullName}`}
+                            >
+                              <span className="material-symbols-outlined text-[14px] text-primary">edit_note</span>
+                              <span>Compose</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSendSinglePass(reg)}
+                              disabled={isSending}
+                              className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <line x1="22" y1="2" x2="11" y2="13" />
+                                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                              </svg>
+                              <span>{isSending ? "Sending..." : "Email Pass"}</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

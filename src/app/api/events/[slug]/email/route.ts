@@ -80,6 +80,8 @@ export async function POST(
       track?: string;
       includePassLink?: boolean;
       revokePasses?: boolean;
+      recipientRef?: string;
+      recipientEmail?: string;
       ctaText?: string;
       ctaUrl?: string;
     };
@@ -210,7 +212,18 @@ export async function POST(
       // Filter audience
       let recipientsList = allRegistrations.filter((r) => r.status !== "cancelled");
 
-      if (audience === "year-1" || audience === "1st-year") {
+      if (audience.startsWith("ref-")) {
+        const targetRef = audience.replace("ref-", "").trim().toUpperCase();
+        recipientsList = allRegistrations.filter((r) => r.referenceId.toUpperCase() === targetRef);
+      } else if (body.recipientRef) {
+        const targetRef = body.recipientRef.trim().toUpperCase();
+        recipientsList = allRegistrations.filter((r) => r.referenceId.toUpperCase() === targetRef);
+      } else if (body.recipientEmail) {
+        const targetEmail = body.recipientEmail.trim().toLowerCase();
+        recipientsList = allRegistrations.filter(
+          (r) => r.email.toLowerCase() === targetEmail
+        );
+      } else if (audience === "year-1" || audience === "1st-year") {
         recipientsList = recipientsList.filter(
           (r) => r.yearOfStudy === "1st Year" || r.yearOfStudy?.includes("1")
         );
