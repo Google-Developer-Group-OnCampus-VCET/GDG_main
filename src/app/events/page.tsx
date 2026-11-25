@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import type { Metadata } from "next";
 import { events as staticEvents } from "@/content/events";
-import { getAllEventsAsync } from "@/lib/db";
+import { getCachedAllEvents } from "@/lib/db/cached";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { EventsExplorer } from "@/components/events-explorer";
 import { EventsExplorerSkeleton } from "@/components/skeletons/event-skeletons";
@@ -16,7 +16,7 @@ async function EventsListContent() {
   await connection();
   let events = staticEvents;
   try {
-    events = await getAllEventsAsync();
+    events = await getCachedAllEvents();
   } catch {
     events = staticEvents;
   }

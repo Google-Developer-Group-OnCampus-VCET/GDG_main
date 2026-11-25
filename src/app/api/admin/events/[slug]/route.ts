@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
-import { getEventBySlugAsync, getEventStatsAsync, logAuditEventAsync, updateEventAsync } from "@/lib/db";
+import { getEventBySlugAsync, getPublicEventStatsAsync, logAuditEventAsync, updateEventAsync } from "@/lib/db";
 import { getClientIp } from "@/lib/rate-limit";
 import type { EventFormat, EventTopic, EventUpdateInput } from "@/types";
 
@@ -125,7 +125,7 @@ export async function GET(
       );
     }
 
-    const stats = await getEventStatsAsync(slug);
+    const stats = await getPublicEventStatsAsync(slug, event);
     return NextResponse.json({ success: true, event, stats });
   } catch (err) {
     console.error("Admin GET event error:", err);
@@ -194,7 +194,7 @@ export async function PATCH(
       );
     }
 
-    const stats = await getEventStatsAsync(slug);
+    const stats = await getPublicEventStatsAsync(slug, result.event);
 
     await logAuditEventAsync({
       action: "EVENT_UPDATE",

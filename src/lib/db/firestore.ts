@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
-import { getCached, setCached, invalidateCache } from "./cache";
+import { getCached, setCached, invalidateCache, revalidateEventCaches } from "./cache";
 import type {
   AuditLogEntry,
   ChapterEvent,
@@ -104,6 +104,7 @@ export async function createFirestoreEvent(
     await docRef.set(docPayload);
 
     invalidateCache("fs:");
+    revalidateEventCaches(slug);
     return { success: true, event: eventRecord };
   } catch (err) {
     console.warn("Firestore createEvent failed:", (err as Error).message);
@@ -196,6 +197,7 @@ export async function updateFirestoreEvent(
     }
 
     invalidateCache("fs:");
+    revalidateEventCaches(slug);
     const updatedEvent = await getFirestoreEvent(slug);
     if (updatedEvent && defaultMatch?.workshop && !updatedEvent.workshop) {
       const cap = updatedEvent.capacity ?? defaultMatch.capacity ?? defaultMatch.workshop.capacity;
@@ -215,6 +217,247 @@ export async function updateFirestoreEvent(
   }
 }
 
+function mapFirestoreEventDoc(docId: string, d: FirebaseFirestore.DocumentData): ChapterEvent {
+  const capacity =
+    typeof d.capacity === "number"
+      ? d.capacity
+      : typeof d.workshop?.capacity === "number"
+        ? d.workshop.capacity
+        : undefined;
+
+  const workshop = d.workshop
+    ? {
+        ...d.workshop,
+        ...(capacity !== undefined
+          ? {
+              capacity,
+              seatsText: `Limited to ${capacity} Seats`,
+            }
+          : {}),
+        ...(d.location ? { venueText: d.location } : {}),
+        ...(typeof d.registeredCount === "number"
+          ? { initialRegisteredCount: d.registeredCount }
+          : {}),
+        registrationConfig: {
+          ...(d.workshop.registrationConfig || {}),
+          ...(typeof d.isRegistrationOpen === "boolean"
+            ? { isOpen: d.isRegistrationOpen }
+            : {}),
+        },
+      }
+    : undefined;
+
+  return {
+    id: d.id || docId,
+    slug: d.slug || docId,
+    title: d.title,
+    startsAt: d.startsAt,
+    endsAt: d.endsAt || undefined,
+    timezone: d.timezone || "Asia/Kolkata",
+    format: d.format || "in-person",
+    location: d.location,
+    topics: d.topics || ["general"],
+    summary: d.summary || undefined,
+    capacity,
+    priceNote: d.priceNote || undefined,
+    isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+    registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
+    registrationUrl: d.registrationUrl || `/events/${d.slug || docId}/register`,
+    workshop,
+  };
+}
+
+function resolveEffectiveCapacity(
+  slug: string,
+  rawCapacity: number,
+  totalRegistered: number
+): number {
+  return slug === "dev-to-cloud"
+    ? Math.max(135, rawCapacity)
+    : rawCapacity === 120 && totalRegistered >= rawCapacity
+      ? Math.max(rawCapacity, 135)
+      : rawCapacity;
+}
+
+function buildPublicStatsObject(
+  slug: string,
+  rawCapacity: number,
+  isRegistrationOpen: boolean,
+  totalRegistered: number
+): EventStats {
+  const capacity = resolveEffectiveCapacity(slug, rawCapacity, totalRegistered);
+  const remaining = Math.max(0, capacity - totalRegistered);
+  const percentFilled =
+    capacity > 0 ? Math.min(100, Math.round((totalRegistered / capacity) * 100)) : 100;
+
+  return {
+    totalRegistered,
+    capacity,
+    remaining,
+    percentFilled,
+    isOpen: Boolean(isRegistrationOpen) && remaining > 0,
+    isRegistrationOpen: Boolean(isRegistrationOpen),
+    checkedInCount: 0,
+    trackCounts: {},
+    yearCounts: {},
+    departmentCounts: {},
+  };
+}
+
+function buildEventStatsFromRegistrations(
+  slug: string,
+  rawCapacity: number,
+  isRegistrationOpen: boolean,
+  regs: RegistrationRecord[]
+): EventStats {
+  let totalRegistered = 0;
+  let checkedInCount = 0;
+  const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  let multiDayCompletionCount = 0;
+  const trackCounts: Record<string, number> = {};
+  const yearCounts: Record<string, number> = {};
+  const departmentCounts: Record<string, number> = {};
+  const experienceCounts: Record<string, number> = {};
+  const collegeFrequencies: Record<string, number> = {};
+  const registrationDates: Record<string, number> = {};
+  let vcetCount = 0;
+  let otherCount = 0;
+
+  for (const data of regs) {
+    if (data.status === "cancelled") continue;
+    totalRegistered++;
+    if (data.checkedIn) checkedInCount++;
+
+    const days: number[] = Array.isArray(data.checkedInDays)
+      ? data.checkedInDays
+      : data.checkedIn
+        ? [1]
+        : [];
+    days.forEach((d) => {
+      dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
+    });
+    if (days.length >= 4) {
+      multiDayCompletionCount++;
+    }
+
+    if (data.track) {
+      trackCounts[data.track] = (trackCounts[data.track] || 0) + 1;
+    }
+    if (data.yearOfStudy) {
+      yearCounts[data.yearOfStudy] = (yearCounts[data.yearOfStudy] || 0) + 1;
+    }
+    if (data.department) {
+      departmentCounts[data.department] = (departmentCounts[data.department] || 0) + 1;
+    }
+    if (data.experienceLevel) {
+      experienceCounts[data.experienceLevel] =
+        (experienceCounts[data.experienceLevel] || 0) + 1;
+    }
+    if (data.college) {
+      const col = String(data.college).trim();
+      const isVcet =
+        col.toLowerCase().includes("vcet") ||
+        col.toLowerCase().includes("vidyavardhini");
+      if (isVcet) {
+        vcetCount++;
+      } else {
+        otherCount++;
+        collegeFrequencies[col] = (collegeFrequencies[col] || 0) + 1;
+      }
+    }
+    if (data.createdAt) {
+      const dateStr = String(data.createdAt).slice(0, 10);
+      registrationDates[dateStr] = (registrationDates[dateStr] || 0) + 1;
+    }
+  }
+
+  const topColleges = Object.entries(collegeFrequencies)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([college, count]) => ({ college, count }));
+  const vcetPercent =
+    totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
+
+  const base = buildPublicStatsObject(slug, rawCapacity, isRegistrationOpen, totalRegistered);
+
+  return {
+    ...base,
+    checkedInCount,
+    dailyCheckedInCounts,
+    multiDayCompletionCount,
+    trackCounts,
+    yearCounts,
+    departmentCounts,
+    experienceCounts,
+    collegeStats: {
+      vcetCount,
+      otherCount,
+      vcetPercent,
+      topColleges,
+    },
+    registrationDates,
+  };
+}
+
+async function getAllEventRegistrationsFromFirestore(
+  eventSlug: string
+): Promise<RegistrationRecord[] | null> {
+  const cacheKey = `fs:regs:${eventSlug}`;
+  const cached = getCached<RegistrationRecord[]>(cacheKey);
+  if (cached) return cached;
+
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const snapshot = await db
+      .collection("registrations")
+      .where("eventSlug", "==", eventSlug)
+      .get();
+
+    const list: RegistrationRecord[] = [];
+    snapshot.forEach((doc) => {
+      const d = doc.data();
+      list.push({
+        id: doc.id,
+        eventSlug: d.eventSlug,
+        referenceId: d.referenceId,
+        fullName: d.fullName,
+        email: d.email,
+        phone: d.phone,
+        college: d.college,
+        department: d.department,
+        yearOfStudy: d.yearOfStudy,
+        track: d.track,
+        experienceLevel: d.experienceLevel,
+        portfolioUrl: d.portfolioUrl || undefined,
+        notes: d.notes || undefined,
+        status: d.status || "confirmed",
+        checkedIn: Boolean(d.checkedIn),
+        checkedInAt: d.checkedInAt || undefined,
+        checkedInDays: Array.isArray(d.checkedInDays)
+          ? d.checkedInDays
+          : d.checkedIn
+            ? [1]
+            : [],
+        checkIns:
+          typeof d.checkIns === "object" && d.checkIns !== null
+            ? d.checkIns
+            : d.checkedIn && d.checkedInAt
+              ? { 1: d.checkedInAt }
+              : {},
+        createdAt: d.createdAt || new Date().toISOString(),
+      });
+    });
+
+    setCached(cacheKey, list, 30 * 1000);
+    return list;
+  } catch (err) {
+    console.warn("Firestore getRegistrations failed:", (err as Error).message);
+    return null;
+  }
+}
+
 export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
   const cacheKey = "fs:events";
   const cached = getCached<ChapterEvent[]>(cacheKey);
@@ -229,54 +472,9 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
 
     const list: ChapterEvent[] = [];
     snapshot.forEach((doc) => {
-      const d = doc.data();
-      const capacity =
-        typeof d.capacity === "number"
-          ? d.capacity
-          : typeof d.workshop?.capacity === "number"
-            ? d.workshop.capacity
-            : undefined;
-
-      const workshop = d.workshop
-        ? {
-          ...d.workshop,
-          ...(capacity !== undefined
-            ? {
-              capacity,
-              seatsText: `Limited to ${capacity} Seats`,
-            }
-            : {}),
-          ...(d.location ? { venueText: d.location } : {}),
-          ...(typeof d.registeredCount === "number"
-            ? { initialRegisteredCount: d.registeredCount }
-            : {}),
-          registrationConfig: {
-            ...(d.workshop.registrationConfig || {}),
-            ...(typeof d.isRegistrationOpen === "boolean"
-              ? { isOpen: d.isRegistrationOpen }
-              : {}),
-          },
-        }
-        : undefined;
-
-      list.push({
-        id: d.id || doc.id,
-        slug: d.slug || doc.id,
-        title: d.title,
-        startsAt: d.startsAt,
-        endsAt: d.endsAt || undefined,
-        timezone: d.timezone || "Asia/Kolkata",
-        format: d.format || "in-person",
-        location: d.location,
-        topics: d.topics || ["general"],
-        summary: d.summary || undefined,
-        capacity,
-        priceNote: d.priceNote || undefined,
-        isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
-        registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
-        registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-        workshop,
-      });
+      const event = mapFirestoreEventDoc(doc.id, doc.data());
+      list.push(event);
+      setCached(`fs:event:${event.slug}`, event, 60 * 1000);
     });
 
     setCached(cacheKey, list, 60 * 1000);
@@ -302,54 +500,7 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
     const d = doc.data();
     if (!d) return null;
 
-    const capacity =
-      typeof d.capacity === "number"
-        ? d.capacity
-        : typeof d.workshop?.capacity === "number"
-          ? d.workshop.capacity
-          : undefined;
-
-    const workshop = d.workshop
-      ? {
-        ...d.workshop,
-        ...(capacity !== undefined
-          ? {
-            capacity,
-            seatsText: `Limited to ${capacity} Seats`,
-          }
-          : {}),
-        ...(d.location ? { venueText: d.location } : {}),
-        ...(typeof d.registeredCount === "number"
-          ? { initialRegisteredCount: d.registeredCount }
-          : {}),
-        registrationConfig: {
-          ...(d.workshop.registrationConfig || {}),
-          ...(typeof d.isRegistrationOpen === "boolean"
-            ? { isOpen: d.isRegistrationOpen }
-            : {}),
-        },
-      }
-      : undefined;
-
-    const eventResult: ChapterEvent = {
-      id: d.id || doc.id,
-      slug: d.slug || doc.id,
-      title: d.title,
-      startsAt: d.startsAt,
-      endsAt: d.endsAt || undefined,
-      timezone: d.timezone || "Asia/Kolkata",
-      format: d.format || "in-person",
-      location: d.location,
-      topics: d.topics || ["general"],
-      summary: d.summary || undefined,
-      capacity,
-      priceNote: d.priceNote || undefined,
-      isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
-      registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
-      registrationUrl: d.registrationUrl || `/events/${d.slug || doc.id}/register`,
-      workshop,
-    };
-
+    const eventResult = mapFirestoreEventDoc(doc.id, d);
     setCached(cacheKey, eventResult, 60 * 1000);
     return eventResult;
   } catch (err) {
@@ -381,14 +532,70 @@ export async function seedFirestoreInitialEvents(initialEvents: ChapterEvent[]):
         topics: event.topics || ["general"],
         summary: event.summary || "",
         capacity: event.workshop?.capacity ?? 150,
+        registeredCount: event.workshop?.initialRegisteredCount ?? 0,
         isRegistrationOpen: event.workshop?.registrationConfig?.isOpen ?? false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
     }
     await batch.commit();
+    invalidateCache("fs:event");
   } catch (err) {
     console.warn("Firestore seedInitialEvents failed:", (err as Error).message);
+  }
+}
+
+/**
+ * Lightweight stats reader for public pages: uses the single `events/{slug}` document's
+ * denormalized `registeredCount` (0 extra Firestore reads if `preloadedEvent` is passed,
+ * or 1 doc read otherwise) instead of scanning all registration documents.
+ */
+export async function getFirestorePublicEventStats(
+  slug: string,
+  preloadedEvent?: ChapterEvent | null
+): Promise<EventStats | null> {
+  const cacheKey = `fs:public-stats:${slug}`;
+  const cached = getCached<EventStats>(cacheKey);
+  if (cached) return cached;
+
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const fsEvent = preloadedEvent ?? (await getFirestoreEvent(slug));
+    const defaultMatch = defaultEvents.find((e) => e.slug === slug);
+    const rawCapacity =
+      fsEvent?.capacity ??
+      fsEvent?.workshop?.capacity ??
+      defaultMatch?.capacity ??
+      defaultMatch?.workshop?.capacity ??
+      120;
+    const isRegistrationOpen =
+      fsEvent?.isRegistrationOpen ??
+      defaultMatch?.workshop?.registrationConfig?.isOpen ??
+      true;
+
+    if (fsEvent && typeof fsEvent.registeredCount === "number") {
+      const statsResult = buildPublicStatsObject(
+        slug,
+        rawCapacity,
+        Boolean(isRegistrationOpen),
+        fsEvent.registeredCount
+      );
+      setCached(cacheKey, statsResult, 30 * 1000);
+      return statsResult;
+    }
+
+    // Backfill path: only when `events/{slug}` has no `registeredCount` yet.
+    const fullStats = await getFirestoreEventStats(slug);
+    if (fullStats) {
+      setCached(cacheKey, fullStats, 30 * 1000);
+      return fullStats;
+    }
+    return null;
+  } catch (err) {
+    console.warn("Firestore getPublicEventStats failed:", (err as Error).message);
+    return null;
   }
 }
 
@@ -401,131 +608,50 @@ export async function getFirestoreEventStats(slug: string): Promise<EventStats |
   if (!db) return null;
 
   try {
-    const eventDoc = await db.collection("events").doc(slug).get();
-    const eventData = eventDoc.data();
+    const [fsEvent, regs] = await Promise.all([
+      getFirestoreEvent(slug),
+      getAllEventRegistrationsFromFirestore(slug),
+    ]);
+    if (regs === null) return null;
+
     const defaultMatch = defaultEvents.find((e) => e.slug === slug);
     const rawCapacity =
-      typeof eventData?.capacity === "number"
-        ? eventData.capacity
-        : typeof eventData?.workshop?.capacity === "number"
-          ? eventData.workshop.capacity
-          : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
+      fsEvent?.capacity ??
+      fsEvent?.workshop?.capacity ??
+      defaultMatch?.capacity ??
+      defaultMatch?.workshop?.capacity ??
+      120;
     const isRegistrationOpen =
-      eventData?.isRegistrationOpen ??
-      eventData?.is_registration_open ??
+      fsEvent?.isRegistrationOpen ??
       defaultMatch?.workshop?.registrationConfig?.isOpen ??
       true;
 
-    const regsSnapshot = await db
-      .collection("registrations")
-      .where("eventSlug", "==", slug)
-      .get();
+    const statsResult = buildEventStatsFromRegistrations(
+      slug,
+      rawCapacity,
+      Boolean(isRegistrationOpen),
+      regs
+    );
 
-    let totalRegistered = 0;
-    let checkedInCount = 0;
-    const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    let multiDayCompletionCount = 0;
-    const trackCounts: Record<string, number> = {};
-    const yearCounts: Record<string, number> = {};
-    const departmentCounts: Record<string, number> = {};
-    const experienceCounts: Record<string, number> = {};
-    const collegeFrequencies: Record<string, number> = {};
-    const registrationDates: Record<string, number> = {};
-    let vcetCount = 0;
-    let otherCount = 0;
-
-    regsSnapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.status === "cancelled") return;
-      totalRegistered++;
-      if (data.checkedIn) checkedInCount++;
-
-      const days: number[] = Array.isArray(data.checkedInDays)
-        ? data.checkedInDays
-        : data.checkedIn
-          ? [1]
-          : [];
-      days.forEach((d) => {
-        dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
-      });
-      if (days.length >= 4) {
-        multiDayCompletionCount++;
-      }
-
-      if (data.track) {
-        trackCounts[data.track] = (trackCounts[data.track] || 0) + 1;
-      }
-      if (data.yearOfStudy) {
-        yearCounts[data.yearOfStudy] = (yearCounts[data.yearOfStudy] || 0) + 1;
-      }
-      if (data.department) {
-        departmentCounts[data.department] = (departmentCounts[data.department] || 0) + 1;
-      }
-      if (data.experienceLevel) {
-        experienceCounts[data.experienceLevel] =
-          (experienceCounts[data.experienceLevel] || 0) + 1;
-      }
-      if (data.college) {
-        const col = String(data.college).trim();
-        const isVcet =
-          col.toLowerCase().includes("vcet") ||
-          col.toLowerCase().includes("vidyavardhini");
-        if (isVcet) {
-          vcetCount++;
-        } else {
-          otherCount++;
-          collegeFrequencies[col] = (collegeFrequencies[col] || 0) + 1;
-        }
-      }
-      if (data.createdAt) {
-        const dateStr = String(data.createdAt).slice(0, 10);
-        registrationDates[dateStr] = (registrationDates[dateStr] || 0) + 1;
-      }
-    });
-
-    const topColleges = Object.entries(collegeFrequencies)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([college, count]) => ({ college, count }));
-    const vcetPercent =
-      totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
-
-    // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
-    const capacity =
-      slug === "dev-to-cloud"
-        ? Math.max(135, rawCapacity)
-        : rawCapacity === 120 && totalRegistered >= rawCapacity
-          ? Math.max(rawCapacity, 135)
-          : rawCapacity;
-
-    const remaining = Math.max(0, capacity - totalRegistered);
-    const percentFilled =
-      capacity > 0 ? Math.min(100, Math.round((totalRegistered / capacity) * 100)) : 100;
-
-    const statsResult: EventStats = {
-      totalRegistered,
-      capacity,
-      remaining,
-      percentFilled,
-      isOpen: Boolean(isRegistrationOpen) && remaining > 0,
-      isRegistrationOpen: Boolean(isRegistrationOpen),
-      checkedInCount,
-      dailyCheckedInCounts,
-      multiDayCompletionCount,
-      trackCounts,
-      yearCounts,
-      departmentCounts,
-      experienceCounts,
-      collegeStats: {
-        vcetCount,
-        otherCount,
-        vcetPercent,
-        topColleges,
-      },
-      registrationDates,
-    };
+    // Opportunistically heal missing/drifted `registeredCount` on the event doc so public 1-doc reads stay exact
+    if (fsEvent && fsEvent.registeredCount !== statsResult.totalRegistered) {
+      db.collection("events")
+        .doc(slug)
+        .set(
+          {
+            registeredCount: statsResult.totalRegistered,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        )
+        .then(() => {
+          invalidateCache("fs:event");
+        })
+        .catch(() => {});
+    }
 
     setCached(cacheKey, statsResult, 30 * 1000);
+    setCached(`fs:public-stats:${slug}`, statsResult, 30 * 1000);
     return statsResult;
   } catch (err) {
     console.warn("Firestore getEventStats failed:", (err as Error).message);
@@ -537,61 +663,8 @@ export async function getFirestoreRegistrations(
   eventSlug: string,
   options?: { search?: string; track?: string; status?: string; checkedIn?: string }
 ): Promise<RegistrationRecord[] | null> {
-  const cacheKey = `fs:regs:${eventSlug}`;
-  let records = getCached<RegistrationRecord[]>(cacheKey);
-
-  if (!records) {
-    const db = getAdminDb();
-    if (!db) return null;
-
-    try {
-      const snapshot = await db
-        .collection("registrations")
-        .where("eventSlug", "==", eventSlug)
-        .get();
-
-      const list: RegistrationRecord[] = [];
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        list.push({
-          id: doc.id,
-          eventSlug: d.eventSlug,
-          referenceId: d.referenceId,
-          fullName: d.fullName,
-          email: d.email,
-          phone: d.phone,
-          college: d.college,
-          department: d.department,
-          yearOfStudy: d.yearOfStudy,
-          track: d.track,
-          experienceLevel: d.experienceLevel,
-          portfolioUrl: d.portfolioUrl || undefined,
-          notes: d.notes || undefined,
-          status: d.status || "confirmed",
-          checkedIn: Boolean(d.checkedIn),
-          checkedInAt: d.checkedInAt || undefined,
-          checkedInDays: Array.isArray(d.checkedInDays)
-            ? d.checkedInDays
-            : d.checkedIn
-              ? [1]
-              : [],
-          checkIns:
-            typeof d.checkIns === "object" && d.checkIns !== null
-              ? d.checkIns
-              : d.checkedIn && d.checkedInAt
-                ? { 1: d.checkedInAt }
-                : {},
-          createdAt: d.createdAt || new Date().toISOString(),
-        });
-      });
-
-      records = list;
-      setCached(cacheKey, records, 15 * 1000);
-    } catch (err) {
-      console.warn("Firestore getRegistrations failed:", (err as Error).message);
-      return null;
-    }
-  }
+  const records = await getAllEventRegistrationsFromFirestore(eventSlug);
+  if (records === null) return null;
 
   let filtered = [...records];
 
@@ -724,11 +797,16 @@ export async function createFirestoreRegistration(
         }
       }
 
-      // 3. Determine currentCount: always count actual active uncancelled registrations to prevent counter drift
-      const regsSnap = await transaction.get(
-        db.collection("registrations").where("eventSlug", "==", eventSlug)
-      );
-      const currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
+      // 3. Determine currentCount using denormalized registeredCount (0 extra reads); scan only to bootstrap uninitialized events
+      let currentCount: number;
+      if (eventDoc.exists && typeof eventData?.registeredCount === "number") {
+        currentCount = eventData.registeredCount;
+      } else {
+        const regsSnap = await transaction.get(
+          db.collection("registrations").where("eventSlug", "==", eventSlug)
+        );
+        currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
+      }
 
       // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
       const effectiveCapacity =
@@ -821,6 +899,7 @@ export async function createFirestoreRegistration(
 
     if (txResult && txResult.success) {
       invalidateCache("fs:");
+      revalidateEventCaches(eventSlug);
     }
     return txResult;
   } catch (err) {
@@ -837,49 +916,64 @@ export async function cancelFirestoreRegistration(
 
   const ref = referenceId.trim().toUpperCase();
   try {
-    const snap = await db
-      .collection("registrations")
-      .where("referenceId", "==", ref)
-      .limit(1)
-      .get();
-    if (snap.empty) return false;
+    const txResult = await db.runTransaction<{ ok: boolean; eventSlug?: string }>(
+      async (transaction) => {
+        const snap = await transaction.get(
+          db.collection("registrations").where("referenceId", "==", ref).limit(1)
+        );
+        if (snap.empty) return { ok: false };
 
-    const docRef = snap.docs[0].ref;
-    const regData = snap.docs[0].data();
-    const eventSlug = regData.eventSlug;
+        const docRef = snap.docs[0].ref;
+        const regData = snap.docs[0].data();
+        const eventSlug = typeof regData.eventSlug === "string" ? regData.eventSlug : undefined;
 
-    await docRef.update({
-      status: "cancelled",
-      cancelledAt: new Date().toISOString(),
-    });
+        if (regData.status === "cancelled") {
+          return { ok: true, eventSlug };
+        }
 
-    // Automatically recalculate and synchronize the event's registeredCount in Firestore
-    if (eventSlug) {
-      try {
-        const regsSnap = await db
-          .collection("registrations")
-          .where("eventSlug", "==", eventSlug)
-          .get();
-        const activeCount = regsSnap.docs.filter(
-          (d) => d.data().status !== "cancelled"
-        ).length;
+        const now = new Date().toISOString();
+        let nextCount: number | undefined;
+        let eventDocRef: FirebaseFirestore.DocumentReference | undefined;
 
-        await db
-          .collection("events")
-          .doc(eventSlug)
-          .set(
+        if (eventSlug) {
+          eventDocRef = db.collection("events").doc(eventSlug);
+          const eventDoc = await transaction.get(eventDocRef);
+          const eventData = eventDoc.data();
+          if (eventDoc.exists && typeof eventData?.registeredCount === "number") {
+            nextCount = Math.max(0, eventData.registeredCount - 1);
+          } else {
+            const regsSnap = await transaction.get(
+              db.collection("registrations").where("eventSlug", "==", eventSlug)
+            );
+            nextCount = regsSnap.docs.filter(
+              (d) => d.id !== docRef.id && d.data().status !== "cancelled"
+            ).length;
+          }
+        }
+
+        transaction.update(docRef, {
+          status: "cancelled",
+          cancelledAt: now,
+        });
+
+        if (eventDocRef && nextCount !== undefined) {
+          transaction.set(
+            eventDocRef,
             {
-              registeredCount: activeCount,
-              updatedAt: new Date().toISOString(),
+              registeredCount: nextCount,
+              updatedAt: now,
             },
             { merge: true }
           );
-      } catch (countErr) {
-        console.warn("Failed to update event registeredCount after cancellation:", countErr);
-      }
-    }
+        }
 
+        return { ok: true, eventSlug };
+      }
+    );
+
+    if (!txResult.ok) return false;
     invalidateCache("fs:");
+    revalidateEventCaches(txResult.eventSlug);
     return true;
   } catch (err) {
     console.warn("Firestore cancel error:", (err as Error).message);
@@ -895,46 +989,58 @@ export async function deleteFirestoreRegistration(
 
   const ref = referenceId.trim().toUpperCase();
   try {
-    const snap = await db
-      .collection("registrations")
-      .where("referenceId", "==", ref)
-      .limit(1)
-      .get();
-    if (snap.empty) return false;
+    const txResult = await db.runTransaction<{ ok: boolean; eventSlug?: string }>(
+      async (transaction) => {
+        const snap = await transaction.get(
+          db.collection("registrations").where("referenceId", "==", ref).limit(1)
+        );
+        if (snap.empty) return { ok: false };
 
-    const docRef = snap.docs[0].ref;
-    const regData = snap.docs[0].data();
-    const eventSlug = regData.eventSlug;
+        const docRef = snap.docs[0].ref;
+        const regData = snap.docs[0].data();
+        const eventSlug = typeof regData.eventSlug === "string" ? regData.eventSlug : undefined;
+        const wasActive = regData.status !== "cancelled";
 
-    await docRef.delete();
+        const now = new Date().toISOString();
+        let nextCount: number | undefined;
+        let eventDocRef: FirebaseFirestore.DocumentReference | undefined;
 
-    // Recalculate event seat count
-    if (eventSlug) {
-      try {
-        const regsSnap = await db
-          .collection("registrations")
-          .where("eventSlug", "==", eventSlug)
-          .get();
-        const activeCount = regsSnap.docs.filter(
-          (d) => d.data().status !== "cancelled"
-        ).length;
+        if (eventSlug && wasActive) {
+          eventDocRef = db.collection("events").doc(eventSlug);
+          const eventDoc = await transaction.get(eventDocRef);
+          const eventData = eventDoc.data();
+          if (eventDoc.exists && typeof eventData?.registeredCount === "number") {
+            nextCount = Math.max(0, eventData.registeredCount - 1);
+          } else {
+            const regsSnap = await transaction.get(
+              db.collection("registrations").where("eventSlug", "==", eventSlug)
+            );
+            nextCount = regsSnap.docs.filter(
+              (d) => d.id !== docRef.id && d.data().status !== "cancelled"
+            ).length;
+          }
+        }
 
-        await db
-          .collection("events")
-          .doc(eventSlug)
-          .set(
+        transaction.delete(docRef);
+
+        if (eventDocRef && nextCount !== undefined) {
+          transaction.set(
+            eventDocRef,
             {
-              registeredCount: activeCount,
-              updatedAt: new Date().toISOString(),
+              registeredCount: nextCount,
+              updatedAt: now,
             },
             { merge: true }
           );
-      } catch (countErr) {
-        console.warn("Failed to update event registeredCount after deletion:", countErr);
-      }
-    }
+        }
 
+        return { ok: true, eventSlug };
+      }
+    );
+
+    if (!txResult.ok) return false;
     invalidateCache("fs:");
+    revalidateEventCaches(txResult.eventSlug);
     return true;
   } catch (err) {
     console.warn("Firestore delete error:", (err as Error).message);
@@ -1049,6 +1155,7 @@ export async function logFirestoreEmail(log: EmailLog): Promise<boolean> {
       ...log,
       createdAt: log.sentAt || new Date().toISOString(),
     });
+    invalidateCache("fs:email-logs");
     return true;
   } catch (err) {
     console.warn("Failed to write email log to Firestore:", (err as Error).message);
@@ -1057,6 +1164,10 @@ export async function logFirestoreEmail(log: EmailLog): Promise<boolean> {
 }
 
 export async function getFirestoreEmailLogs(eventSlug: string): Promise<EmailLog[] | null> {
+  const cacheKey = `fs:email-logs:${eventSlug}`;
+  const cached = getCached<EmailLog[]>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
   try {
@@ -1072,6 +1183,7 @@ export async function getFirestoreEmailLogs(eventSlug: string): Promise<EmailLog
       logs.push(d);
     });
     logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+    setCached(cacheKey, logs, 30 * 1000);
     return logs;
   } catch (err) {
     console.warn("Failed to fetch email logs from Firestore:", (err as Error).message);
@@ -1087,6 +1199,7 @@ export async function logFirestoreAudit(entry: AuditLogEntry): Promise<boolean> 
       ...entry,
       createdAt: entry.timestamp || new Date().toISOString(),
     });
+    invalidateCache("fs:audit-logs");
     return true;
   } catch (err) {
     console.warn("Failed to write audit log to Firestore:", (err as Error).message);
@@ -1099,10 +1212,14 @@ export async function getFirestoreAuditLogs(options?: {
   action?: string;
   limit?: number;
 }): Promise<AuditLogEntry[] | null> {
+  const maxLimit = Math.min(options?.limit ?? 100, 200);
+  const cacheKey = `fs:audit-logs:${options?.eventSlug || "all"}:${options?.action || "all"}:${maxLimit}`;
+  const cached = getCached<AuditLogEntry[]>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
   try {
-    const maxLimit = Math.min(options?.limit ?? 100, 200);
     let query: FirebaseFirestore.Query = db.collection("audit_logs");
 
     if (options?.eventSlug && options.eventSlug !== "all") {
@@ -1120,6 +1237,7 @@ export async function getFirestoreAuditLogs(options?: {
     });
 
     logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    setCached(cacheKey, logs, 30 * 1000);
     return logs;
   } catch (err) {
     console.warn("Failed to fetch audit logs from Firestore:", (err as Error).message);

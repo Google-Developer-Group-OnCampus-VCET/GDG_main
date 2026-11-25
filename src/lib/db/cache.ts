@@ -1,7 +1,10 @@
+import { revalidateTag } from "next/cache";
+
 /**
- * High-performance In-Memory TTL Cache for Firestore Operations
- * Dramatically reduces Cloud Firestore document reads by caching frequently-read
- * aggregate stats, event definitions, and attendee rosters with configurable TTLs.
+ * High-performance In-Memory TTL Cache & Next.js Tag Revalidation Helpers
+ * Reduces Cloud Firestore document reads by caching frequently-read
+ * aggregate stats, event definitions, and attendee rosters with configurable TTLs,
+ * paired with shared Next.js 16 remote cache tag invalidation on mutations.
  */
 
 interface CacheEntry<T> {
@@ -47,4 +50,27 @@ export function invalidateCache(prefix?: string): void {
       cacheStore.delete(key);
     }
   }
+}
+
+/**
+ * Safely revalidate Next.js Data / Remote Cache tags when running inside Next.js runtime.
+ * No-ops gracefully in standalone scripts and Vitest where Next's cache store isn't mounted.
+ */
+export function safeRevalidateTags(tags: string[], immediate = true): void {
+  const profile = immediate ? { expire: 0 } : "max";
+  for (const tag of tags) {
+    try {
+      revalidateTag(tag, profile);
+    } catch {
+      // Ignore outside Next.js request/runtime contexts (e.g. Vitest unit tests)
+    }
+  }
+}
+
+export function revalidateEventCaches(eventSlug?: string): void {
+  const tags = ["events-list", "event-stats"];
+  if (eventSlug) {
+    tags.push(`event:${eventSlug}`, `event-stats:${eventSlug}`);
+  }
+  safeRevalidateTags(tags, true);
 }

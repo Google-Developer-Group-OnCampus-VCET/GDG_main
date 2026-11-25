@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEventStatsAsync } from "@/lib/db";
+import { getCachedPublicEventStats } from "@/lib/db/cached";
 
 export async function GET(
   _request: Request,
@@ -7,8 +7,12 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const stats = await getEventStatsAsync(slug);
-    return NextResponse.json(stats);
+    const stats = await getCachedPublicEventStats(slug);
+    return NextResponse.json(stats, {
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+      },
+    });
   } catch (err) {
     console.error("Stats API error:", err);
     return NextResponse.json(

@@ -20,6 +20,7 @@ import { validateAndNormalizeRegistrationInput } from "@/lib/registration-valida
 import {
   buildEventReferenceId,
   getFirestoreEventStats,
+  getFirestorePublicEventStats,
   getFirestoreRegistrations,
   createFirestoreRegistration,
   checkInFirestoreAttendee,
@@ -36,6 +37,7 @@ import {
   getFirestoreAuditLogs,
   slugify,
 } from "./firestore";
+import { revalidateEventCaches } from "./cache";
 
 export { buildEventReferenceId };
 
@@ -1116,12 +1118,15 @@ export function cancelRegistration(referenceId: string): boolean {
 
 export async function cancelRegistrationAsync(referenceId: string): Promise<boolean> {
   const ref = referenceId.trim().toUpperCase();
+  const existing = getRegistrationByReference(ref);
   try {
     await cancelFirestoreRegistration(ref);
   } catch (err) {
     console.warn("Firestore cancel failed:", err);
   }
-  return cancelRegistration(ref);
+  const cancelled = cancelRegistration(ref);
+  revalidateEventCaches(existing?.eventSlug);
+  return cancelled;
 }
 
 export function deleteRegistration(referenceId: string): boolean {
@@ -1133,12 +1138,15 @@ export function deleteRegistration(referenceId: string): boolean {
 
 export async function deleteRegistrationAsync(referenceId: string): Promise<boolean> {
   const ref = referenceId.trim().toUpperCase();
+  const existing = getRegistrationByReference(ref);
   try {
     await deleteFirestoreRegistration(ref);
   } catch (err) {
     console.warn("Firestore delete failed:", err);
   }
-  return deleteRegistration(ref);
+  const deleted = deleteRegistration(ref);
+  revalidateEventCaches(existing?.eventSlug);
+  return deleted;
 }
 
 export function cleanupTestRegistrations(): void {
@@ -1152,6 +1160,23 @@ export function cleanupTestRegistrations(): void {
        OR email LIKE '%noconsent%'
        OR event_slug LIKE 'test-%'
   `).run();
+}
+
+/**
+ * Lightweight public stats: reads ONLY the single `events/{slug}` document's denormalized
+ * `registeredCount` (or uses `preloadedEvent` with 0 extra reads) instead of scanning every registration doc.
+ */
+export async function getPublicEventStatsAsync(
+  slug: string,
+  preloadedEvent?: ChapterEvent | null
+): Promise<EventStats> {
+  try {
+    const firestoreStats = await getFirestorePublicEventStats(slug, preloadedEvent);
+    if (firestoreStats) return firestoreStats;
+  } catch (err) {
+    console.warn("Firestore public stats query failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getEventStats(slug);
 }
 
 /**
@@ -1240,12 +1265,19 @@ export async function createRegistrationAsync(
           // ignore local SQLite mirroring error
         }
       }
+      if (firestoreResult.success) {
+        revalidateEventCaches(eventSlug);
+      }
       return firestoreResult;
     }
   } catch (err) {
     console.warn("Firestore registration failed, falling back to local SQLite:", (err as Error).message);
   }
-  return createRegistration(eventSlug, input);
+  const localResult = createRegistration(eventSlug, input);
+  if (localResult.success) {
+    revalidateEventCaches(eventSlug);
+  }
+  return localResult;
 }
 
 export async function checkInAttendeeAsync(
@@ -1304,7 +1336,11 @@ export async function createEventAsync(
     console.warn("Firestore createEvent failed, falling back to local SQLite:", (err as Error).message);
   }
 
-  return createEvent(input);
+  const localResult = createEvent(input);
+  if (localResult.success && localResult.event) {
+    revalidateEventCaches(localResult.event.slug);
+  }
+  return localResult;
 }
 
 export async function updateEventAsync(
@@ -1346,14 +1382,20 @@ export async function updateEventAsync(
     console.warn("Firestore updateEvent failed, falling back to local SQLite:", (err as Error).message);
   }
 
-  return updateEvent(slug, input);
+  const localUpdated = updateEvent(slug, input);
+  if (localUpdated.success) {
+    revalidateEventCaches(slug);
+  }
+  return localUpdated;
 }
 
 export async function getAllEventsAsync(): Promise<ChapterEvent[]> {
   try {
-    await seedFirestoreInitialEvents(defaultEvents);
-
-    const firestoreEvents = await getFirestoreEvents();
+    let firestoreEvents = await getFirestoreEvents();
+    if (firestoreEvents && firestoreEvents.length === 0) {
+      await seedFirestoreInitialEvents(defaultEvents);
+      firestoreEvents = await getFirestoreEvents();
+    }
     if (firestoreEvents && firestoreEvents.length > 0) {
       const merged = [...firestoreEvents];
       for (const def of defaultEvents) {

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { events as staticEvents } from "@/content/events";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getCachedEventBySlug, getCachedPublicEventStats } from "@/lib/db/cached";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventRegistrationView } from "@/components/workshop/event-registration-view";
@@ -25,9 +25,16 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const staticMatch = staticEvents.find((e) => e.slug === slug);
+  if (staticMatch) {
+    return {
+      title: `Register · ${staticMatch.title}`,
+      description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
+    };
+  }
   await connection();
   try {
-    const event = await getEventBySlugAsync(slug);
+    const event = await getCachedEventBySlug(slug);
     if (event) {
       return {
         title: `Register · ${event.title}`,
@@ -36,14 +43,6 @@ export async function generateMetadata({
     }
   } catch {
     // fallback
-  }
-
-  const staticMatch = staticEvents.find((e) => e.slug === slug);
-  if (staticMatch) {
-    return {
-      title: `Register · ${staticMatch.title}`,
-      description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
-    };
   }
   return { title: "Register" };
 }
@@ -55,12 +54,12 @@ async function EventRegisterContent({
 }) {
   const { slug } = await params;
   await connection();
-  const event = await getEventBySlugAsync(slug);
+  const event = await getCachedEventBySlug(slug);
   if (!event) notFound();
 
   let stats;
   try {
-    stats = await getEventStatsAsync(slug);
+    stats = await getCachedPublicEventStats(slug);
   } catch {
     // fallback to defaults
   }

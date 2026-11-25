@@ -5,7 +5,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { events as staticEvents } from "@/content/events";
 import { formatEventDateRange } from "@/lib/events";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getCachedEventBySlug, getCachedPublicEventStats } from "@/lib/db/cached";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { Button } from "@/components/ui/button";
 import { EventStatusActions, EventStatusEyebrow } from "@/components/event-status-section";
@@ -32,7 +32,7 @@ export async function generateMetadata({
     return { title: staticMatch.title, description: staticMatch.summary };
   }
   await connection();
-  const event = await getEventBySlugAsync(slug);
+  const event = await getCachedEventBySlug(slug);
   if (!event) return { title: "Event not found" };
   return { title: event.title, description: event.summary };
 }
@@ -50,14 +50,14 @@ async function EventDetailContent({
 }) {
   const { slug } = await params;
   await connection();
-  const event = await getEventBySlugAsync(slug);
+  const event = await getCachedEventBySlug(slug);
   if (!event) notFound();
 
   // If this event has rich workshop data, render the full Stitch-based workshop experience
   if (event.workshop) {
     let stats;
     try {
-      stats = await getEventStatsAsync(slug);
+      stats = await getCachedPublicEventStats(slug);
     } catch {
       // Fallback to static numbers if db is initializing
     }

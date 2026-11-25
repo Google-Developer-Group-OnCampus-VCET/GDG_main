@@ -39,6 +39,7 @@ function EventSubNavDesktopTabs({
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all ${
               isActive
                 ? "bg-primary-fixed text-on-primary-fixed-variant font-semibold shadow-xs"
@@ -80,6 +81,7 @@ function EventSubNavMobileTabs({
           <Link
             key={item.href}
             href={item.href}
+            prefetch={false}
             className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
               isActive
                 ? "bg-primary text-white font-semibold shadow-xs"
@@ -103,6 +105,7 @@ export function EventSubNav({ event }: EventSubNavProps) {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0 pr-2">
           <Link
             href={basePath}
+            prefetch={false}
             className="flex flex-col group hover:opacity-90 transition-opacity min-w-0"
           >
             <span className="text-xs sm:text-sm font-bold text-on-surface leading-tight truncate max-w-[170px] sm:max-w-xs md:max-w-md">
@@ -139,6 +142,7 @@ export function EventSubNav({ event }: EventSubNavProps) {
 
           <Link
             href={`${basePath}/register`}
+            prefetch={false}
             className="inline-flex items-center gap-1 bg-primary text-on-primary px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-[13px] font-semibold shadow-sm hover:bg-primary-hover transition-all shrink-0"
           >
             <span>Register</span>

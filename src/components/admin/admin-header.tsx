@@ -53,7 +53,7 @@ export function AdminHeader({
     <header className="sticky top-0 z-40 border-b border-border bg-white shadow-xs">
       <div className="mx-auto flex h-16 max-w-(--container-max) items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <Link href={homeHref} className="flex items-center gap-2">
+          <Link href={homeHref} prefetch={false} className="flex items-center gap-2">
             <GdgLogo className="h-5 sm:h-6" />
             <span className="text-sm font-bold text-foreground">
               Chapter Admin
@@ -84,6 +84,7 @@ export function AdminHeader({
             {!isVolunteer ? (
               <Link
                 href="/admin/console"
+                prefetch={false}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                   currentTab === "overview"
                     ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -97,6 +98,7 @@ export function AdminHeader({
             {/* Registrations: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/registrations`}
+              prefetch={false}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                 currentTab === "registrations"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -109,6 +111,7 @@ export function AdminHeader({
             {/* Check-in Terminal: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/check-in`}
+              prefetch={false}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                 currentTab === "check-in"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -121,6 +124,7 @@ export function AdminHeader({
             {/* Analytics: Visible to all */}
             <Link
               href={`/admin/console/events/${eventSlug}/analytics`}
+              prefetch={false}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                 currentTab === "analytics"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -134,6 +138,7 @@ export function AdminHeader({
             {isMaster ? (
               <Link
                 href={`/admin/console/events/${eventSlug}/email`}
+                prefetch={false}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                   currentTab === "email"
                     ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -148,6 +153,7 @@ export function AdminHeader({
             {isMaster ? (
               <Link
                 href={`/admin/console/events/${eventSlug}/audit`}
+                prefetch={false}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
                   currentTab === "audit"
                     ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -163,6 +169,7 @@ export function AdminHeader({
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href={`/events/${eventSlug}`}
+            prefetch={false}
             className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary-hover"
           >
             <span>Public View</span>
@@ -216,6 +223,7 @@ export function AdminHeader({
           {!isVolunteer ? (
             <Link
               href="/admin/console"
+              prefetch={false}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                 currentTab === "overview"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -227,6 +235,7 @@ export function AdminHeader({
           ) : null}
           <Link
             href={`/admin/console/events/${eventSlug}/registrations`}
+            prefetch={false}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               currentTab === "registrations"
                 ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -237,6 +246,7 @@ export function AdminHeader({
           </Link>
           <Link
             href={`/admin/console/events/${eventSlug}/check-in`}
+            prefetch={false}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               currentTab === "check-in"
                 ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -247,6 +257,7 @@ export function AdminHeader({
           </Link>
           <Link
             href={`/admin/console/events/${eventSlug}/analytics`}
+            prefetch={false}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               currentTab === "analytics"
                 ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -258,6 +269,7 @@ export function AdminHeader({
           {isMaster ? (
             <Link
               href={`/admin/console/events/${eventSlug}/email`}
+              prefetch={false}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                 currentTab === "email"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -270,6 +282,7 @@ export function AdminHeader({
           {isMaster ? (
             <Link
               href={`/admin/console/events/${eventSlug}/audit`}
+              prefetch={false}
               className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                 currentTab === "audit"
                   ? "bg-primary text-on-primary font-bold shadow-xs"
@@ -281,6 +294,7 @@ export function AdminHeader({
           ) : null}
           <Link
             href={`/events/${eventSlug}`}
+            prefetch={false}
             className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium text-primary hover:text-primary-hover bg-white border border-border/50"
           >
             Public View ↗

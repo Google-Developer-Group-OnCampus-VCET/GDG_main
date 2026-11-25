@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getEventBySlugAsync, getPublicEventStatsAsync } from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { EventEditForm } from "@/components/admin/event-edit-form";
@@ -38,7 +38,7 @@ async function AdminEditEventContent({ slug }: { slug: string }) {
   let initialIsOpen = true;
 
   try {
-    const stats = await getEventStatsAsync(slug);
+    const stats = await getPublicEventStatsAsync(slug, event);
     initialCapacity = stats.capacity;
     initialIsOpen =
       (stats as { isRegistrationOpen?: boolean; isOpen: boolean })

@@ -87,23 +87,6 @@ async function AdminConsoleContent() {
   const role = await getAdminRoleFromCookies();
   const allEvents = await getAllEventsAsync();
 
-  const statsEntries = await Promise.all(
-    allEvents.map(async (e): Promise<[string, EventStats]> => {
-      try {
-        const stats = await getEventStatsAsync(e.slug);
-        return [e.slug, stats];
-      } catch {
-        return [e.slug, createFallbackStats(e.capacity ?? e.workshop?.capacity ?? 135)];
-      }
-    })
-  );
-
-  const statsBySlug = new Map<string, EventStats>(statsEntries);
-  const statsRecord: Record<string, EventStats> = {};
-  statsEntries.forEach(([slug, s]) => {
-    statsRecord[slug] = s;
-  });
-
   const flagshipWorkshop =
     allEvents.find((e) => e.slug === "dev-to-cloud") ??
     allEvents.find((e) => Boolean(e.workshop)) ??
@@ -115,11 +98,51 @@ async function AdminConsoleContent() {
     redirect(`/admin/console/events/${flagshipSlug}/check-in`);
   }
 
-  const flagshipStats =
-    (flagshipWorkshop ? statsBySlug.get(flagshipWorkshop.slug) : undefined) ??
-    createFallbackStats(flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 135);
+  // Fetch registrations once (populates shared cache for flagshipStats too) instead of scanning every archived event
+  let flagshipRegistrations: RegistrationRecord[] = [];
+  let flagshipStats = createFallbackStats(
+    flagshipWorkshop?.capacity ?? flagshipWorkshop?.workshop?.capacity ?? 135
+  );
+  try {
+    flagshipRegistrations = await getRegistrationsAsync(flagshipSlug);
+    flagshipStats = await getEventStatsAsync(flagshipSlug);
+  } catch {
+    // fallback to defaults
+  }
 
-  const flagshipRegistrations = await getRegistrationsAsync(flagshipSlug);
+  // Derive lightweight summary stats for directory rows directly from event docs (0 extra Firestore reads)
+  const statsEntries: [string, EventStats][] = allEvents.map((e) => {
+    if (e.slug === flagshipSlug) {
+      return [e.slug, flagshipStats];
+    }
+    const cap = e.capacity ?? e.workshop?.capacity ?? 135;
+    const regCount = e.registeredCount ?? e.workshop?.initialRegisteredCount ?? 0;
+    const remaining = Math.max(0, cap - regCount);
+    const open =
+      e.isRegistrationOpen ?? e.workshop?.registrationConfig?.isOpen ?? true;
+    return [
+      e.slug,
+      {
+        totalRegistered: regCount,
+        capacity: cap,
+        remaining,
+        percentFilled: cap > 0 ? Math.min(100, Math.round((regCount / cap) * 100)) : 100,
+        isOpen: Boolean(open) && remaining > 0,
+        isRegistrationOpen: Boolean(open),
+        checkedInCount: 0,
+        trackCounts: {},
+        yearCounts: {},
+        departmentCounts: {},
+      },
+    ];
+  });
+
+  const statsBySlug = new Map<string, EventStats>(statsEntries);
+  const statsRecord: Record<string, EventStats> = {};
+  statsEntries.forEach(([slug, s]) => {
+    statsRecord[slug] = s;
+  });
+
   const activeFlagshipRegistrations = flagshipRegistrations.filter((r) => r.status !== "cancelled");
   const recentRegistrations = activeFlagshipRegistrations.slice(0, 5);
   const velocityStats = computeVelocityStats(activeFlagshipRegistrations);
@@ -135,8 +158,6 @@ async function AdminConsoleContent() {
   });
   const archivedEventsList = allEvents.filter((e) => !activeEventsList.includes(e));
 
-  const totalRegisteredAll = statsEntries.reduce((sum, [, s]) => sum + s.totalRegistered, 0);
-  const totalCheckedInAll = statsEntries.reduce((sum, [, s]) => sum + s.checkedInCount, 0);
   const totalCapacityAll = statsEntries.reduce((sum, [, s]) => sum + s.capacity, 0);
 
   const gateVerificationRate = Math.round(

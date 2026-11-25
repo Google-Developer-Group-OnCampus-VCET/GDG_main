@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { events } from "@/content/events";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import { getCachedEventBySlug } from "@/lib/db/cached";
 import { resolveWorkshopDetails } from "@/lib/workshop-fallback";
 import { EventSubNav } from "@/components/event-sub-nav";
 import { EventSpeakersView } from "@/components/workshop/event-speakers-view";
@@ -18,7 +18,7 @@ export function generateStaticParams() {
 async function findEvent(slug: string) {
   await connection();
   try {
-    const dbEvent = await getEventBySlugAsync(slug);
+    const dbEvent = await getCachedEventBySlug(slug);
     if (dbEvent?.workshop) return dbEvent;
   } catch {
     // fallback
@@ -34,6 +34,13 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const staticMatch = events.find((event) => event.slug === slug);
+  if (staticMatch?.workshop) {
+    return {
+      title: `Speakers & Mentors · ${staticMatch.title}`,
+      description: `Meet the instructors, mentors, and leads for ${staticMatch.title}.`,
+    };
+  }
   const event = await findEvent(slug);
   if (!event || !event.workshop) return { title: "Speakers" };
   return {
@@ -51,14 +58,7 @@ async function EventSpeakersContent({
   const event = await findEvent(slug);
   if (!event || !event.workshop) notFound();
 
-  let stats;
-  try {
-    stats = await getEventStatsAsync(slug);
-  } catch {
-    // fallback
-  }
-
-  const workshop = resolveWorkshopDetails(event, stats);
+  const workshop = resolveWorkshopDetails(event);
 
   return (
     <div className="w-full flex flex-col">
