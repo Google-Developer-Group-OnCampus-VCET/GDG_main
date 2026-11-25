@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { getEventBySlugAsync, getRegistrationsAsync, getEmailLogsAsync } from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
+import { formatEventDateRange } from "@/lib/events";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { EmailHub } from "@/components/admin/email-hub";
 import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
@@ -71,6 +72,14 @@ async function AdminEmailContent({ slug }: { slug: string }) {
         <EmailHub
           eventSlug={slug}
           eventTitle={event.title}
+          eventDatesText={formatEventDateRange(event)}
+          eventLocation={
+            event.location ||
+            event.workshop?.venueText ||
+            "Vidyavardhini's College of Engineering and Technology, Vasai"
+          }
+          workshopAgenda={event.workshop?.agenda}
+          workshopSpeakers={event.workshop?.speakers}
           registrations={registrations}
           initialLogs={logs}
         />

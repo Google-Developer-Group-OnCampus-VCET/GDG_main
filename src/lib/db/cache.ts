@@ -74,3 +74,7 @@ export function revalidateEventCaches(eventSlug?: string): void {
   }
   safeRevalidateTags(tags, true);
 }
+
+export function revalidateSiteCaches(): void {
+  safeRevalidateTags(["site-settings"], true);
+}

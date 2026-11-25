@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { ChapterEvent, EventFormat, EventTopic } from "@/types";
+import { WorkshopCmsEditor } from "@/components/admin/workshop-cms-editor";
+import type { ChapterEvent, EventFormat, EventTopic, WorkshopDetails } from "@/types";
 
 const ALL_TOPICS: { id: EventTopic; label: string }[] = [
   { id: "web", label: "Modern Web" },
@@ -79,9 +80,18 @@ export function EventEditForm({
     event.topics && event.topics.length > 0 ? event.topics : ["general"]
   );
   const [summary, setSummary] = useState(event.summary ?? "");
+  const [image, setImage] = useState(event.image ?? "");
+  const [url, setUrl] = useState(event.url ?? "");
+  const [cancelled, setCancelled] = useState(Boolean(event.cancelled));
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(initialIsOpen);
+  const [requireApproval, setRequireApproval] = useState(
+    Boolean(event.requireApproval ?? event.workshop?.registrationConfig?.requireApproval)
+  );
+  const [workshop, setWorkshop] = useState<WorkshopDetails | undefined>(event.workshop);
 
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState<boolean | null>(null);
@@ -134,6 +144,18 @@ export function EventEditForm({
         : undefined;
 
     try {
+      const syncedWorkshop = workshop
+        ? {
+            ...workshop,
+            capacity: parsedCapacity,
+            registrationConfig: {
+              ...workshop.registrationConfig,
+              isOpen: isRegistrationOpen,
+              requireApproval,
+            },
+          }
+        : undefined;
+
       const res = await fetch(`/api/admin/events/${encodeURIComponent(event.slug)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -147,7 +169,12 @@ export function EventEditForm({
           priceNote: priceNote.trim() || undefined,
           topics: selectedTopics,
           summary: summary.trim(),
+          image: image.trim(),
+          url: url.trim(),
+          cancelled,
           isRegistrationOpen,
+          requireApproval,
+          ...(syncedWorkshop ? { workshop: syncedWorkshop } : {}),
         }),
       });
 
@@ -165,6 +192,31 @@ export function EventEditForm({
     } catch {
       setErrorMessage("Network error connecting to event API. Please try again.");
       setLoading(false);
+    }
+  }
+
+  async function handleDeleteEvent() {
+    if (canEdit === false || deleting) return;
+    setDeleting(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch(`/api/admin/events/${encodeURIComponent(event.slug)}`, {
+        method: "DELETE",
+      });
+      const data = (await res.json().catch(() => ({}))) as { message?: string };
+
+      if (!res.ok) {
+        setErrorMessage(data.message || "Failed to delete event.");
+        setDeleting(false);
+        return;
+      }
+
+      router.push("/admin/console");
+      router.refresh();
+    } catch {
+      setErrorMessage("Network error deleting event.");
+      setDeleting(false);
     }
   }
 
@@ -469,36 +521,188 @@ export function EventEditForm({
               />
             </div>
 
-            {/* 7. Registration Open Toggle */}
-            <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-surface-container-low border border-border/60">
-              <div className="flex flex-col gap-0.5">
+            {/* Cover Image & External URL */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1 text-left">
                 <label
-                  htmlFor="edit-regOpen"
-                  className="text-xs sm:text-sm font-semibold text-foreground cursor-pointer"
+                  htmlFor="edit-event-image"
+                  className="text-xs font-bold text-slate-700 uppercase tracking-wider"
                 >
-                  Accepting Public Registrations
+                  Poster / Cover Image URL or Path
                 </label>
-                <span className="text-xs text-foreground-muted">
-                  When disabled, the public registration form displays registration as closed.
-                </span>
-              </div>
-              <button
-                id="edit-regOpen"
-                type="button"
-                role="switch"
-                aria-checked={isRegistrationOpen}
-                onClick={() => setIsRegistrationOpen((prev) => !prev)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
-                  isRegistrationOpen ? "bg-emerald-600" : "bg-slate-300"
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
-                    isRegistrationOpen ? "translate-x-6" : "translate-x-1"
-                  }`}
+                <input
+                  id="edit-event-image"
+                  type="text"
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                  placeholder="/images/events/poster.jpg or https://..."
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
                 />
-              </button>
+              </div>
+
+              <div className="flex flex-col gap-1 text-left">
+                <label
+                  htmlFor="edit-event-url"
+                  className="text-xs font-bold text-slate-700 uppercase tracking-wider"
+                >
+                  Official / Bevy URL (Optional)
+                </label>
+                <input
+                  id="edit-event-url"
+                  type="text"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://gdg.community.dev/..."
+                  className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-hidden focus:ring-4 focus:ring-primary/10 transition-all"
+                />
+              </div>
             </div>
+
+            {/* Status Switches */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 7. Registration Open Toggle */}
+              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-surface-container-low border border-border/60">
+                <div className="flex flex-col gap-0.5">
+                  <label
+                    htmlFor="edit-regOpen"
+                    className="text-xs sm:text-sm font-semibold text-foreground cursor-pointer"
+                  >
+                    Accepting Public Registrations
+                  </label>
+                  <span className="text-xs text-foreground-muted">
+                    Toggle whether attendees can register online.
+                  </span>
+                </div>
+                <button
+                  id="edit-regOpen"
+                  type="button"
+                  role="switch"
+                  aria-checked={isRegistrationOpen}
+                  onClick={() => setIsRegistrationOpen((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                    isRegistrationOpen ? "bg-emerald-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
+                      isRegistrationOpen ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Require Host Approval (Luma Queue) Toggle */}
+              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 sm:col-span-2">
+                <div className="flex flex-col gap-0.5">
+                  <label
+                    htmlFor="edit-requireApproval"
+                    className="text-xs sm:text-sm font-semibold text-amber-950 cursor-pointer"
+                  >
+                    Require Host Approval (Luma Approval Queue)
+                  </label>
+                  <span className="text-xs text-amber-800/90">
+                    When enabled, new registrations go into Pending Review instead of issuing a QR pass immediately. Master Admins approve or decline guests from the Roster Queue.
+                  </span>
+                </div>
+                <button
+                  id="edit-requireApproval"
+                  type="button"
+                  role="switch"
+                  aria-checked={requireApproval}
+                  onClick={() => setRequireApproval((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                    requireApproval ? "bg-amber-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
+                      requireApproval ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Cancelled Toggle */}
+              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-rose-50/50 border border-rose-200/70">
+                <div className="flex flex-col gap-0.5">
+                  <label
+                    htmlFor="edit-cancelled"
+                    className="text-xs sm:text-sm font-semibold text-rose-950 cursor-pointer"
+                  >
+                    Mark Event Cancelled
+                  </label>
+                  <span className="text-xs text-rose-700/80">
+                    Displays a Cancelled status badge on public listings.
+                  </span>
+                </div>
+                <button
+                  id="edit-cancelled"
+                  type="button"
+                  role="switch"
+                  aria-checked={cancelled}
+                  onClick={() => setCancelled((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                    cancelled ? "bg-rose-600" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-xs transition-transform ${
+                      cancelled ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Workshop CMS Editor (Agenda, Speakers, Sponsors, Tracks, FAQ) */}
+            <WorkshopCmsEditor
+              workshop={workshop}
+              onChange={setWorkshop}
+              defaultTitle={title}
+              defaultSummary={summary}
+              defaultVenue={location}
+              defaultCapacity={Number(capacity) || 120}
+              defaultIsOpen={isRegistrationOpen}
+            />
+
+            {/* Danger Zone: Delete Event */}
+            {canEdit !== false ? (
+              <div className="p-4 rounded-2xl border border-rose-200 bg-rose-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-rose-900">Danger Zone · Delete Event</span>
+                  <span className="text-[11px] text-rose-700">
+                    Removes this event from public pages and admin console listings.
+                  </span>
+                </div>
+                {confirmDelete ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold text-slate-700 cursor-pointer"
+                    >
+                      Keep Event
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteEvent}
+                      disabled={deleting}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 cursor-pointer disabled:opacity-60"
+                    >
+                      {deleting ? "Deleting..." : "Confirm Delete"}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(true)}
+                    className="shrink-0 px-3.5 py-1.5 rounded-lg border border-rose-300 bg-white text-rose-700 text-xs font-semibold hover:bg-rose-100 cursor-pointer"
+                  >
+                    Delete Event
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             {/* Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">

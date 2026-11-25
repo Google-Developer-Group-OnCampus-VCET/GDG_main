@@ -30,6 +30,10 @@ export default function CreateEventPage() {
   const [priceNote, setPriceNote] = useState("Free event (Registration required)");
   const [selectedTopics, setSelectedTopics] = useState<EventTopic[]>(["web", "cloud"]);
   const [summary, setSummary] = useState("");
+  const [image, setImage] = useState("");
+  const [url, setUrl] = useState("");
+  const [enableWorkshop, setEnableWorkshop] = useState(true);
+  const [requireApproval, setRequireApproval] = useState(false);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(true);
 
   const [loading, setLoading] = useState(false);
@@ -97,6 +101,10 @@ export default function CreateEventPage() {
           priceNote: priceNote.trim() || undefined,
           topics: selectedTopics,
           summary: summary.trim() || undefined,
+          image: image.trim() || undefined,
+          url: url.trim() || undefined,
+          enableWorkshop,
+          requireApproval,
           isRegistrationOpen,
         }),
       });
@@ -363,18 +371,76 @@ export default function CreateEventPage() {
                 />
               </div>
 
-              {/* 8. Registration Open Toggle */}
-              <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
-                <input
-                  id="regOpen"
-                  type="checkbox"
-                  checked={isRegistrationOpen}
-                  onChange={(e) => setIsRegistrationOpen(e.target.checked)}
-                  className="w-4 h-4 rounded-md text-[#1a73e8] focus:ring-[#1a73e8]"
-                />
-                <label htmlFor="regOpen" className="text-xs sm:text-sm font-semibold text-slate-800 cursor-pointer">
-                  Open registrations immediately upon publishing
-                </label>
+              {/* Cover Image & External URL */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1 text-left">
+                  <label htmlFor="event-image" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Poster / Cover Image URL (Optional)
+                  </label>
+                  <input
+                    id="event-image"
+                    type="text"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder="/images/events/poster.jpg or https://..."
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                  />
+                </div>
+                <div className="flex flex-col gap-1 text-left">
+                  <label htmlFor="event-url" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Official Bevy / External URL (Optional)
+                  </label>
+                  <input
+                    id="event-url"
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://gdg.community.dev/..."
+                    className="h-11 px-3.5 rounded-xl border border-slate-300 bg-slate-50/50 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#1a73e8] focus:outline-hidden focus:ring-4 focus:ring-[#1a73e8]/10 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* 8. Toggles */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <input
+                    id="regOpen"
+                    type="checkbox"
+                    checked={isRegistrationOpen}
+                    onChange={(e) => setIsRegistrationOpen(e.target.checked)}
+                    className="w-4 h-4 rounded-md text-[#1a73e8] focus:ring-[#1a73e8]"
+                  />
+                  <label htmlFor="regOpen" className="text-xs sm:text-sm font-semibold text-slate-800 cursor-pointer">
+                    Open registrations immediately
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/80">
+                  <input
+                    id="enableWorkshop"
+                    type="checkbox"
+                    checked={enableWorkshop}
+                    onChange={(e) => setEnableWorkshop(e.target.checked)}
+                    className="w-4 h-4 rounded-md text-[#1a73e8] focus:ring-[#1a73e8]"
+                  />
+                  <label htmlFor="enableWorkshop" className="text-xs sm:text-sm font-semibold text-slate-800 cursor-pointer">
+                    Enable Workshop Mode (Agenda, Speakers &amp; FAQ)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80 sm:col-span-2">
+                  <input
+                    id="requireApproval"
+                    type="checkbox"
+                    checked={requireApproval}
+                    onChange={(e) => setRequireApproval(e.target.checked)}
+                    className="w-4 h-4 rounded-md text-amber-600 focus:ring-amber-600"
+                  />
+                  <label htmlFor="requireApproval" className="text-xs sm:text-sm font-semibold text-amber-950 cursor-pointer">
+                    Require Host Approval (Luma Approval Queue — review registrations before issuing QR passes)
+                  </label>
+                </div>
               </div>
 
               {/* Buttons */}

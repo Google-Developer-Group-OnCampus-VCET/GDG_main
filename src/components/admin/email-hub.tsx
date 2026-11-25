@@ -2,14 +2,57 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { RegistrationRecord, EmailLog } from "@/types";
+import type {
+  AgendaSession,
+  EmailLog,
+  RegistrationRecord,
+  WorkshopSpeaker,
+} from "@/types";
 
 interface EmailHubProps {
   eventSlug: string;
   eventTitle: string;
+  eventDatesText?: string;
+  eventLocation?: string;
+  workshopAgenda?: AgendaSession[];
+  workshopSpeakers?: WorkshopSpeaker[];
   registrations: RegistrationRecord[];
   initialLogs: EmailLog[];
 }
+
+const SPEAKER_TEMPLATES = [
+  {
+    name: "Official Talk Confirmation",
+    buildSubject: (eventTitle: string, talkTitle: string) =>
+      `Confirmed Speaker Invite: ${talkTitle || "Your Talk"} · ${eventTitle}`,
+    message: `Thank you for confirming your session with Google Developer Groups on Campus · VCET!
+
+We are delighted to host you as an official speaker. Our student developer cohort is eagerly looking forward to learning from your insights and practical experience.
+
+Please find your confirmed session details below. Kindly share your slide deck or repository links a day prior if you would like us to verify lab/display readiness beforehand, and let us know if you have any specific software or stage requirements.`,
+    ctaText: "View Event Agenda",
+  },
+  {
+    name: "Pre-Event Reminder & AV Check",
+    buildSubject: (eventTitle: string, talkTitle: string) =>
+      `Speaker Reminder & Venue Logistics: ${talkTitle || "Upcoming Session"} · ${eventTitle}`,
+    message: `We are just around the corner from your session at VCET! This is a quick confirmation reminder with reporting and AV setup details.
+
+Our organizing leads will greet you at the main gate/seminar hall entrance 30 minutes before your slot to assist with HDMI/USB-C display testing, microphone check, and refreshments.
+
+Feel free to reply directly to this thread or reach out to vcet_gdg@vcet.edu.in once you are on your way.`,
+    ctaText: "Review Schedule & Venue",
+  },
+  {
+    name: "Post-Talk Thank You",
+    buildSubject: (eventTitle: string, talkTitle: string) =>
+      `Thank You for Speaking on "${talkTitle || "Your Session"}" · ${eventTitle}`,
+    message: `Thank you so much for taking the time to inspire and mentor our student developers at VCET!
+
+Your session received tremendous appreciation from the attendees, and we are truly grateful for your contribution to the campus tech community. If you would like us to share your slides or resources with attendees, feel free to reply with the links.`,
+    ctaText: "Visit Event Recap Page",
+  },
+];
 
 const EMAIL_TEMPLATES = [
   {
@@ -113,12 +156,18 @@ Google Developer Groups on Campus VCET`,
 export function EmailHub({
   eventSlug,
   eventTitle,
+  eventDatesText = "Dec 1–4, 2026",
+  eventLocation = "Vidyavardhini's College of Engineering and Technology, Vasai",
+  workshopAgenda = [],
+  workshopSpeakers = [],
   registrations: initialRegistrations,
   initialLogs,
 }: EmailHubProps) {
   const router = useRouter();
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialRegistrations);
-  const [activeTab, setActiveTab] = useState<"broadcast" | "individual" | "history">("broadcast");
+  const [activeTab, setActiveTab] = useState<"broadcast" | "speaker" | "individual" | "history">(
+    "broadcast"
+  );
   const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
 
   // Broadcast state
@@ -146,6 +195,41 @@ export function EmailHub({
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Speaker confirmation state
+  const [speakerTemplateIdx, setSpeakerTemplateIdx] = useState(0);
+  const [speakerName, setSpeakerName] = useState("");
+  const [speakerEmail, setSpeakerEmail] = useState("");
+  const [speakerRole, setSpeakerRole] = useState("");
+  const [speakerCcEmail, setSpeakerCcEmail] = useState("");
+  const [talkTitle, setTalkTitle] = useState("");
+  const [sessionFormat, setSessionFormat] = useState("Technical Session");
+  const [sessionSlot, setSessionSlot] = useState(eventDatesText);
+  const [speakerVenue, setSpeakerVenue] = useState(eventLocation);
+  const [speakerSubject, setSpeakerSubject] = useState(
+    SPEAKER_TEMPLATES[0].buildSubject(eventTitle, "")
+  );
+  const [speakerSubjectCustomized, setSpeakerSubjectCustomized] = useState(false);
+  const [speakerMessage, setSpeakerMessage] = useState(SPEAKER_TEMPLATES[0].message);
+  const [speakerCtaText, setSpeakerCtaText] = useState(SPEAKER_TEMPLATES[0].ctaText);
+  const [speakerCtaUrl, setSpeakerCtaUrl] = useState(
+    `https://gdg-vcet.vercel.app/events/${eventSlug}/agenda`
+  );
+  const [sendingSpeakerMail, setSendingSpeakerMail] = useState(false);
+  const [speakerFeedback, setSpeakerFeedback] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const speakerAgendaOptions = useMemo(
+    () => workshopAgenda.filter((session) => session.track !== "break"),
+    [workshopAgenda]
+  );
+
+  const confirmedSpeakerLogs = useMemo(
+    () => logs.filter((entry) => entry.type === "speaker"),
+    [logs]
+  );
 
   // Target audience recipients
   const targetRecipients = useMemo(() => {
@@ -373,6 +457,156 @@ export function EmailHub({
     }
   }
 
+  function handleSelectSpeakerTemplate(idx: number) {
+    setSpeakerTemplateIdx(idx);
+    const tmpl = SPEAKER_TEMPLATES[idx];
+    if (!tmpl) return;
+    setSpeakerSubject(tmpl.buildSubject(eventTitle, talkTitle.trim()));
+    setSpeakerSubjectCustomized(false);
+    setSpeakerMessage(tmpl.message);
+    setSpeakerCtaText(tmpl.ctaText);
+  }
+
+  function handleTalkTitleChange(nextTitle: string) {
+    setTalkTitle(nextTitle);
+    if (!speakerSubjectCustomized) {
+      const tmpl = SPEAKER_TEMPLATES[speakerTemplateIdx] ?? SPEAKER_TEMPLATES[0];
+      setSpeakerSubject(tmpl.buildSubject(eventTitle, nextTitle.trim()));
+    }
+  }
+
+  function handlePrefillFromSession(session: AgendaSession) {
+    const nextTalk = session.title;
+    setTalkTitle(nextTalk);
+    setSessionSlot(`Day ${session.day} · ${session.time}`);
+    setSessionFormat(
+      session.trackLabel ||
+        (session.track === "lab"
+          ? "Hands-on Workshop"
+          : session.track === "keynote"
+            ? "Keynote Session"
+            : "Technical Session")
+    );
+    if (session.location) {
+      setSpeakerVenue(session.location);
+    }
+    if (session.speaker && !session.speaker.toLowerCase().includes("tbd")) {
+      setSpeakerName(session.speaker);
+    }
+    if (session.speakerRole && !session.speakerRole.toLowerCase().includes("tbd")) {
+      setSpeakerRole(session.speakerRole);
+    }
+    if (!speakerSubjectCustomized) {
+      const tmpl = SPEAKER_TEMPLATES[speakerTemplateIdx] ?? SPEAKER_TEMPLATES[0];
+      setSpeakerSubject(tmpl.buildSubject(eventTitle, nextTalk));
+    }
+  }
+
+  function handlePrefillFromSpeakerProfile(sp: WorkshopSpeaker) {
+    setSpeakerName(sp.name);
+    setSpeakerRole(
+      [sp.role, sp.organization].filter((v) => Boolean(v && v.trim())).join(" · ")
+    );
+    if (sp.topicTitle) {
+      handleTalkTitleChange(sp.topicTitle);
+    }
+    setSessionFormat(
+      sp.category === "keynote"
+        ? "Keynote Session"
+        : sp.category === "hands-on"
+          ? "Hands-on Workshop"
+          : "Technical Session"
+    );
+  }
+
+  async function handleSendSpeakerConfirmation(e: React.FormEvent) {
+    e.preventDefault();
+    if (
+      !speakerName.trim() ||
+      !speakerEmail.trim() ||
+      !talkTitle.trim() ||
+      !speakerSubject.trim() ||
+      !speakerMessage.trim()
+    ) {
+      setSpeakerFeedback({
+        type: "error",
+        text: "Please complete speaker name, email, confirmed talk title, subject, and message.",
+      });
+      return;
+    }
+
+    if (
+      !confirm(
+        `Send official Speaker Confirmation email to ${speakerName.trim()} (${speakerEmail.trim()}) for "${talkTitle.trim()}"?`
+      )
+    ) {
+      return;
+    }
+
+    setSendingSpeakerMail(true);
+    setSpeakerFeedback(null);
+
+    try {
+      const res = await fetch(`/api/events/${eventSlug}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "speaker-confirmation",
+          speakerName: speakerName.trim(),
+          speakerEmail: speakerEmail.trim(),
+          speakerRole: speakerRole.trim() || undefined,
+          ccEmail: speakerCcEmail.trim() || undefined,
+          talkTitle: talkTitle.trim(),
+          sessionFormat: sessionFormat.trim() || "Technical Session",
+          sessionSlot: sessionSlot.trim() || eventDatesText,
+          venue: speakerVenue.trim() || eventLocation,
+          subject: speakerSubject.trim(),
+          message: speakerMessage.trim(),
+          ctaText: speakerCtaText.trim() || undefined,
+          ctaUrl: speakerCtaUrl.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSpeakerFeedback({
+          type: "success",
+          text:
+            data.message ||
+            `Speaker confirmation emailed to ${speakerName.trim()} (${speakerEmail.trim()})!`,
+        });
+
+        const newLog: EmailLog = data.log ?? {
+          id: String(Date.now()),
+          eventSlug,
+          type: "speaker",
+          subject: speakerSubject.trim(),
+          recipientCount: speakerCcEmail.trim() ? 2 : 1,
+          recipients: speakerCcEmail.trim()
+            ? [speakerEmail.trim(), speakerCcEmail.trim()]
+            : [speakerEmail.trim()],
+          sentAt: new Date().toISOString(),
+          status: data.simulated ? "simulated" : "sent",
+          previewText: `${speakerName.trim()} · ${talkTitle.trim()}`,
+        };
+        setLogs((prev) => [newLog, ...prev]);
+      } else {
+        setSpeakerFeedback({
+          type: "error",
+          text: data.message || "Failed to send speaker confirmation email.",
+        });
+      }
+    } catch {
+      setSpeakerFeedback({
+        type: "error",
+        text: "Network error sending speaker confirmation email.",
+      });
+    } finally {
+      setSendingSpeakerMail(false);
+    }
+  }
+
   const filteredRegistrations = registrations.filter((r) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
@@ -397,6 +631,17 @@ export function EmailHub({
             }`}
         >
           Broadcast Announcements ({targetCount} Attendees)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("speaker")}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === "speaker"
+            ? "bg-emerald-600 text-white shadow-xs"
+            : "bg-surface text-foreground-muted hover:text-foreground hover:bg-surface-container"
+            }`}
+        >
+          Speaker Confirmation{confirmedSpeakerLogs.length > 0 ? ` (${confirmedSpeakerLogs.length})` : ""}
         </button>
 
         <button
@@ -851,7 +1096,417 @@ export function EmailHub({
         </div>
       ) : null}
 
-      {/* TAB 2: INDIVIDUAL PASS RESEND */}
+      {/* TAB 2: SPEAKER TALK CONFIRMATION */}
+      {activeTab === "speaker" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Compose Speaker Email Column */}
+          <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-foreground">
+                    Speaker Talk Confirmation &amp; Logistics
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
+                    Speaker Mode
+                  </span>
+                </div>
+                <p className="text-xs text-foreground-muted mt-0.5">
+                  Send an official confirmation card with talk title, time slot, venue, and AV checklist after a speaker confirms their talk.
+                </p>
+              </div>
+            </div>
+
+            {speakerFeedback ? (
+              <div
+                className={`p-3.5 rounded-xl text-xs font-semibold border ${
+                  speakerFeedback.type === "success"
+                    ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                    : "bg-rose-50 text-rose-900 border-rose-200"
+                }`}
+              >
+                {speakerFeedback.text}
+              </div>
+            ) : null}
+
+            {/* Speaker Presets */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Speaker Mail Presets
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {SPEAKER_TEMPLATES.map((tmpl, idx) => (
+                  <button
+                    key={tmpl.name}
+                    type="button"
+                    onClick={() => handleSelectSpeakerTemplate(idx)}
+                    className={`p-2.5 rounded-xl border text-left text-xs font-semibold transition-all cursor-pointer ${
+                      speakerTemplateIdx === idx
+                        ? "bg-emerald-50 border-emerald-500 text-emerald-900"
+                        : "bg-surface border-border text-foreground hover:bg-surface-container"
+                    }`}
+                  >
+                    {tmpl.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Prefill from Event Schedule / Roster */}
+            {speakerAgendaOptions.length > 0 || workshopSpeakers.length > 0 ? (
+              <div className="p-3.5 rounded-xl border border-border bg-surface-container-low/60 flex flex-col gap-2">
+                <span className="text-[11px] font-bold text-foreground uppercase tracking-wider">
+                  Quick Pre-fill from Event Schedule
+                </span>
+                {workshopSpeakers.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {workshopSpeakers.map((sp) => (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        onClick={() => handlePrefillFromSpeakerProfile(sp)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-border text-[11px] font-semibold text-foreground hover:border-emerald-400 hover:bg-emerald-50/60 transition-colors cursor-pointer"
+                      >
+                        👤 {sp.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {speakerAgendaOptions.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {speakerAgendaOptions.slice(0, 8).map((session) => (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => handlePrefillFromSession(session)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-border text-[11px] font-medium text-foreground-muted hover:text-foreground hover:border-primary/50 transition-colors cursor-pointer"
+                      >
+                        Day {session.day} · {session.title.slice(0, 34)}
+                        {session.title.length > 34 ? "…" : ""}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <form onSubmit={handleSendSpeakerConfirmation} className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Speaker Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerName}
+                    onChange={(e) => setSpeakerName(e.target.value)}
+                    placeholder="e.g. Aarav Mehta"
+                    required
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Speaker Email *
+                  </label>
+                  <input
+                    type="email"
+                    value={speakerEmail}
+                    onChange={(e) => setSpeakerEmail(e.target.value)}
+                    placeholder="speaker@company.com"
+                    required
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Role &amp; Organization (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerRole}
+                    onChange={(e) => setSpeakerRole(e.target.value)}
+                    placeholder="e.g. Cloud Engineer · Google"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    CC Co-Speaker / Faculty (Optional)
+                  </label>
+                  <input
+                    type="email"
+                    value={speakerCcEmail}
+                    onChange={(e) => setSpeakerCcEmail(e.target.value)}
+                    placeholder="coordinator@vcet.edu.in"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Confirmed Talk / Session Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={talkTitle}
+                    onChange={(e) => handleTalkTitleChange(e.target.value)}
+                    placeholder="e.g. Deploying AI Agents on Cloud Run"
+                    required
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Session Format
+                  </label>
+                  <select
+                    value={sessionFormat}
+                    onChange={(e) => setSessionFormat(e.target.value)}
+                    className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  >
+                    <option value="Technical Session">Technical Session</option>
+                    <option value="Hands-on Workshop">Hands-on Workshop</option>
+                    <option value="Keynote Session">Keynote Session</option>
+                    <option value="Panel / Fireside Chat">Panel / Fireside Chat</option>
+                    <option value="Guest Lecture">Guest Lecture</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Date &amp; Time Slot
+                  </label>
+                  <input
+                    type="text"
+                    value={sessionSlot}
+                    onChange={(e) => setSessionSlot(e.target.value)}
+                    placeholder="e.g. Day 2 · Dec 2, 2026 · 10:30 AM – 12:00 PM IST"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Venue / Room
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerVenue}
+                    onChange={(e) => setSpeakerVenue(e.target.value)}
+                    placeholder="VCET Seminar Hall, Vasai"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Email Subject *
+                </label>
+                <input
+                  type="text"
+                  value={speakerSubject}
+                  onChange={(e) => {
+                    setSpeakerSubject(e.target.value);
+                    setSpeakerSubjectCustomized(true);
+                  }}
+                  required
+                  className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-medium"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Confirmation Message *
+                </label>
+                <textarea
+                  value={speakerMessage}
+                  onChange={(e) => setSpeakerMessage(e.target.value)}
+                  rows={6}
+                  required
+                  className="p-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden font-normal leading-relaxed resize-y"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Action Button Label (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={speakerCtaText}
+                    onChange={(e) => setSpeakerCtaText(e.target.value)}
+                    placeholder="e.g. View Event Agenda"
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Action Button URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    value={speakerCtaUrl}
+                    onChange={(e) => setSpeakerCtaUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="h-11 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm text-foreground focus:bg-white focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={sendingSpeakerMail}
+                  className="w-full sm:w-auto h-12 px-6 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                  <span>
+                    {sendingSpeakerMail
+                      ? "Sending Confirmation..."
+                      : "Send Speaker Confirmation Mail"}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Live Speaker Preview Column */}
+          <div className="lg:col-span-5 flex flex-col gap-5">
+            <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  Live Speaker Mail Preview
+                </span>
+                <span className="text-[11px] text-emerald-700 font-semibold">
+                  Speaker Card HTML
+                </span>
+              </div>
+
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs bg-slate-50/50">
+                <div className="flex h-1.5 w-full">
+                  <div className="w-1/4 bg-[#4285F4]" />
+                  <div className="w-1/4 bg-[#EA4335]" />
+                  <div className="w-1/4 bg-[#FBBC04]" />
+                  <div className="w-1/4 bg-[#34A853]" />
+                </div>
+
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="inline-block self-start px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-800 uppercase">
+                    {eventTitle} &bull; Speaker Confirmation
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-900 leading-snug">
+                    {speakerSubject || "Speaker Confirmation Subject"}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-800">
+                    Dear {speakerName.trim() || "Speaker Name"},
+                  </p>
+                  <div className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">
+                    {speakerMessage || "Confirmation details..."}
+                  </div>
+
+                  {/* Session Brief Preview Card */}
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden text-[11px]">
+                    <div className="px-3 py-2 bg-blue-50 border-b border-blue-100 text-[10px] font-extrabold text-blue-700 uppercase tracking-wider">
+                      Confirmed Talk &amp; Session Brief
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      <div className="px-3 py-2 flex justify-between gap-2">
+                        <span className="text-slate-500 font-semibold">Session</span>
+                        <span className="text-slate-900 font-bold text-right">
+                          {talkTitle.trim() || "Talk Title"}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 flex justify-between gap-2">
+                        <span className="text-slate-500 font-semibold">Speaker</span>
+                        <span className="text-slate-900 font-bold text-right">
+                          {speakerName.trim() || "Speaker"}
+                          {speakerRole.trim() ? ` (${speakerRole.trim()})` : ""}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 flex justify-between gap-2">
+                        <span className="text-slate-500 font-semibold">Format</span>
+                        <span className="text-slate-900 font-semibold text-right">
+                          {sessionFormat}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 flex justify-between gap-2">
+                        <span className="text-slate-500 font-semibold">Date &amp; Time</span>
+                        <span className="text-slate-900 font-semibold text-right">
+                          {sessionSlot || eventDatesText}
+                        </span>
+                      </div>
+                      <div className="px-3 py-2 flex justify-between gap-2">
+                        <span className="text-slate-500 font-semibold">Venue</span>
+                        <span className="text-slate-900 font-semibold text-right">
+                          {speakerVenue || eventLocation}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {speakerCtaText && speakerCtaUrl ? (
+                    <div className="py-1 text-center">
+                      <span className="inline-block px-4 py-2 rounded-lg bg-primary text-white font-bold text-xs shadow-xs">
+                        {speakerCtaText}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <div className="pt-2 text-[10px] text-slate-400 border-t border-slate-200 text-center">
+                    Google Developer Groups on Campus &middot; VCET Vasai
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {confirmedSpeakerLogs.length > 0 ? (
+              <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                    Sent Speaker Confirmations ({confirmedSpeakerLogs.length})
+                  </span>
+                </div>
+                <div className="divide-y divide-border/60">
+                  {confirmedSpeakerLogs.slice(0, 5).map((entry) => (
+                    <div key={entry.id} className="py-2.5 flex items-start justify-between gap-2 text-xs">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-foreground truncate">
+                          {entry.previewText || entry.subject}
+                        </div>
+                        <div className="font-mono text-[11px] text-foreground-muted truncate">
+                          {entry.recipients.join(", ")}
+                        </div>
+                      </div>
+                      <span className="shrink-0 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold uppercase">
+                        {entry.status === "simulated" ? "Simulated" : entry.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* TAB 3: INDIVIDUAL PASS RESEND */}
       {activeTab === "individual" ? (
         <div className="bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -995,10 +1650,13 @@ export function EmailHub({
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${log.type === "pass"
-                            ? "bg-purple-50 text-purple-700 border border-purple-200"
-                            : "bg-blue-50 text-blue-700 border border-blue-200"
-                            }`}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            log.type === "pass"
+                              ? "bg-purple-50 text-purple-700 border border-purple-200"
+                              : log.type === "speaker"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                          }`}
                         >
                           {log.type}
                         </span>

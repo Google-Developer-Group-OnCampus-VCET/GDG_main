@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createRegistrationAsync } from "@/lib/db";
+import { createRegistrationAsync, getEventBySlugAsync } from "@/lib/db";
+import { sendApplicationReceivedEmail } from "@/lib/email";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import type { RegistrationInput } from "@/types";
 
@@ -57,10 +58,27 @@ export async function POST(
       );
     }
 
+    const isPending = result.registration.status === "pending";
+    if (isPending) {
+      try {
+        const ev = await getEventBySlugAsync(slug).catch(() => null);
+        await sendApplicationReceivedEmail({
+          eventTitle: ev?.title || slug,
+          registration: result.registration,
+          origin: request.headers.get("origin") || undefined,
+        });
+      } catch {
+        // email notification failure must not block registration
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: "Registration confirmed successfully!",
+        pendingApproval: isPending,
+        message: isPending
+          ? "Application submitted and is pending host approval."
+          : "Registration confirmed successfully!",
         registration: result.registration,
       },
       { status: 201 }

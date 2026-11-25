@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Google_Sans } from "next/font/google";
 import "./globals.css";
+import { DynamicSiteHeader, DynamicSiteFooter } from "@/components/site-chrome";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteLoader } from "@/components/site-loader";
@@ -44,14 +45,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>
-        <Suspense fallback={null}>
-          <SiteHeader />
+        <Suspense fallback={<SiteHeader />}>
+          <DynamicSiteHeader />
         </Suspense>
         <main id="main-content" className="flex-1">
           {children}
         </main>
-        <Suspense fallback={null}>
-          <SiteFooter />
+        <Suspense fallback={<SiteFooter />}>
+          <DynamicSiteFooter />
         </Suspense>
       </body>
     </html>

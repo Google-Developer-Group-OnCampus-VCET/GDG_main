@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
-import { getEventBySlugAsync, getPublicEventStatsAsync, logAuditEventAsync, updateEventAsync } from "@/lib/db";
+import {
+  deleteEventAsync,
+  getEventBySlugAsync,
+  getPublicEventStatsAsync,
+  logAuditEventAsync,
+  updateEventAsync,
+} from "@/lib/db";
 import { getClientIp } from "@/lib/rate-limit";
-import type { EventFormat, EventTopic, EventUpdateInput } from "@/types";
+import type { EventFormat, EventTopic, EventUpdateInput, WorkshopDetails } from "@/types";
 
 const VALID_FORMATS = new Set<EventFormat>(["in-person", "online", "hybrid"]);
 const VALID_TOPICS = new Set<EventTopic>(["web", "ai-ml", "cloud", "android", "general"]);
@@ -74,6 +80,41 @@ function validateUpdatePayload(
       return { valid: false, message: "Summary must be a string." };
     }
     data.summary = body.summary;
+  }
+
+  if (body.image !== undefined) {
+    if (typeof body.image !== "string") {
+      return { valid: false, message: "Cover image path/URL must be a string." };
+    }
+    data.image = body.image.trim();
+  }
+
+  if (body.url !== undefined) {
+    if (typeof body.url !== "string") {
+      return { valid: false, message: "External URL must be a string." };
+    }
+    data.url = body.url.trim();
+  }
+
+  if (body.cancelled !== undefined) {
+    if (typeof body.cancelled !== "boolean") {
+      return { valid: false, message: "cancelled must be a boolean." };
+    }
+    data.cancelled = body.cancelled;
+  }
+
+  if (body.requireApproval !== undefined) {
+    if (typeof body.requireApproval !== "boolean") {
+      return { valid: false, message: "requireApproval must be a boolean." };
+    }
+    data.requireApproval = body.requireApproval;
+  }
+
+  if (body.workshop !== undefined) {
+    if (!body.workshop || typeof body.workshop !== "object" || Array.isArray(body.workshop)) {
+      return { valid: false, message: "workshop payload must be an object." };
+    }
+    data.workshop = body.workshop as WorkshopDetails;
   }
 
   if (body.priceNote !== undefined) {
@@ -219,6 +260,68 @@ export async function PATCH(
     console.error("Admin PATCH event error:", err);
     return NextResponse.json(
       { error: "SERVER_ERROR", message: "Failed to update event." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const role = await getAdminRoleFromRequest(request);
+    if (!role) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Admin authorization required." },
+        { status: 401 }
+      );
+    }
+
+    if (role !== "admin") {
+      return NextResponse.json(
+        {
+          error: "FORBIDDEN",
+          message: "Event deletion is restricted. Only master admin can delete events.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const { slug } = await params;
+    const result = await deleteEventAsync(slug);
+
+    if (!result.success) {
+      if (result.error === "EVENT_NOT_FOUND") {
+        return NextResponse.json(
+          { error: "EVENT_NOT_FOUND", message: "Event not found." },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json(
+        { error: "DELETE_FAILED", message: result.error || "Failed to delete event." },
+        { status: 400 }
+      );
+    }
+
+    await logAuditEventAsync({
+      action: "EVENT_DELETED",
+      actorRole: role,
+      actorIdentifier: "Master Admin",
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent") || undefined,
+      eventSlug: slug,
+      details: { slug },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Event "${slug}" deleted successfully.`,
+    });
+  } catch (err) {
+    console.error("Admin DELETE event error:", err);
+    return NextResponse.json(
+      { error: "SERVER_ERROR", message: "Failed to delete event." },
       { status: 500 }
     );
   }

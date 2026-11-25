@@ -89,6 +89,7 @@ export interface WorkshopTrack {
 
 export interface WorkshopRegistrationConfig {
   isOpen: boolean;
+  requireApproval?: boolean;
   deadline?: string;
   price: number; // 0 for free
   currency: string;
@@ -150,10 +151,13 @@ export interface ChapterEvent {
   transcribedAt?: string;
   capacity?: number;
   isRegistrationOpen?: boolean;
+  requireApproval?: boolean;
   registeredCount?: number;
   /** When present, enables the rich multi-page workshop experience */
   workshop?: WorkshopDetails;
 }
+
+export type RegistrationStatus = "pending" | "confirmed" | "waitlisted" | "declined" | "cancelled";
 
 export interface RegistrationRecord {
   id: string;
@@ -169,7 +173,8 @@ export interface RegistrationRecord {
   experienceLevel: string;
   portfolioUrl?: string;
   notes?: string;
-  status: "confirmed" | "waitlisted" | "cancelled";
+  status: RegistrationStatus;
+  reviewedAt?: string;
   checkedIn: boolean;
   checkedInAt?: string;
   checkedInDays?: number[];
@@ -201,12 +206,59 @@ export interface EventInput {
   location?: string;
   topics?: EventTopic[];
   summary?: string;
+  image?: string;
+  url?: string;
+  cancelled?: boolean;
   capacity?: number;
   priceNote?: string;
   isRegistrationOpen?: boolean;
+  requireApproval?: boolean;
+  workshop?: WorkshopDetails;
 }
 
 export type EventUpdateInput = Partial<Omit<EventInput, "slug">>;
+
+export interface RegistrationUpdateInput {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  college?: string;
+  department?: string;
+  yearOfStudy?: string;
+  track?: string;
+  experienceLevel?: string;
+  portfolioUrl?: string;
+  notes?: string;
+  status?: RegistrationStatus;
+}
+
+export interface LearningArea {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface SiteFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface AboutCardItem {
+  title: string;
+  description: string;
+}
+
+export interface ChapterSettings {
+  chapter: ChapterConfig;
+  team: TeamMember[];
+  learningAreas: LearningArea[];
+  homeFaq: SiteFaqItem[];
+  joinFaq: SiteFaqItem[];
+  joinDescription: string;
+  aboutDescription: string;
+  aboutCards: AboutCardItem[];
+  updatedAt?: string;
+}
 
 export interface TeamMember {
   id: string;
@@ -249,7 +301,7 @@ export interface ChapterConfig {
 export interface EmailLog {
   id: string;
   eventSlug: string;
-  type: "pass" | "announcement";
+  type: "pass" | "announcement" | "speaker";
   subject: string;
   recipientCount: number;
   recipients: string[];
@@ -264,10 +316,18 @@ export type AuditAction =
   | "AUTH_LOGIN_FAILED"
   | "ATTENDEE_CHECK_IN"
   | "CHECK_IN_DUPLICATE_BLOCKED"
+  | "CHECK_IN_REVOKED"
   | "EVENT_UPDATE"
   | "EVENT_CREATE"
+  | "EVENT_DELETED"
   | "EMAIL_BROADCAST"
-  | "REGISTRATION_CANCELLED";
+  | "SPEAKER_CONFIRMATION_SENT"
+  | "REGISTRATION_CANCELLED"
+  | "REGISTRATION_CREATED"
+  | "REGISTRATION_APPROVED"
+  | "REGISTRATION_DECLINED"
+  | "REGISTRATION_UPDATED"
+  | "SITE_SETTINGS_UPDATED";
 
 export type AuditActorRole = "admin" | "core" | "volunteer" | "system";
 

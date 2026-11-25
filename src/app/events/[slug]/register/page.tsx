@@ -25,13 +25,6 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const staticMatch = staticEvents.find((e) => e.slug === slug);
-  if (staticMatch) {
-    return {
-      title: `Register · ${staticMatch.title}`,
-      description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
-    };
-  }
   await connection();
   try {
     const event = await getCachedEventBySlug(slug);
@@ -43,6 +36,13 @@ export async function generateMetadata({
     }
   } catch {
     // fallback
+  }
+  const staticMatch = staticEvents.find((e) => e.slug === slug);
+  if (staticMatch) {
+    return {
+      title: `Register · ${staticMatch.title}`,
+      description: `Official registration for ${staticMatch.title} at GDG on Campus VCET.`,
+    };
   }
   return { title: "Register" };
 }

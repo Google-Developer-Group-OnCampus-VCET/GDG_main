@@ -2,15 +2,19 @@ import crypto from "node:crypto";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { events as defaultEvents } from "@/content/events";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
-import { getCached, setCached, invalidateCache, revalidateEventCaches } from "./cache";
+import { getCached, setCached, invalidateCache, revalidateEventCaches, revalidateSiteCaches } from "./cache";
+import { DEFAULT_CHAPTER_SETTINGS } from "@/lib/site-defaults";
 import type {
   AuditLogEntry,
   ChapterEvent,
+  ChapterSettings,
   EmailLog,
   EventInput,
   EventUpdateInput,
   RegistrationInput,
   RegistrationRecord,
+  RegistrationStatus,
+  RegistrationUpdateInput,
 } from "@/types";
 import type { CreateRegistrationResult, EventStats } from "./index";
 
@@ -88,18 +92,30 @@ export async function createFirestoreEvent(
       location: input.location?.trim() || "Vidyavardhini's College of Engineering and Technology, Vasai",
       topics: input.topics && input.topics.length > 0 ? input.topics : ["general"],
       summary: input.summary?.trim() || undefined,
-      registrationUrl: `/events/${slug}/register`,
-    };
-
-    const docPayload = {
-      ...eventRecord,
+      ...(input.image?.trim() ? { image: input.image.trim() } : {}),
+      ...(input.url?.trim() ? { url: input.url.trim() } : {}),
+      ...(input.cancelled !== undefined ? { cancelled: Boolean(input.cancelled) } : {}),
       capacity: input.capacity ?? 120,
       priceNote: input.priceNote?.trim() || undefined,
       isRegistrationOpen: input.isRegistrationOpen ?? true,
+      ...(input.requireApproval !== undefined
+        ? { requireApproval: Boolean(input.requireApproval) }
+        : input.workshop?.registrationConfig?.requireApproval !== undefined
+          ? { requireApproval: Boolean(input.workshop.registrationConfig.requireApproval) }
+          : {}),
       registeredCount: 0,
+      registrationUrl: `/events/${slug}/register`,
+      ...(input.workshop ? { workshop: input.workshop } : {}),
+    };
+
+    const docPayload: Record<string, unknown> = {
+      ...eventRecord,
       createdAt: now,
       updatedAt: now,
     };
+    Object.keys(docPayload).forEach((k) => {
+      if (docPayload[k] === undefined) delete docPayload[k];
+    });
 
     await docRef.set(docPayload);
 
@@ -141,6 +157,11 @@ export async function updateFirestoreEvent(
       return { success: false, error: "EVENT_NOT_FOUND" };
     }
 
+    const existingData = existingDoc.data();
+    if (existingData?.deleted === true) {
+      return { success: false, error: "EVENT_NOT_FOUND" };
+    }
+
     const now = new Date().toISOString();
     const updates: Record<string, unknown> = {
       updatedAt: now,
@@ -156,15 +177,38 @@ export async function updateFirestoreEvent(
       updates.topics = input.topics.length > 0 ? input.topics : ["general"];
     }
     if (input.summary !== undefined) updates.summary = input.summary.trim() || null;
+    if (input.image !== undefined) updates.image = input.image.trim() || null;
+    if (input.url !== undefined) updates.url = input.url.trim() || null;
+    if (input.cancelled !== undefined) updates.cancelled = Boolean(input.cancelled);
     if (input.priceNote !== undefined) updates.priceNote = input.priceNote.trim() || null;
+    if (input.workshop !== undefined) {
+      updates.workshop = input.workshop;
+    }
     if (input.capacity !== undefined) {
       const cap = Math.floor(input.capacity);
       updates.capacity = cap;
-      updates["workshop.capacity"] = cap;
-      updates["workshop.seatsText"] = `Limited to ${cap} Seats`;
+      // Only update nested workshop.capacity when a full workshop doc already exists (prevents creating a partial stub that blocks static workshop merge)
+      if (input.workshop) {
+        updates.workshop = {
+          ...input.workshop,
+          capacity: cap,
+          seatsText: `Limited to ${cap} Seats`,
+        };
+      } else if (existingData?.workshop && typeof existingData.workshop.headline === "string") {
+        updates["workshop.capacity"] = cap;
+        updates["workshop.seatsText"] = `Limited to ${cap} Seats`;
+      }
     }
     if (input.isRegistrationOpen !== undefined) {
       updates.isRegistrationOpen = Boolean(input.isRegistrationOpen);
+    }
+    if (input.requireApproval !== undefined) {
+      updates.requireApproval = Boolean(input.requireApproval);
+      if (!input.workshop && existingData?.workshop && typeof existingData.workshop.headline === "string") {
+        updates["workshop.registrationConfig.requireApproval"] = Boolean(input.requireApproval);
+      }
+    } else if (input.workshop?.registrationConfig?.requireApproval !== undefined) {
+      updates.requireApproval = Boolean(input.workshop.registrationConfig.requireApproval);
     }
 
     if (!existingDoc.exists && defaultMatch) {
@@ -180,9 +224,12 @@ export async function updateFirestoreEvent(
           "Vidyavardhini's College of Engineering and Technology, Vasai",
         topics: defaultMatch.topics || ["general"],
         registrationUrl: defaultMatch.registrationUrl || `/events/${defaultMatch.slug}/register`,
-        capacity: defaultMatch.workshop?.capacity ?? 150,
+        capacity: defaultMatch.capacity ?? defaultMatch.workshop?.capacity ?? 150,
         isRegistrationOpen: defaultMatch.workshop?.registrationConfig?.isOpen ?? true,
         createdAt: now,
+        ...(defaultMatch.image ? { image: defaultMatch.image } : {}),
+        ...(defaultMatch.url ? { url: defaultMatch.url } : {}),
+        ...(defaultMatch.priceNote ? { priceNote: defaultMatch.priceNote } : {}),
         ...updates,
       };
       if (defaultMatch.endsAt && updates.endsAt === undefined) {
@@ -205,6 +252,13 @@ export async function updateFirestoreEvent(
         ...defaultMatch.workshop,
         capacity: cap,
         seatsText: `Limited to ${cap} Seats`,
+        venueText: updatedEvent.location || defaultMatch.workshop.venueText,
+        registrationConfig: {
+          ...defaultMatch.workshop.registrationConfig,
+          ...(typeof updatedEvent.isRegistrationOpen === "boolean"
+            ? { isOpen: updatedEvent.isRegistrationOpen }
+            : {}),
+        },
       };
     }
 
@@ -217,6 +271,44 @@ export async function updateFirestoreEvent(
   }
 }
 
+export async function deleteFirestoreEvent(
+  slug: string
+): Promise<{ success: boolean; error?: string } | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const docRef = db.collection("events").doc(slug);
+    const existingDoc = await docRef.get();
+    const defaultMatch = defaultEvents.find((e) => e.slug === slug);
+
+    if (!existingDoc.exists && !defaultMatch) {
+      return { success: false, error: "EVENT_NOT_FOUND" };
+    }
+
+    if (defaultMatch) {
+      // Soft-delete built-in default events so defaultEvents merger does not resurrect them
+      await docRef.set(
+        {
+          slug,
+          deleted: true,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } else {
+      await docRef.delete();
+    }
+
+    invalidateCache("fs:");
+    revalidateEventCaches(slug);
+    return { success: true };
+  } catch (err) {
+    console.warn("Firestore deleteEvent failed:", (err as Error).message);
+    return { success: false, error: (err as Error).message };
+  }
+}
+
 function mapFirestoreEventDoc(docId: string, d: FirebaseFirestore.DocumentData): ChapterEvent {
   const capacity =
     typeof d.capacity === "number"
@@ -225,7 +317,15 @@ function mapFirestoreEventDoc(docId: string, d: FirebaseFirestore.DocumentData):
         ? d.workshop.capacity
         : undefined;
 
-  const workshop = d.workshop
+  const hasFullWorkshop = Boolean(d.workshop && typeof d.workshop.headline === "string");
+  const requireApproval =
+    typeof d.requireApproval === "boolean"
+      ? d.requireApproval
+      : typeof d.workshop?.registrationConfig?.requireApproval === "boolean"
+        ? d.workshop.registrationConfig.requireApproval
+        : undefined;
+
+  const workshop = hasFullWorkshop
     ? {
         ...d.workshop,
         ...(capacity !== undefined
@@ -243,6 +343,7 @@ function mapFirestoreEventDoc(docId: string, d: FirebaseFirestore.DocumentData):
           ...(typeof d.isRegistrationOpen === "boolean"
             ? { isOpen: d.isRegistrationOpen }
             : {}),
+          ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
         },
       }
     : undefined;
@@ -258,9 +359,13 @@ function mapFirestoreEventDoc(docId: string, d: FirebaseFirestore.DocumentData):
     location: d.location,
     topics: d.topics || ["general"],
     summary: d.summary || undefined,
+    image: d.image || undefined,
+    url: d.url || undefined,
+    cancelled: typeof d.cancelled === "boolean" ? d.cancelled : undefined,
     capacity,
     priceNote: d.priceNote || undefined,
     isRegistrationOpen: typeof d.isRegistrationOpen === "boolean" ? d.isRegistrationOpen : undefined,
+    ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
     registeredCount: typeof d.registeredCount === "number" ? d.registeredCount : undefined,
     registrationUrl: d.registrationUrl || `/events/${d.slug || docId}/register`,
     workshop,
@@ -283,7 +388,9 @@ function buildPublicStatsObject(
   slug: string,
   rawCapacity: number,
   isRegistrationOpen: boolean,
-  totalRegistered: number
+  totalRegistered: number,
+  pendingCount = 0,
+  waitlistedCount = 0
 ): EventStats {
   const capacity = resolveEffectiveCapacity(slug, rawCapacity, totalRegistered);
   const remaining = Math.max(0, capacity - totalRegistered);
@@ -292,6 +399,8 @@ function buildPublicStatsObject(
 
   return {
     totalRegistered,
+    pendingCount,
+    waitlistedCount,
     capacity,
     remaining,
     percentFilled,
@@ -311,6 +420,8 @@ function buildEventStatsFromRegistrations(
   regs: RegistrationRecord[]
 ): EventStats {
   let totalRegistered = 0;
+  let pendingCount = 0;
+  let waitlistedCount = 0;
   let checkedInCount = 0;
   const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   let multiDayCompletionCount = 0;
@@ -324,7 +435,15 @@ function buildEventStatsFromRegistrations(
   let otherCount = 0;
 
   for (const data of regs) {
-    if (data.status === "cancelled") continue;
+    if (data.status === "pending") {
+      pendingCount++;
+      continue;
+    }
+    if (data.status === "waitlisted") {
+      waitlistedCount++;
+      continue;
+    }
+    if (data.status === "cancelled" || data.status === "declined") continue;
     totalRegistered++;
     if (data.checkedIn) checkedInCount++;
 
@@ -378,7 +497,14 @@ function buildEventStatsFromRegistrations(
   const vcetPercent =
     totalRegistered > 0 ? Math.round((vcetCount / totalRegistered) * 100) : 0;
 
-  const base = buildPublicStatsObject(slug, rawCapacity, isRegistrationOpen, totalRegistered);
+  const base = buildPublicStatsObject(
+    slug,
+    rawCapacity,
+    isRegistrationOpen,
+    totalRegistered,
+    pendingCount,
+    waitlistedCount
+  );
 
   return {
     ...base,
@@ -458,6 +584,10 @@ async function getAllEventRegistrationsFromFirestore(
   }
 }
 
+export async function getFirestoreDeletedEventSlugs(): Promise<string[]> {
+  return getCached<string[]>("fs:deleted-events") ?? [];
+}
+
 export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
   const cacheKey = "fs:events";
   const cached = getCached<ChapterEvent[]>(cacheKey);
@@ -468,15 +598,25 @@ export async function getFirestoreEvents(): Promise<ChapterEvent[] | null> {
 
   try {
     const snapshot = await db.collection("events").get();
-    if (snapshot.empty) return [];
+    if (snapshot.empty) {
+      setCached("fs:deleted-events", [], 60 * 1000);
+      return [];
+    }
 
     const list: ChapterEvent[] = [];
+    const deletedSlugs: string[] = [];
     snapshot.forEach((doc) => {
-      const event = mapFirestoreEventDoc(doc.id, doc.data());
+      const data = doc.data();
+      if (data?.deleted === true) {
+        deletedSlugs.push(data.slug || doc.id);
+        return;
+      }
+      const event = mapFirestoreEventDoc(doc.id, data);
       list.push(event);
       setCached(`fs:event:${event.slug}`, event, 60 * 1000);
     });
 
+    setCached("fs:deleted-events", deletedSlugs, 60 * 1000);
     setCached(cacheKey, list, 60 * 1000);
     return list;
   } catch (err) {
@@ -498,7 +638,7 @@ export async function getFirestoreEvent(slug: string): Promise<ChapterEvent | nu
     if (!doc.exists) return null;
 
     const d = doc.data();
-    if (!d) return null;
+    if (!d || d.deleted === true) return null;
 
     const eventResult = mapFirestoreEventDoc(doc.id, d);
     setCached(cacheKey, eventResult, 60 * 1000);
@@ -718,7 +858,8 @@ export async function getFirestoreRegistrations(
 
 export async function createFirestoreRegistration(
   eventSlug: string,
-  input: RegistrationInput
+  input: RegistrationInput,
+  options?: { forceConfirmed?: boolean }
 ): Promise<CreateRegistrationResult | null> {
   const validated = validateAndNormalizeRegistrationInput(input);
   if (!validated.valid) {
@@ -775,6 +916,15 @@ export async function createFirestoreRegistration(
         true
       );
 
+      const requireApproval = Boolean(
+        eventData?.requireApproval ??
+        eventData?.workshop?.registrationConfig?.requireApproval ??
+        defaultMatch?.requireApproval ??
+        defaultMatch?.workshop?.registrationConfig?.requireApproval ??
+        false
+      );
+      const isPending = requireApproval && !options?.forceConfirmed;
+
       if (!isRegistrationOpen) {
         return {
           success: false,
@@ -788,11 +938,14 @@ export async function createFirestoreRegistration(
       const existingRegDoc = await transaction.get(regDocRef);
       if (existingRegDoc.exists) {
         const existingData = existingRegDoc.data();
-        if (existingData?.status !== "cancelled") {
+        if (existingData?.status !== "cancelled" && existingData?.status !== "declined") {
           return {
             success: false,
             error: "DUPLICATE_EMAIL",
-            message: "This email is already registered for this event.",
+            message:
+              existingData?.status === "pending"
+                ? "An application with this email is already pending host review."
+                : "This email is already registered for this event.",
           };
         }
       }
@@ -805,7 +958,10 @@ export async function createFirestoreRegistration(
         const regsSnap = await transaction.get(
           db.collection("registrations").where("eventSlug", "==", eventSlug)
         );
-        currentCount = regsSnap.docs.filter((d) => d.data().status !== "cancelled").length;
+        currentCount = regsSnap.docs.filter((d) => {
+          const st = d.data().status;
+          return !st || st === "confirmed";
+        }).length;
       }
 
       // Peak capacity: dev-to-cloud is fixed at 135 peak capacity. Other events auto-expand if initial 120 is reached.
@@ -816,7 +972,7 @@ export async function createFirestoreRegistration(
             ? Math.max(rawCapacity, 135)
             : rawCapacity;
 
-      if (currentCount >= effectiveCapacity) {
+      if (!isPending && currentCount >= effectiveCapacity) {
         return {
           success: false,
           error: "CAPACITY_FULL",
@@ -825,12 +981,15 @@ export async function createFirestoreRegistration(
       }
 
       // 4. Generate referenceId and run 1 indexed uniqueness check before any writes
-      let referenceId = buildEventReferenceId(eventSlug, currentCount + 1);
+      const pendingBase =
+        typeof eventData?.pendingCount === "number" ? eventData.pendingCount : 0;
+      const refSeed = isPending ? currentCount + pendingBase + 1 : currentCount + 1;
+      let referenceId = buildEventReferenceId(eventSlug, refSeed, isPending);
       const refCheckSnap = await transaction.get(
         db.collection("registrations").where("referenceId", "==", referenceId).limit(1)
       );
       if (!refCheckSnap.empty) {
-        referenceId = buildEventReferenceId(eventSlug, currentCount + 1, true);
+        referenceId = buildEventReferenceId(eventSlug, refSeed, true);
       }
 
       // 5. All reads complete — perform writes
@@ -850,7 +1009,7 @@ export async function createFirestoreRegistration(
         experienceLevel,
         ...(portfolioUrl ? { portfolioUrl } : {}),
         ...(notes ? { notes } : {}),
-        status: "confirmed",
+        status: isPending ? "pending" : "confirmed",
         checkedIn: false,
         createdAt,
       };
@@ -858,11 +1017,16 @@ export async function createFirestoreRegistration(
       transaction.set(regDocRef, newRegistration);
 
       if (eventDoc.exists) {
-        const eventUpdates: Record<string, unknown> = {
-          registeredCount: currentCount + 1,
-          updatedAt: createdAt,
-        };
-        if ((eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120) {
+        const eventUpdates: Record<string, unknown> = isPending
+          ? {
+              pendingCount: pendingBase + 1,
+              updatedAt: createdAt,
+            }
+          : {
+              registeredCount: currentCount + 1,
+              updatedAt: createdAt,
+            };
+        if (!isPending && (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120) {
           eventUpdates.capacity = 135;
           eventUpdates["workshop.capacity"] = 135;
         }
@@ -880,9 +1044,14 @@ export async function createFirestoreRegistration(
             "Vidyavardhini's College of Engineering and Technology, Vasai",
           topics: defaultMatch.topics || ["general"],
           registrationUrl: defaultMatch.registrationUrl || `/events/${defaultMatch.slug}/register`,
-          capacity: (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120 ? 135 : rawCapacity,
+          capacity:
+            !isPending && (eventSlug === "dev-to-cloud" || rawCapacity === 120) && currentCount + 1 >= 120
+              ? 135
+              : rawCapacity,
           isRegistrationOpen,
-          registeredCount: currentCount + 1,
+          requireApproval,
+          registeredCount: isPending ? currentCount : currentCount + 1,
+          pendingCount: isPending ? pendingBase + 1 : pendingBase,
           createdAt,
           updatedAt: createdAt,
         };
@@ -931,11 +1100,12 @@ export async function cancelFirestoreRegistration(
           return { ok: true, eventSlug };
         }
 
+        const wasConfirmed = !regData.status || regData.status === "confirmed";
         const now = new Date().toISOString();
         let nextCount: number | undefined;
         let eventDocRef: FirebaseFirestore.DocumentReference | undefined;
 
-        if (eventSlug) {
+        if (eventSlug && wasConfirmed) {
           eventDocRef = db.collection("events").doc(eventSlug);
           const eventDoc = await transaction.get(eventDocRef);
           const eventData = eventDoc.data();
@@ -946,7 +1116,7 @@ export async function cancelFirestoreRegistration(
               db.collection("registrations").where("eventSlug", "==", eventSlug)
             );
             nextCount = regsSnap.docs.filter(
-              (d) => d.id !== docRef.id && d.data().status !== "cancelled"
+              (d) => d.id !== docRef.id && (!d.data().status || d.data().status === "confirmed")
             ).length;
           }
         }
@@ -999,7 +1169,7 @@ export async function deleteFirestoreRegistration(
         const docRef = snap.docs[0].ref;
         const regData = snap.docs[0].data();
         const eventSlug = typeof regData.eventSlug === "string" ? regData.eventSlug : undefined;
-        const wasActive = regData.status !== "cancelled";
+        const wasActive = !regData.status || regData.status === "confirmed";
 
         const now = new Date().toISOString();
         let nextCount: number | undefined;
@@ -1072,6 +1242,20 @@ export async function checkInFirestoreAttendee(
 
     const doc = snap.docs[0];
     const data = doc.data() as RegistrationRecord;
+
+    if (data.status && data.status !== "confirmed") {
+      const reason =
+        data.status === "pending"
+          ? "is PENDING HOST APPROVAL and cannot be checked in yet."
+          : data.status === "waitlisted"
+            ? "is on the WAITLIST and has not been approved yet."
+            : `is ${data.status.toUpperCase()} and is not valid for entry.`;
+      return {
+        success: false,
+        message: `${data.fullName}'s registration ${reason}`,
+        registration: data,
+      };
+    }
 
     const existingDays: number[] = Array.isArray(data.checkedInDays)
       ? data.checkedInDays
@@ -1241,6 +1425,437 @@ export async function getFirestoreAuditLogs(options?: {
     return logs;
   } catch (err) {
     console.warn("Failed to fetch audit logs from Firestore:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function updateFirestoreRegistration(
+  eventSlug: string,
+  referenceId: string,
+  updates: RegistrationUpdateInput
+): Promise<{ success: boolean; message: string; registration?: RegistrationRecord } | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    const txResult = await db.runTransaction<{
+      success: boolean;
+      message: string;
+      registration?: RegistrationRecord;
+    }>(async (transaction) => {
+      const snap = await transaction.get(
+        db
+          .collection("registrations")
+          .where("eventSlug", "==", eventSlug)
+          .where("referenceId", "==", ref)
+          .limit(1)
+      );
+      if (snap.empty) {
+        return { success: false, message: "Pass reference was not found for this event." };
+      }
+
+      const docRef = snap.docs[0].ref;
+      const existing = snap.docs[0].data() as RegistrationRecord;
+
+      const patch: Record<string, unknown> = {};
+      if (updates.fullName !== undefined && updates.fullName.trim()) {
+        patch.fullName = updates.fullName.trim();
+      }
+      if (updates.email !== undefined && updates.email.trim()) {
+        patch.email = updates.email.trim().toLowerCase();
+      }
+      if (updates.phone !== undefined && updates.phone.trim()) {
+        patch.phone = updates.phone.trim();
+      }
+      if (updates.college !== undefined && updates.college.trim()) {
+        patch.college = updates.college.trim();
+      }
+      if (updates.department !== undefined && updates.department.trim()) {
+        patch.department = updates.department.trim();
+      }
+      if (updates.yearOfStudy !== undefined && updates.yearOfStudy.trim()) {
+        patch.yearOfStudy = updates.yearOfStudy.trim();
+      }
+      if (updates.track !== undefined) {
+        patch.track = updates.track.trim() || "General Admission";
+      }
+      if (updates.experienceLevel !== undefined && updates.experienceLevel.trim()) {
+        patch.experienceLevel = updates.experienceLevel.trim();
+      }
+      if (updates.portfolioUrl !== undefined) {
+        patch.portfolioUrl = updates.portfolioUrl.trim() || null;
+      }
+      if (updates.notes !== undefined) {
+        patch.notes = updates.notes.trim() || null;
+      }
+
+      const oldActive = !existing.status || existing.status === "confirmed";
+      const nextStatus = updates.status ?? existing.status;
+      const newActive = nextStatus === "confirmed";
+      if (updates.status !== undefined) {
+        patch.status = nextStatus;
+      }
+
+      let eventDocRef: FirebaseFirestore.DocumentReference | undefined;
+      let nextEventCount: number | undefined;
+      if (oldActive !== newActive) {
+        eventDocRef = db.collection("events").doc(eventSlug);
+        const eventDoc = await transaction.get(eventDocRef);
+        const eventData = eventDoc.data();
+        if (eventDoc.exists && typeof eventData?.registeredCount === "number") {
+          nextEventCount = Math.max(0, eventData.registeredCount + (newActive ? 1 : -1));
+        }
+      }
+
+      transaction.update(docRef, patch);
+      if (eventDocRef && nextEventCount !== undefined) {
+        transaction.set(
+          eventDocRef,
+          { registeredCount: nextEventCount, updatedAt: new Date().toISOString() },
+          { merge: true }
+        );
+      }
+
+      const updatedReg: RegistrationRecord = {
+        ...existing,
+        ...patch,
+        portfolioUrl:
+          patch.portfolioUrl === null
+            ? undefined
+            : ((patch.portfolioUrl as string | undefined) ?? existing.portfolioUrl),
+        notes:
+          patch.notes === null
+            ? undefined
+            : ((patch.notes as string | undefined) ?? existing.notes),
+      };
+
+      return {
+        success: true,
+        message: `Updated registration for ${updatedReg.fullName}.`,
+        registration: updatedReg,
+      };
+    });
+
+    if (txResult.success) {
+      invalidateCache("fs:");
+      revalidateEventCaches(eventSlug);
+    }
+    return txResult;
+  } catch (err) {
+    console.warn("Firestore updateRegistration failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function reviewFirestoreRegistration(
+  eventSlug: string,
+  referenceId: string,
+  decision: "approve" | "decline" | "waitlist",
+  options?: { force?: boolean }
+): Promise<{
+  success: boolean;
+  code?: "NOT_FOUND" | "CAPACITY_FULL";
+  message: string;
+  registration?: RegistrationRecord;
+  previousStatus?: RegistrationStatus;
+} | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const ref = referenceId.trim().toUpperCase();
+  const nextStatus: RegistrationStatus =
+    decision === "approve" ? "confirmed" : decision === "decline" ? "declined" : "waitlisted";
+
+  try {
+    const txResult = await db.runTransaction<{
+      success: boolean;
+      code?: "NOT_FOUND" | "CAPACITY_FULL";
+      message: string;
+      registration?: RegistrationRecord;
+      previousStatus?: RegistrationStatus;
+    }>(async (transaction) => {
+      const snap = await transaction.get(
+        db
+          .collection("registrations")
+          .where("eventSlug", "==", eventSlug)
+          .where("referenceId", "==", ref)
+          .limit(1)
+      );
+      if (snap.empty) {
+        return {
+          success: false,
+          code: "NOT_FOUND",
+          message: "Registration reference was not found for this event.",
+        };
+      }
+
+      const docRef = snap.docs[0].ref;
+      const existing = snap.docs[0].data() as RegistrationRecord;
+      const previousStatus: RegistrationStatus = existing.status || "confirmed";
+
+      if (previousStatus === nextStatus) {
+        return {
+          success: true,
+          message: `${existing.fullName} is already ${nextStatus}.`,
+          registration: existing,
+          previousStatus,
+        };
+      }
+
+      const eventDocRef = db.collection("events").doc(eventSlug);
+      const eventDoc = await transaction.get(eventDocRef);
+      const eventData = eventDoc.data();
+      const defaultMatch = defaultEvents.find((e) => e.slug === eventSlug);
+
+      const rawCapacity =
+        typeof eventData?.capacity === "number"
+          ? eventData.capacity
+          : typeof eventData?.workshop?.capacity === "number"
+            ? eventData.workshop.capacity
+            : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity ?? 120;
+
+      let currentConfirmed =
+        eventDoc.exists && typeof eventData?.registeredCount === "number"
+          ? eventData.registeredCount
+          : 0;
+      if (!eventDoc.exists || typeof eventData?.registeredCount !== "number") {
+        const regsSnap = await transaction.get(
+          db.collection("registrations").where("eventSlug", "==", eventSlug)
+        );
+        currentConfirmed = regsSnap.docs.filter((d) => {
+          const st = d.data().status;
+          return !st || st === "confirmed";
+        }).length;
+      }
+
+      const effectiveCapacity = resolveEffectiveCapacity(
+        eventSlug,
+        rawCapacity,
+        currentConfirmed
+      );
+
+      if (nextStatus === "confirmed" && previousStatus !== "confirmed" && !options?.force) {
+        if (currentConfirmed >= effectiveCapacity) {
+          return {
+            success: false,
+            code: "CAPACITY_FULL",
+            message: `Event capacity reached (${currentConfirmed}/${effectiveCapacity} confirmed seats). Increase capacity before approving more applicants.`,
+          };
+        }
+      }
+
+      const now = new Date().toISOString();
+      const deltaConfirmed =
+        nextStatus === "confirmed" && previousStatus !== "confirmed"
+          ? 1
+          : previousStatus === "confirmed" && nextStatus !== "confirmed"
+            ? -1
+            : 0;
+
+      const existingPending =
+        typeof eventData?.pendingCount === "number" ? eventData.pendingCount : 0;
+      const deltaPending = previousStatus === "pending" ? -1 : 0;
+
+      transaction.update(docRef, {
+        status: nextStatus,
+        reviewedAt: now,
+      });
+
+      if (eventDoc.exists) {
+        transaction.set(
+          eventDocRef,
+          {
+            registeredCount: Math.max(0, currentConfirmed + deltaConfirmed),
+            pendingCount: Math.max(0, existingPending + deltaPending),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
+
+      const updated: RegistrationRecord = {
+        ...existing,
+        status: nextStatus,
+        reviewedAt: now,
+      };
+
+      const verb =
+        nextStatus === "confirmed"
+          ? "Approved"
+          : nextStatus === "declined"
+            ? "Declined"
+            : "Moved to Waitlist";
+
+      return {
+        success: true,
+        message: `${verb}: ${existing.fullName}`,
+        registration: updated,
+        previousStatus,
+      };
+    });
+
+    if (txResult.success) {
+      invalidateCache("fs:");
+      revalidateEventCaches(eventSlug);
+    }
+    return txResult;
+  } catch (err) {
+    console.warn("Firestore reviewRegistration failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function revokeCheckInFirestoreAttendee(
+  eventSlug: string,
+  referenceId: string,
+  day: number
+): Promise<{ success: boolean; message: string; registration?: RegistrationRecord } | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const ref = referenceId.trim().toUpperCase();
+  try {
+    const snap = await db
+      .collection("registrations")
+      .where("eventSlug", "==", eventSlug)
+      .where("referenceId", "==", ref)
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      return { success: false, message: "Pass reference was not found for this event." };
+    }
+
+    const doc = snap.docs[0];
+    const data = doc.data() as RegistrationRecord;
+
+    if (data.status && data.status !== "confirmed") {
+      const reason =
+        data.status === "pending"
+          ? "is PENDING HOST APPROVAL and cannot be checked in yet."
+          : data.status === "waitlisted"
+            ? "is on the WAITLIST and has not been approved yet."
+            : `is ${data.status.toUpperCase()} and is not valid for entry.`;
+      return {
+        success: false,
+        message: `${data.fullName}'s registration ${reason}`,
+        registration: data,
+      };
+    }
+
+    const existingDays: number[] = Array.isArray(data.checkedInDays)
+      ? data.checkedInDays
+      : data.checkedIn
+        ? [1]
+        : [];
+    const existingCheckIns: Record<number, string> =
+      typeof data.checkIns === "object" && data.checkIns !== null
+        ? { ...data.checkIns }
+        : data.checkedIn && data.checkedInAt
+          ? { 1: data.checkedInAt }
+          : {};
+
+    if (!existingDays.includes(day)) {
+      return {
+        success: false,
+        message: `${data.fullName} is not checked in for Day ${day}.`,
+        registration: { ...data, checkedInDays: existingDays, checkIns: existingCheckIns },
+      };
+    }
+
+    const updatedDays = existingDays.filter((d) => d !== day);
+    delete existingCheckIns[day];
+    const stillCheckedIn = updatedDays.length > 0;
+    const latestTime = stillCheckedIn
+      ? existingCheckIns[updatedDays[updatedDays.length - 1]] || data.checkedInAt || ""
+      : "";
+
+    await doc.ref.update({
+      checkedIn: stillCheckedIn,
+      checkedInAt: stillCheckedIn ? latestTime : null,
+      checkedInDays: updatedDays,
+      checkIns: existingCheckIns,
+    });
+
+    const updated: RegistrationRecord = {
+      ...data,
+      checkedIn: stillCheckedIn,
+      checkedInAt: stillCheckedIn ? latestTime : undefined,
+      checkedInDays: updatedDays,
+      checkIns: existingCheckIns,
+    };
+
+    invalidateCache("fs:");
+    return {
+      success: true,
+      message: `Removed Day ${day} check-in for ${data.fullName}.`,
+      registration: updated,
+    };
+  } catch (err) {
+    console.warn("Firestore revokeCheckIn failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function getFirestoreSiteSettings(): Promise<ChapterSettings | null> {
+  const cacheKey = "fs:site-settings";
+  const cached = getCached<ChapterSettings>(cacheKey);
+  if (cached) return cached;
+
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const doc = await db.collection("site_content").doc("main").get();
+    if (!doc.exists) return null;
+
+    const data = doc.data() as Partial<ChapterSettings> | undefined;
+    if (!data) return null;
+
+    const merged: ChapterSettings = {
+      ...DEFAULT_CHAPTER_SETTINGS,
+      ...data,
+      chapter: {
+        ...DEFAULT_CHAPTER_SETTINGS.chapter,
+        ...(data.chapter || {}),
+      },
+      team: Array.isArray(data.team) ? data.team : DEFAULT_CHAPTER_SETTINGS.team,
+      learningAreas: Array.isArray(data.learningAreas)
+        ? data.learningAreas
+        : DEFAULT_CHAPTER_SETTINGS.learningAreas,
+      homeFaq: Array.isArray(data.homeFaq) ? data.homeFaq : DEFAULT_CHAPTER_SETTINGS.homeFaq,
+      joinFaq: Array.isArray(data.joinFaq) ? data.joinFaq : DEFAULT_CHAPTER_SETTINGS.joinFaq,
+      aboutCards: Array.isArray(data.aboutCards)
+        ? data.aboutCards
+        : DEFAULT_CHAPTER_SETTINGS.aboutCards,
+    };
+
+    setCached(cacheKey, merged, 300 * 1000);
+    return merged;
+  } catch (err) {
+    console.warn("Firestore getSiteSettings failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function updateFirestoreSiteSettings(
+  settings: ChapterSettings
+): Promise<ChapterSettings | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const payload: ChapterSettings = {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    };
+    await db.collection("site_content").doc("main").set(payload, { merge: true });
+    invalidateCache("fs:site-settings");
+    revalidateSiteCaches();
+    return payload;
+  } catch (err) {
+    console.warn("Firestore updateSiteSettings failed:", (err as Error).message);
     return null;
   }
 }

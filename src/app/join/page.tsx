@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import type { Metadata } from "next";
-import { chapter } from "@/content/chapter";
+import { DEFAULT_CHAPTER_SETTINGS } from "@/lib/site-defaults";
+import { getCachedSiteSettings } from "@/lib/db/cached";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Button } from "@/components/ui/button";
 import { Faq } from "@/components/faq";
@@ -9,30 +12,24 @@ export const metadata: Metadata = {
   description: "Join GDG on Campus VCET through the official chapter page.",
 };
 
-const faqItems = [
-  {
-    question: "Is joining free?",
-    answer: "Yes, joining the community itself is free. Individual events may have their own cost, noted on each event's page.",
-  },
-  {
-    question: "What happens after I join?",
-    answer:
-      "You'll be connected to the chapter's official community channels, where announcements about upcoming sessions are shared.",
-  },
-  {
-    question: "I'm new to programming — is this still for me?",
-    answer: "Yes. The community welcomes members at every experience level.",
-  },
-];
+async function JoinContent() {
+  await connection();
+  let settings = DEFAULT_CHAPTER_SETTINGS;
+  try {
+    settings = await getCachedSiteSettings();
+  } catch {
+    settings = DEFAULT_CHAPTER_SETTINGS;
+  }
 
-export default function JoinPage() {
+  const { chapter, joinDescription, joinFaq } = settings;
+
   return (
-    <div className="mx-auto max-w-(--container-max) px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
+    <>
       <div className="mb-10 flex flex-col gap-6">
         <SectionHeading
           eyebrow="Join"
-          title="Join GDG on Campus VCET"
-          description="Membership is managed through the official GDG community platform. Use the button below to join — it takes you to the verified chapter page."
+          title={`Join ${chapter.name}`}
+          description={joinDescription}
         />
         <div>
           <Button href={chapter.joinUrl} size="lg">
@@ -58,8 +55,18 @@ export default function JoinPage() {
 
       <div className="max-w-2xl">
         <h2 className="mb-4 text-lg font-medium text-foreground">FAQ</h2>
-        <Faq items={faqItems} />
+        <Faq items={joinFaq} />
       </div>
+    </>
+  );
+}
+
+export default function JoinPage() {
+  return (
+    <div className="mx-auto max-w-(--container-max) px-5 py-12 sm:px-8 sm:py-16 lg:px-10">
+      <Suspense fallback={<div className="h-48 rounded-2xl bg-surface-muted animate-pulse" />}>
+        <JoinContent />
+      </Suspense>
     </div>
   );
 }

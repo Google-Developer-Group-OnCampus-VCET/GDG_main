@@ -15,6 +15,9 @@ import {
   getFirestoreEventStats,
   getFirestorePublicEventStats,
   getFirestoreRegistrations,
+  getFirestoreSiteSettings,
+  reviewFirestoreRegistration,
+  updateFirestoreEvent,
 } from "./firestore";
 
 describe("Firestore Read Reduction & Shared Caching", () => {
@@ -272,6 +275,180 @@ describe("Firestore Read Reduction & Shared Caching", () => {
     expect(txSetSpy).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "event", slug: "dev-to-cloud" }),
       expect.objectContaining({ registeredCount: 129 }),
+      { merge: true }
+    );
+  });
+
+  it("updates workshop.capacity using dot-notation when workshop doc already exists (no partial overwrite)", async () => {
+    const updateSpy = vi.fn().mockResolvedValue(undefined);
+    const getSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      data: () => ({
+        id: "dev-to-cloud",
+        slug: "dev-to-cloud",
+        title: "Dev to Cloud",
+        startsAt: "2026-11-19T09:00:00+05:30",
+        topics: ["cloud"],
+        capacity: 135,
+        workshop: {
+          headline: "Dev to Cloud",
+          subheading: "4-Day Workshop",
+          capacity: 135,
+          agenda: [],
+          speakers: [],
+          sponsors: [],
+          faq: [],
+          registrationConfig: { isOpen: true, price: 0, currency: "INR" },
+        },
+      }),
+    });
+
+    mockGetAdminDb.mockReturnValue({
+      collection: () => ({
+        doc: () => ({
+          get: getSpy,
+          update: updateSpy,
+        }),
+      }),
+    });
+
+    await updateFirestoreEvent("dev-to-cloud", { capacity: 150 });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capacity: 150,
+        "workshop.capacity": 150,
+        "workshop.seatsText": "Limited to 150 Seats",
+      })
+    );
+  });
+
+  it("caches site settings reads after first Firestore document fetch", async () => {
+    const siteDocGetSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      data: () => ({
+        chapter: { name: "GDG VCET Test", shortName: "GDG VCET", tagline: "Build", description: "Desc", institution: "VCET", joinUrl: "/", chapterPageUrl: "/", socials: [], nav: [], sourceUrl: "", lastVerifiedAt: "" },
+        team: [],
+        learningAreas: [],
+        homeFaq: [],
+        joinFaq: [],
+        joinDescription: "Join",
+        aboutDescription: "About",
+        aboutCards: [],
+      }),
+    });
+
+    mockGetAdminDb.mockReturnValue({
+      collection: () => ({
+        doc: () => ({ get: siteDocGetSpy }),
+      }),
+    });
+
+    const first = await getFirestoreSiteSettings();
+    const second = await getFirestoreSiteSettings();
+
+    expect(first?.chapter.name).toBe("GDG VCET Test");
+    expect(second?.chapter.name).toBe("GDG VCET Test");
+    expect(siteDocGetSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits as pending into approval queue and transitions counts cleanly on approval", async () => {
+    const txSetSpy = vi.fn();
+    const txUpdateSpy = vi.fn();
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "events") {
+          return { doc: (slug: string) => ({ kind: "event", slug }) };
+        }
+        return {
+          doc: (id: string) => ({ kind: "reg", id }),
+          where: () => ({
+            limit: () => ({ kind: "refCheck" }),
+            where: () => ({ limit: () => ({ kind: "regBySlugAndRef" }) }),
+          }),
+        };
+      },
+      runTransaction: async <T>(fn: (tx: unknown) => Promise<T>) => {
+        const tx = {
+          get: async (target: { kind?: string }) => {
+            if (target.kind === "event") {
+              return {
+                exists: true,
+                data: () => ({
+                  slug: "queue-event",
+                  capacity: 50,
+                  registeredCount: 10,
+                  pendingCount: 2,
+                  isRegistrationOpen: true,
+                  requireApproval: true,
+                }),
+              };
+            }
+            if (target.kind === "reg") {
+              return { exists: false };
+            }
+            if (target.kind === "refCheck") {
+              return { empty: true, docs: [] };
+            }
+            return {
+              empty: false,
+              docs: [
+                {
+                  ref: { id: "reg-pending-1" },
+                  data: () => ({
+                    eventSlug: "queue-event",
+                    referenceId: "GDG-QUEU-2026-0001",
+                    fullName: "Pending Student",
+                    email: "pending@vcet.edu.in",
+                    status: "pending",
+                    checkedIn: false,
+                  }),
+                },
+              ],
+            };
+          },
+          set: txSetSpy,
+          update: txUpdateSpy,
+        };
+        return fn(tx);
+      },
+    });
+
+    const created = await createFirestoreRegistration("queue-event", {
+      fullName: "Pending Student",
+      email: "pending@vcet.edu.in",
+      phone: "+91 91234 56789",
+      agreedToCoc: true,
+    });
+
+    expect(created?.success).toBe(true);
+    if (created?.success) {
+      expect(created.registration.status).toBe("pending");
+    }
+    expect(txUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "event", slug: "queue-event" }),
+      expect.objectContaining({ pendingCount: 3 })
+    );
+
+    txSetSpy.mockClear();
+    txUpdateSpy.mockClear();
+
+    const approved = await reviewFirestoreRegistration(
+      "queue-event",
+      "GDG-QUEU-2026-0001",
+      "approve"
+    );
+
+    expect(approved?.success).toBe(true);
+    expect(approved?.registration?.status).toBe("confirmed");
+    expect(txUpdateSpy).toHaveBeenCalledWith(
+      { id: "reg-pending-1" },
+      expect.objectContaining({ status: "confirmed" })
+    );
+    expect(txSetSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "event", slug: "queue-event" }),
+      expect.objectContaining({ registeredCount: 11, pendingCount: 1 }),
       { merge: true }
     );
   });

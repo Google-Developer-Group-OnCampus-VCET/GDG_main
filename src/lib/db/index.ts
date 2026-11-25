@@ -7,6 +7,7 @@ import type {
   AuditActorRole,
   AuditLogEntry,
   ChapterEvent,
+  ChapterSettings,
   EmailLog,
   EventFormat,
   EventInput,
@@ -14,8 +15,12 @@ import type {
   EventUpdateInput,
   RegistrationInput,
   RegistrationRecord,
+  RegistrationStatus,
+  RegistrationUpdateInput,
+  WorkshopDetails,
 } from "@/types";
 import { events as defaultEvents } from "@/content/events";
+import { DEFAULT_CHAPTER_SETTINGS } from "@/lib/site-defaults";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import {
   buildEventReferenceId,
@@ -23,10 +28,15 @@ import {
   getFirestorePublicEventStats,
   getFirestoreRegistrations,
   createFirestoreRegistration,
+  updateFirestoreRegistration,
+  reviewFirestoreRegistration,
   checkInFirestoreAttendee,
+  revokeCheckInFirestoreAttendee,
   createFirestoreEvent,
   updateFirestoreEvent,
+  deleteFirestoreEvent,
   getFirestoreEvents,
+  getFirestoreDeletedEventSlugs,
   getFirestoreEvent,
   seedFirestoreInitialEvents,
   logFirestoreEmail,
@@ -35,9 +45,11 @@ import {
   deleteFirestoreRegistration,
   logFirestoreAudit,
   getFirestoreAuditLogs,
+  getFirestoreSiteSettings,
+  updateFirestoreSiteSettings,
   slugify,
 } from "./firestore";
-import { revalidateEventCaches } from "./cache";
+import { revalidateEventCaches, revalidateSiteCaches } from "./cache";
 
 export { buildEventReferenceId };
 
@@ -163,17 +175,32 @@ export function getDatabase(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_audit_logs_event ON audit_logs(event_slug);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
     CREATE INDEX IF NOT EXISTS idx_audit_logs_time ON audit_logs(timestamp);
+
+    CREATE TABLE IF NOT EXISTS site_settings (
+      id TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
-  try {
-    _db.exec("ALTER TABLE registrations ADD COLUMN checked_in_days TEXT;");
-  } catch {
-    // Column already exists
-  }
-  try {
-    _db.exec("ALTER TABLE registrations ADD COLUMN check_ins TEXT;");
-  } catch {
-    // Column already exists
+  const alterColumns = [
+    "ALTER TABLE registrations ADD COLUMN checked_in_days TEXT;",
+    "ALTER TABLE registrations ADD COLUMN check_ins TEXT;",
+    "ALTER TABLE events ADD COLUMN image TEXT;",
+    "ALTER TABLE events ADD COLUMN url TEXT;",
+    "ALTER TABLE events ADD COLUMN cancelled INTEGER DEFAULT 0;",
+    "ALTER TABLE events ADD COLUMN price_note TEXT;",
+    "ALTER TABLE events ADD COLUMN workshop_json TEXT;",
+    "ALTER TABLE events ADD COLUMN deleted INTEGER DEFAULT 0;",
+    "ALTER TABLE events ADD COLUMN require_approval INTEGER DEFAULT 0;",
+    "ALTER TABLE registrations ADD COLUMN reviewed_at TEXT;",
+  ];
+  for (const sql of alterColumns) {
+    try {
+      _db.exec(sql);
+    } catch {
+      // Column already exists
+    }
   }
 
   // Seed default DevCraft 2025 event if not existing
@@ -335,6 +362,8 @@ export function getDatabase(): DatabaseSync {
 
 export interface EventStats {
   totalRegistered: number;
+  pendingCount?: number;
+  waitlistedCount?: number;
   capacity: number;
   remaining: number;
   percentFilled: number;
@@ -371,17 +400,28 @@ export function getEventStats(slug: string): EventStats {
       : (defaultMatch?.workshop?.registrationConfig?.isOpen ?? true);
 
   const totalRow = db
-    .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled'")
+    .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed'")
     .get(slug) as { count: number };
   const totalRegistered = totalRow?.count ?? 0;
 
+  const statusCountsRow = db
+    .prepare(
+      `SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+        SUM(CASE WHEN status = 'waitlisted' THEN 1 ELSE 0 END) as waitlisted_count
+       FROM registrations WHERE event_slug = ?`
+    )
+    .get(slug) as { pending_count?: number | null; waitlisted_count?: number | null } | undefined;
+  const pendingCount = statusCountsRow?.pending_count ?? 0;
+  const waitlistedCount = statusCountsRow?.waitlisted_count ?? 0;
+
   const checkedInRow = db
-    .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND checked_in = 1")
+    .prepare("SELECT COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' AND checked_in = 1")
     .get(slug) as { count: number };
   const checkedInCount = checkedInRow?.count ?? 0;
 
   const regRows = db
-    .prepare("SELECT checked_in, checked_in_days FROM registrations WHERE event_slug = ? AND status != 'cancelled'")
+    .prepare("SELECT checked_in, checked_in_days FROM registrations WHERE event_slug = ? AND status = 'confirmed'")
     .all(slug) as { checked_in: number; checked_in_days: string | null }[];
 
   const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -412,7 +452,7 @@ export function getEventStats(slug: string): EventStats {
   }
 
   const trackRows = db
-    .prepare("SELECT track, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY track")
+    .prepare("SELECT track, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY track")
     .all(slug) as { track: string; count: number }[];
   const trackCounts: Record<string, number> = {};
   for (const r of trackRows) {
@@ -420,7 +460,7 @@ export function getEventStats(slug: string): EventStats {
   }
 
   const yearRows = db
-    .prepare("SELECT year_of_study, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY year_of_study")
+    .prepare("SELECT year_of_study, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY year_of_study")
     .all(slug) as { year_of_study: string; count: number }[];
   const yearCounts: Record<string, number> = {};
   for (const r of yearRows) {
@@ -428,7 +468,7 @@ export function getEventStats(slug: string): EventStats {
   }
 
   const deptRows = db
-    .prepare("SELECT department, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY department")
+    .prepare("SELECT department, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY department")
     .all(slug) as { department: string; count: number }[];
   const departmentCounts: Record<string, number> = {};
   for (const r of deptRows) {
@@ -437,7 +477,7 @@ export function getEventStats(slug: string): EventStats {
 
   const expRows = db
     .prepare(
-      "SELECT experience_level, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY experience_level"
+      "SELECT experience_level, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY experience_level"
     )
     .all(slug) as { experience_level: string; count: number }[];
   const experienceCounts: Record<string, number> = {};
@@ -447,7 +487,7 @@ export function getEventStats(slug: string): EventStats {
 
   const collegeRows = db
     .prepare(
-      "SELECT college, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY college ORDER BY count DESC"
+      "SELECT college, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY college ORDER BY count DESC"
     )
     .all(slug) as { college: string; count: number }[];
 
@@ -475,7 +515,7 @@ export function getEventStats(slug: string): EventStats {
 
   const dateRows = db
     .prepare(
-      "SELECT SUBSTR(created_at, 1, 10) as reg_date, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status != 'cancelled' GROUP BY reg_date ORDER BY reg_date ASC"
+      "SELECT SUBSTR(created_at, 1, 10) as reg_date, COUNT(*) as count FROM registrations WHERE event_slug = ? AND status = 'confirmed' GROUP BY reg_date ORDER BY reg_date ASC"
     )
     .all(slug) as { reg_date: string; count: number }[];
   const registrationDates: Record<string, number> = {};
@@ -497,6 +537,8 @@ export function getEventStats(slug: string): EventStats {
 
   return {
     totalRegistered,
+    pendingCount,
+    waitlistedCount,
     capacity,
     remaining,
     percentFilled,
@@ -541,15 +583,23 @@ export function createEvent(input: EventInput): { success: boolean; event?: Chap
   const location = input.location?.trim() || "Vidyavardhini's College of Engineering and Technology, Vasai";
   const capacity = input.capacity ?? 150;
   const isOpen = input.isRegistrationOpen !== false ? 1 : 0;
+  const requireApproval = Boolean(
+    input.requireApproval ?? input.workshop?.registrationConfig?.requireApproval ?? false
+  );
   const timezone = input.timezone || "Asia/Kolkata";
   const summary = input.summary?.trim() || "";
   const topics: EventTopic[] = input.topics && input.topics.length > 0 ? input.topics : ["general"];
   const topicsJson = JSON.stringify(topics);
+  const image = input.image?.trim() || null;
+  const url = input.url?.trim() || null;
+  const cancelled = input.cancelled ? 1 : 0;
+  const priceNote = input.priceNote?.trim() || null;
+  const workshopJson = input.workshop ? JSON.stringify(input.workshop) : null;
 
   db.prepare(`
     INSERT INTO events (
-      id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open, summary, topics
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open, require_approval, summary, topics, image, url, cancelled, price_note, workshop_json, deleted
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `).run(
     id,
     slug,
@@ -561,8 +611,14 @@ export function createEvent(input: EventInput): { success: boolean; event?: Chap
     location,
     capacity,
     isOpen,
+    requireApproval ? 1 : 0,
     summary,
-    topicsJson
+    topicsJson,
+    image,
+    url,
+    cancelled,
+    priceNote,
+    workshopJson
   );
 
   const event: ChapterEvent = {
@@ -576,7 +632,15 @@ export function createEvent(input: EventInput): { success: boolean; event?: Chap
     location,
     topics,
     summary: summary || undefined,
+    ...(image ? { image } : {}),
+    ...(url ? { url } : {}),
+    ...(input.cancelled !== undefined ? { cancelled: Boolean(input.cancelled) } : {}),
+    capacity,
+    ...(priceNote ? { priceNote } : {}),
+    isRegistrationOpen: input.isRegistrationOpen !== false,
+    requireApproval,
     registrationUrl: `/events/${slug}/register`,
+    ...(input.workshop ? { workshop: input.workshop } : {}),
   };
 
   return { success: true, event };
@@ -592,19 +656,47 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
     }
   }
 
+  let storedWorkshop: WorkshopDetails | undefined;
+  if (typeof r.workshop_json === "string" && r.workshop_json.trim()) {
+    try {
+      storedWorkshop = JSON.parse(r.workshop_json) as WorkshopDetails;
+    } catch {
+      storedWorkshop = undefined;
+    }
+  }
+
   const slug = r.slug as string;
   const defaultMatch = defaultEvents.find((e) => e.slug === slug);
 
   const capacity = typeof r.capacity === "number" ? r.capacity : defaultMatch?.capacity ?? defaultMatch?.workshop?.capacity;
-  const workshop = defaultMatch?.workshop
+  const isRegistrationOpen =
+    typeof r.is_registration_open === "number" ? r.is_registration_open !== 0 : undefined;
+  const requireApproval =
+    typeof r.require_approval === "number"
+      ? r.require_approval === 1
+      : storedWorkshop?.registrationConfig?.requireApproval ??
+        defaultMatch?.requireApproval ??
+        defaultMatch?.workshop?.registrationConfig?.requireApproval;
+  const location =
+    (r.location as string) ||
+    "Vidyavardhini's College of Engineering and Technology, Vasai";
+
+  const baseWorkshop = storedWorkshop ?? defaultMatch?.workshop;
+  const workshop = baseWorkshop
     ? {
-        ...defaultMatch.workshop,
+        ...baseWorkshop,
         ...(capacity !== undefined
           ? {
               capacity,
               seatsText: `Limited to ${capacity} Seats`,
             }
           : {}),
+        venueText: location,
+        registrationConfig: {
+          ...(baseWorkshop.registrationConfig || {}),
+          ...(typeof isRegistrationOpen === "boolean" ? { isOpen: isRegistrationOpen } : {}),
+          ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
+        },
       }
     : undefined;
 
@@ -616,12 +708,16 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
     endsAt: (r.ends_at as string) || undefined,
     timezone: (r.timezone as string) || "Asia/Kolkata",
     format: (r.format as EventFormat) || "in-person",
-    location:
-      (r.location as string) ||
-      "Vidyavardhini's College of Engineering and Technology, Vasai",
+    location,
     topics,
     summary: (r.summary as string) || defaultMatch?.summary,
+    image: (r.image as string) || defaultMatch?.image,
+    url: (r.url as string) || defaultMatch?.url,
+    cancelled: typeof r.cancelled === "number" ? r.cancelled === 1 : defaultMatch?.cancelled,
     capacity,
+    priceNote: (r.price_note as string) || defaultMatch?.priceNote,
+    isRegistrationOpen,
+    ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
     registrationUrl: `/events/${slug}/register`,
     workshop,
   };
@@ -630,8 +726,8 @@ function mapEventRowToChapterEvent(r: Record<string, unknown>): ChapterEvent {
 function ensureDefaultEventInSqlite(db: DatabaseSync, defMatch: ChapterEvent): void {
   db.prepare(`
     INSERT OR IGNORE INTO events (
-      id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open, summary, topics
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, slug, title, starts_at, ends_at, timezone, format, location, capacity, is_registration_open, summary, topics, image, url, cancelled, price_note, deleted
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `).run(
     defMatch.id,
     defMatch.slug,
@@ -641,10 +737,14 @@ function ensureDefaultEventInSqlite(db: DatabaseSync, defMatch: ChapterEvent): v
     defMatch.timezone ?? "Asia/Kolkata",
     defMatch.format ?? "in-person",
     defMatch.location ?? "Vidyavardhini's College of Engineering and Technology, Vasai",
-    defMatch.workshop?.capacity ?? 150,
+    defMatch.capacity ?? defMatch.workshop?.capacity ?? 150,
     defMatch.workshop?.registrationConfig?.isOpen === false ? 0 : 1,
     defMatch.summary ?? "",
-    JSON.stringify(defMatch.topics ?? ["general"])
+    JSON.stringify(defMatch.topics ?? ["general"]),
+    defMatch.image ?? null,
+    defMatch.url ?? null,
+    defMatch.cancelled ? 1 : 0,
+    defMatch.priceNote ?? null
   );
 }
 
@@ -667,7 +767,12 @@ export function updateEvent(
     return { success: false, error: "Capacity must be at least 1." };
   }
 
-  const existing = db.prepare("SELECT slug FROM events WHERE slug = ?").get(slug);
+  const existing = db.prepare("SELECT slug, deleted FROM events WHERE slug = ?").get(slug) as
+    | { slug: string; deleted?: number }
+    | undefined;
+  if (existing?.deleted === 1) {
+    return { success: false, error: "EVENT_NOT_FOUND" };
+  }
   if (!existing) {
     const defMatch = defaultEvents.find((e) => e.slug === slug);
     if (!defMatch) {
@@ -711,6 +816,26 @@ export function updateEvent(
     setClauses.push("summary = ?");
     params.push(input.summary.trim() || "");
   }
+  if (input.image !== undefined) {
+    setClauses.push("image = ?");
+    params.push(input.image.trim() || null);
+  }
+  if (input.url !== undefined) {
+    setClauses.push("url = ?");
+    params.push(input.url.trim() || null);
+  }
+  if (input.cancelled !== undefined) {
+    setClauses.push("cancelled = ?");
+    params.push(input.cancelled ? 1 : 0);
+  }
+  if (input.priceNote !== undefined) {
+    setClauses.push("price_note = ?");
+    params.push(input.priceNote.trim() || null);
+  }
+  if (input.workshop !== undefined) {
+    setClauses.push("workshop_json = ?");
+    params.push(JSON.stringify(input.workshop));
+  }
   if (input.capacity !== undefined) {
     setClauses.push("capacity = ?");
     params.push(Math.floor(input.capacity));
@@ -718,6 +843,13 @@ export function updateEvent(
   if (input.isRegistrationOpen !== undefined) {
     setClauses.push("is_registration_open = ?");
     params.push(input.isRegistrationOpen ? 1 : 0);
+  }
+  if (input.requireApproval !== undefined) {
+    setClauses.push("require_approval = ?");
+    params.push(input.requireApproval ? 1 : 0);
+  } else if (input.workshop?.registrationConfig?.requireApproval !== undefined) {
+    setClauses.push("require_approval = ?");
+    params.push(input.workshop.registrationConfig.requireApproval ? 1 : 0);
   }
 
   if (setClauses.length > 0) {
@@ -735,15 +867,42 @@ export function updateEvent(
   return { success: true, event: mapEventRowToChapterEvent(updatedRow) };
 }
 
+export function deleteEvent(slug: string): { success: boolean; error?: string } {
+  const db = getDatabase();
+  const existing = db.prepare("SELECT slug FROM events WHERE slug = ?").get(slug);
+  const defMatch = defaultEvents.find((e) => e.slug === slug);
+
+  if (!existing && !defMatch) {
+    return { success: false, error: "EVENT_NOT_FOUND" };
+  }
+
+  if (defMatch) {
+    ensureDefaultEventInSqlite(db, defMatch);
+    db.prepare("UPDATE events SET deleted = 1 WHERE slug = ?").run(slug);
+  } else {
+    db.prepare("DELETE FROM events WHERE slug = ?").run(slug);
+  }
+
+  return { success: true };
+}
+
 export function getAllEvents(): ChapterEvent[] {
   const db = getDatabase();
-  const rows = db.prepare("SELECT * FROM events ORDER BY starts_at DESC").all() as Record<string, unknown>[];
+  const allRows = db.prepare("SELECT * FROM events ORDER BY starts_at DESC").all() as Record<
+    string,
+    unknown
+  >[];
 
-  const dbEvents: ChapterEvent[] = rows.map(mapEventRowToChapterEvent);
+  const deletedSlugs = new Set(
+    allRows.filter((r) => r.deleted === 1).map((r) => String(r.slug))
+  );
+  const dbEvents: ChapterEvent[] = allRows
+    .filter((r) => r.deleted !== 1)
+    .map(mapEventRowToChapterEvent);
 
   const merged = [...dbEvents];
   for (const def of defaultEvents) {
-    if (!merged.some((e) => e.slug === def.slug)) {
+    if (!deletedSlugs.has(def.slug) && !merged.some((e) => e.slug === def.slug)) {
       merged.push(def);
     }
   }
@@ -844,7 +1003,8 @@ export function getRegistrations(
       experienceLevel: r.experience_level as string,
       portfolioUrl: (r.portfolio_url as string) || undefined,
       notes: (r.notes as string) || undefined,
-      status: r.status as "confirmed" | "waitlisted" | "cancelled",
+      status: (r.status as RegistrationStatus) || "confirmed",
+      reviewedAt: (r.reviewed_at as string) || undefined,
       checkedIn: (r.checked_in as number) === 1,
       checkedInAt: (r.checked_in_at as string) || undefined,
       checkedInDays,
@@ -903,7 +1063,8 @@ export function getRegistrationByReference(referenceId: string): RegistrationRec
     experienceLevel: row.experience_level as string,
     portfolioUrl: (row.portfolio_url as string) || undefined,
     notes: (row.notes as string) || undefined,
-    status: row.status as "confirmed" | "waitlisted" | "cancelled",
+    status: (row.status as RegistrationStatus) || "confirmed",
+    reviewedAt: (row.reviewed_at as string) || undefined,
     checkedIn: (row.checked_in as number) === 1,
     checkedInAt: (row.checked_in_at as string) || undefined,
     checkedInDays,
@@ -922,7 +1083,8 @@ export type CreateRegistrationResult =
 
 export function createRegistration(
   eventSlug: string,
-  input: RegistrationInput
+  input: RegistrationInput,
+  options?: { forceConfirmed?: boolean }
 ): CreateRegistrationResult {
   const db = getDatabase();
 
@@ -945,25 +1107,44 @@ export function createRegistration(
   } = validated.data;
 
   // Ensure event exists in SQLite or static catalog
-  const existingEvent = db.prepare("SELECT slug FROM events WHERE slug = ?").get(eventSlug);
-  if (!existingEvent) {
-    const defMatch = defaultEvents.find((e) => e.slug === eventSlug);
+  let eventRow = db
+    .prepare("SELECT slug, require_approval FROM events WHERE slug = ?")
+    .get(eventSlug) as { slug: string; require_approval?: number } | undefined;
+  const defMatch = defaultEvents.find((e) => e.slug === eventSlug);
+  if (!eventRow) {
     if (!defMatch) {
       return { success: false, error: "EVENT_NOT_FOUND", message: "Event not found." };
     }
     ensureDefaultEventInSqlite(db, defMatch);
+    eventRow = db
+      .prepare("SELECT slug, require_approval FROM events WHERE slug = ?")
+      .get(eventSlug) as { slug: string; require_approval?: number } | undefined;
   }
+
+  const requireApproval = Boolean(
+    eventRow?.require_approval === 1 ||
+      defMatch?.requireApproval ||
+      defMatch?.workshop?.registrationConfig?.requireApproval
+  );
+  const isPending = requireApproval && !options?.forceConfirmed;
 
   // Check duplicate
   const existing = db
-    .prepare("SELECT id, reference_id FROM registrations WHERE event_slug = ? AND LOWER(email) = ? AND status != 'cancelled'")
-    .get(eventSlug, emailNormalized) as { id: string; reference_id: string } | undefined;
+    .prepare(
+      "SELECT id, reference_id, status FROM registrations WHERE event_slug = ? AND LOWER(email) = ? AND status NOT IN ('cancelled', 'declined')"
+    )
+    .get(eventSlug, emailNormalized) as
+    | { id: string; reference_id: string; status: RegistrationStatus }
+    | undefined;
 
   if (existing) {
     return {
       success: false,
       error: "DUPLICATE_EMAIL",
-      message: "This email is already registered for this event.",
+      message:
+        existing.status === "pending"
+          ? "An application with this email is already pending host review."
+          : "This email is already registered for this event.",
     };
   }
 
@@ -981,7 +1162,7 @@ export function createRegistration(
       ? Math.max(baseCapacity, 135)
       : baseCapacity;
 
-  if (stats.totalRegistered >= effectiveCapacity) {
+  if (!isPending && stats.totalRegistered >= effectiveCapacity) {
     return {
       success: false,
       error: "CAPACITY_FULL",
@@ -990,20 +1171,23 @@ export function createRegistration(
   }
 
   // Generate Reference ID (guaranteed collision-free across all events)
-  const nextNum = stats.totalRegistered + 1;
-  if ((eventSlug === "dev-to-cloud" || baseCapacity === 120) && nextNum >= 120) {
+  const nextNum = isPending
+    ? stats.totalRegistered + (stats.pendingCount ?? 0) + 1
+    : stats.totalRegistered + 1;
+  if (!isPending && (eventSlug === "dev-to-cloud" || baseCapacity === 120) && nextNum >= 120) {
     try {
       db.prepare("UPDATE events SET capacity = 135 WHERE slug = ?").run(eventSlug);
     } catch {
       // ignore
     }
   }
-  let referenceId = buildEventReferenceId(eventSlug, nextNum);
+  let referenceId = buildEventReferenceId(eventSlug, nextNum, isPending);
   while (db.prepare("SELECT id FROM registrations WHERE reference_id = ?").get(referenceId)) {
     referenceId = buildEventReferenceId(eventSlug, nextNum, true);
   }
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
+  const initialStatus: RegistrationStatus = isPending ? "pending" : "confirmed";
 
   db.prepare(`
     INSERT INTO registrations (
@@ -1025,7 +1209,7 @@ export function createRegistration(
     experienceLevel,
     portfolioUrl ?? null,
     notes ?? null,
-    "confirmed",
+    initialStatus,
     0,
     createdAt
   );
@@ -1046,7 +1230,7 @@ export function createRegistration(
       experienceLevel,
       portfolioUrl,
       notes,
-      status: "confirmed",
+      status: initialStatus,
       checkedIn: false,
       createdAt,
     },
@@ -1065,6 +1249,20 @@ export function checkInAttendee(
 
   if (!reg || reg.eventSlug !== eventSlug) {
     return { success: false, message: "Pass reference was not found for this event." };
+  }
+
+  if (reg.status && reg.status !== "confirmed") {
+    const reason =
+      reg.status === "pending"
+        ? "is PENDING HOST APPROVAL and cannot be checked in yet."
+        : reg.status === "waitlisted"
+          ? "is on the WAITLIST and has not been approved yet."
+          : `is ${reg.status.toUpperCase()} and is not valid for entry.`;
+    return {
+      success: false,
+      message: `${reg.fullName}'s registration ${reason}`,
+      registration: reg,
+    };
   }
 
   const existingDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
@@ -1207,10 +1405,11 @@ export async function getRegistrationsAsync(
 
 export async function createRegistrationAsync(
   eventSlug: string,
-  input: RegistrationInput
+  input: RegistrationInput,
+  options?: { forceConfirmed?: boolean }
 ): Promise<CreateRegistrationResult> {
   try {
-    const firestoreResult = await createFirestoreRegistration(eventSlug, input);
+    const firestoreResult = await createFirestoreRegistration(eventSlug, input, options);
     if (firestoreResult) {
       if (firestoreResult.success) {
         try {
@@ -1273,7 +1472,7 @@ export async function createRegistrationAsync(
   } catch (err) {
     console.warn("Firestore registration failed, falling back to local SQLite:", (err as Error).message);
   }
-  const localResult = createRegistration(eventSlug, input);
+  const localResult = createRegistration(eventSlug, input, options);
   if (localResult.success) {
     revalidateEventCaches(eventSlug);
   }
@@ -1365,8 +1564,20 @@ export async function updateEventAsync(
               location: ev.location,
               topics: ev.topics,
               summary: ev.summary,
-              capacity: input.capacity,
-              isRegistrationOpen: input.isRegistrationOpen,
+              image: ev.image,
+              url: ev.url,
+              cancelled: ev.cancelled,
+              capacity: input.capacity ?? ev.workshop?.capacity,
+              priceNote: input.priceNote ?? ev.priceNote,
+              isRegistrationOpen:
+                input.isRegistrationOpen ??
+                ev.isRegistrationOpen ??
+                ev.workshop?.registrationConfig?.isOpen,
+              requireApproval:
+                input.requireApproval ??
+                ev.requireApproval ??
+                ev.workshop?.registrationConfig?.requireApproval,
+              workshop: input.workshop ?? ev.workshop,
             });
           }
         } catch {
@@ -1389,22 +1600,97 @@ export async function updateEventAsync(
   return localUpdated;
 }
 
+export async function deleteEventAsync(
+  slug: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const fsResult = await deleteFirestoreEvent(slug);
+    if (fsResult) {
+      if (fsResult.success) {
+        try {
+          deleteEvent(slug);
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return fsResult;
+    }
+  } catch (err) {
+    console.warn("Firestore deleteEvent failed, falling back to local SQLite:", (err as Error).message);
+  }
+
+  const localRes = deleteEvent(slug);
+  if (localRes.success) {
+    revalidateEventCaches(slug);
+  }
+  return localRes;
+}
+
+function mergeWithStaticEventDefaults(
+  event: ChapterEvent,
+  defMatch?: ChapterEvent
+): ChapterEvent {
+  if (!defMatch) return event;
+
+  const cap = event.capacity ?? defMatch.capacity ?? defMatch.workshop?.capacity;
+  const requireApproval =
+    event.requireApproval ??
+    event.workshop?.registrationConfig?.requireApproval ??
+    defMatch.requireApproval ??
+    defMatch.workshop?.registrationConfig?.requireApproval;
+
+  const mergedWorkshop =
+    event.workshop ||
+    (defMatch.workshop
+      ? {
+          ...defMatch.workshop,
+          ...(cap !== undefined
+            ? {
+                capacity: cap,
+                seatsText: `Limited to ${cap} Seats`,
+              }
+            : {}),
+          ...(event.location ? { venueText: event.location } : {}),
+          registrationConfig: {
+            ...(defMatch.workshop.registrationConfig || {}),
+            ...(typeof event.isRegistrationOpen === "boolean"
+              ? { isOpen: event.isRegistrationOpen }
+              : {}),
+            ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
+          },
+        }
+      : undefined);
+
+  return {
+    ...event,
+    image: event.image || defMatch.image,
+    url: event.url || defMatch.url,
+    priceNote: event.priceNote || defMatch.priceNote,
+    ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
+    workshop: mergedWorkshop,
+  };
+}
+
 export async function getAllEventsAsync(): Promise<ChapterEvent[]> {
   try {
     let firestoreEvents = await getFirestoreEvents();
     if (firestoreEvents && firestoreEvents.length === 0) {
-      await seedFirestoreInitialEvents(defaultEvents);
-      firestoreEvents = await getFirestoreEvents();
+      const deletedSlugs = await getFirestoreDeletedEventSlugs();
+      if (deletedSlugs.length === 0) {
+        await seedFirestoreInitialEvents(defaultEvents);
+        firestoreEvents = await getFirestoreEvents();
+      }
     }
-    if (firestoreEvents && firestoreEvents.length > 0) {
-      const merged = [...firestoreEvents];
+    if (firestoreEvents) {
+      const deletedSet = new Set(await getFirestoreDeletedEventSlugs());
+      const merged = firestoreEvents.map((ev) =>
+        mergeWithStaticEventDefaults(
+          ev,
+          defaultEvents.find((d) => d.slug === ev.slug)
+        )
+      );
       for (const def of defaultEvents) {
-        const existingIdx = merged.findIndex((e) => e.slug === def.slug);
-        if (existingIdx >= 0) {
-          if (def.workshop && !merged[existingIdx].workshop) {
-            merged[existingIdx].workshop = def.workshop;
-          }
-        } else {
+        if (!deletedSet.has(def.slug) && !merged.some((e) => e.slug === def.slug)) {
           merged.push(def);
         }
       }
@@ -1427,15 +1713,11 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     const firestoreEvent = await getFirestoreEvent(slug);
     if (firestoreEvent) {
       const defMatch = defaultEvents.find((e) => e.slug === slug);
-      if (defMatch?.workshop && !firestoreEvent.workshop) {
-        const cap = firestoreEvent.capacity ?? defMatch.capacity ?? defMatch.workshop.capacity;
-        firestoreEvent.workshop = {
-          ...defMatch.workshop,
-          capacity: cap,
-          seatsText: `Limited to ${cap} Seats`,
-        };
-      }
-      return firestoreEvent;
+      return mergeWithStaticEventDefaults(firestoreEvent, defMatch);
+    }
+    const deletedSet = new Set(await getFirestoreDeletedEventSlugs());
+    if (deletedSet.has(slug)) {
+      return null;
     }
   } catch (err) {
     console.warn("Firestore getEvent failed, falling back to local SQLite:", (err as Error).message);
@@ -1448,6 +1730,356 @@ export async function getEventBySlugAsync(slug: string): Promise<ChapterEvent | 
     console.warn("SQLite getEventBySlug fallback failed, checking static events:", (err as Error).message);
     return defaultEvents.find((e) => e.slug === slug) ?? null;
   }
+}
+
+export function updateRegistration(
+  eventSlug: string,
+  referenceId: string,
+  updates: RegistrationUpdateInput
+): { success: boolean; message: string; registration?: RegistrationRecord } {
+  const db = getDatabase();
+  const ref = referenceId.trim().toUpperCase();
+  const existing = getRegistrationByReference(ref);
+  if (!existing || existing.eventSlug !== eventSlug) {
+    return { success: false, message: "Pass reference was not found for this event." };
+  }
+
+  const setClauses: string[] = [];
+  const params: (string | number | null)[] = [];
+
+  if (updates.fullName !== undefined && updates.fullName.trim()) {
+    setClauses.push("full_name = ?");
+    params.push(updates.fullName.trim());
+  }
+  if (updates.email !== undefined && updates.email.trim()) {
+    setClauses.push("email = ?");
+    params.push(updates.email.trim().toLowerCase());
+  }
+  if (updates.phone !== undefined && updates.phone.trim()) {
+    setClauses.push("phone = ?");
+    params.push(updates.phone.trim());
+  }
+  if (updates.college !== undefined && updates.college.trim()) {
+    setClauses.push("college = ?");
+    params.push(updates.college.trim());
+  }
+  if (updates.department !== undefined && updates.department.trim()) {
+    setClauses.push("department = ?");
+    params.push(updates.department.trim());
+  }
+  if (updates.yearOfStudy !== undefined && updates.yearOfStudy.trim()) {
+    setClauses.push("year_of_study = ?");
+    params.push(updates.yearOfStudy.trim());
+  }
+  if (updates.track !== undefined) {
+    setClauses.push("track = ?");
+    params.push(updates.track.trim() || "General Admission");
+  }
+  if (updates.experienceLevel !== undefined && updates.experienceLevel.trim()) {
+    setClauses.push("experience_level = ?");
+    params.push(updates.experienceLevel.trim());
+  }
+  if (updates.portfolioUrl !== undefined) {
+    setClauses.push("portfolio_url = ?");
+    params.push(updates.portfolioUrl.trim() || null);
+  }
+  if (updates.notes !== undefined) {
+    setClauses.push("notes = ?");
+    params.push(updates.notes.trim() || null);
+  }
+  if (updates.status !== undefined) {
+    setClauses.push("status = ?");
+    params.push(updates.status);
+  }
+
+  if (setClauses.length > 0) {
+    params.push(ref);
+    db.prepare(`UPDATE registrations SET ${setClauses.join(", ")} WHERE reference_id = ?`).run(...params);
+  }
+
+  const updated = getRegistrationByReference(ref)!;
+  return {
+    success: true,
+    message: `Updated registration for ${updated.fullName}.`,
+    registration: updated,
+  };
+}
+
+export async function updateRegistrationAsync(
+  eventSlug: string,
+  referenceId: string,
+  updates: RegistrationUpdateInput
+): Promise<{ success: boolean; message: string; registration?: RegistrationRecord }> {
+  try {
+    const fsResult = await updateFirestoreRegistration(eventSlug, referenceId, updates);
+    if (fsResult) {
+      if (fsResult.success) {
+        try {
+          updateRegistration(eventSlug, referenceId, updates);
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return fsResult;
+    }
+  } catch (err) {
+    console.warn("Firestore updateRegistration failed, falling back to local SQLite:", (err as Error).message);
+  }
+
+  const localRes = updateRegistration(eventSlug, referenceId, updates);
+  if (localRes.success) {
+    revalidateEventCaches(eventSlug);
+  }
+  return localRes;
+}
+
+export function reviewRegistration(
+  eventSlug: string,
+  referenceId: string,
+  decision: "approve" | "decline" | "waitlist",
+  options?: { force?: boolean }
+): {
+  success: boolean;
+  code?: "NOT_FOUND" | "CAPACITY_FULL";
+  message: string;
+  registration?: RegistrationRecord;
+  previousStatus?: RegistrationStatus;
+} {
+  const db = getDatabase();
+  const ref = referenceId.trim().toUpperCase();
+  const existing = getRegistrationByReference(ref);
+  if (!existing || existing.eventSlug !== eventSlug) {
+    return {
+      success: false,
+      code: "NOT_FOUND",
+      message: "Registration reference was not found for this event.",
+    };
+  }
+
+  const nextStatus: RegistrationStatus =
+    decision === "approve" ? "confirmed" : decision === "decline" ? "declined" : "waitlisted";
+  const previousStatus: RegistrationStatus = existing.status || "confirmed";
+
+  if (previousStatus === nextStatus) {
+    return {
+      success: true,
+      message: `${existing.fullName} is already ${nextStatus}.`,
+      registration: existing,
+      previousStatus,
+    };
+  }
+
+  if (nextStatus === "confirmed" && previousStatus !== "confirmed" && !options?.force) {
+    const stats = getEventStats(eventSlug);
+    if (stats.totalRegistered >= stats.capacity) {
+      return {
+        success: false,
+        code: "CAPACITY_FULL",
+        message: `Event capacity reached (${stats.totalRegistered}/${stats.capacity} confirmed seats). Increase capacity before approving more applicants.`,
+      };
+    }
+  }
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE registrations SET status = ?, reviewed_at = ? WHERE reference_id = ?").run(
+    nextStatus,
+    now,
+    ref
+  );
+
+  const updated = getRegistrationByReference(ref)!;
+  const verb =
+    nextStatus === "confirmed"
+      ? "Approved"
+      : nextStatus === "declined"
+        ? "Declined"
+        : "Moved to Waitlist";
+
+  return {
+    success: true,
+    message: `${verb}: ${updated.fullName}`,
+    registration: updated,
+    previousStatus,
+  };
+}
+
+export async function reviewRegistrationAsync(
+  eventSlug: string,
+  referenceId: string,
+  decision: "approve" | "decline" | "waitlist",
+  options?: { force?: boolean }
+): Promise<{
+  success: boolean;
+  code?: "NOT_FOUND" | "CAPACITY_FULL";
+  message: string;
+  registration?: RegistrationRecord;
+  previousStatus?: RegistrationStatus;
+}> {
+  try {
+    const fsResult = await reviewFirestoreRegistration(eventSlug, referenceId, decision, options);
+    if (fsResult) {
+      if (fsResult.success) {
+        try {
+          reviewRegistration(eventSlug, referenceId, decision, { force: true });
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return fsResult;
+    }
+  } catch (err) {
+    console.warn("Firestore reviewRegistration failed, falling back to local SQLite:", (err as Error).message);
+  }
+
+  const localRes = reviewRegistration(eventSlug, referenceId, decision, options);
+  if (localRes.success) {
+    revalidateEventCaches(eventSlug);
+  }
+  return localRes;
+}
+
+export function revokeCheckInAttendee(
+  eventSlug: string,
+  referenceId: string,
+  day: number = 1
+): { success: boolean; message: string; registration?: RegistrationRecord } {
+  const db = getDatabase();
+  const ref = referenceId.trim().toUpperCase();
+  const reg = getRegistrationByReference(ref);
+  if (!reg || reg.eventSlug !== eventSlug) {
+    return { success: false, message: "Pass reference was not found for this event." };
+  }
+
+  const existingDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
+  const existingCheckIns = { ...(reg.checkIns || (reg.checkedInAt ? { 1: reg.checkedInAt } : {})) };
+
+  if (!existingDays.includes(day)) {
+    return {
+      success: false,
+      message: `${reg.fullName} is not checked in for Day ${day}.`,
+      registration: reg,
+    };
+  }
+
+  const updatedDays = existingDays.filter((d) => d !== day);
+  delete existingCheckIns[day];
+  const stillCheckedIn = updatedDays.length > 0;
+  const latestTime = stillCheckedIn
+    ? existingCheckIns[updatedDays[updatedDays.length - 1]] || reg.checkedInAt || ""
+    : null;
+
+  db.prepare(`
+    UPDATE registrations
+    SET checked_in = ?,
+        checked_in_at = ?,
+        checked_in_days = ?,
+        check_ins = ?
+    WHERE reference_id = ?
+  `).run(
+    stillCheckedIn ? 1 : 0,
+    latestTime,
+    JSON.stringify(updatedDays),
+    JSON.stringify(existingCheckIns),
+    ref
+  );
+
+  return {
+    success: true,
+    message: `Removed Day ${day} check-in for ${reg.fullName}.`,
+    registration: getRegistrationByReference(ref)!,
+  };
+}
+
+export async function revokeCheckInAttendeeAsync(
+  eventSlug: string,
+  referenceId: string,
+  day: number = 1
+): Promise<{ success: boolean; message: string; registration?: RegistrationRecord }> {
+  try {
+    const fsResult = await revokeCheckInFirestoreAttendee(eventSlug, referenceId, day);
+    if (fsResult) {
+      if (fsResult.success) {
+        try {
+          revokeCheckInAttendee(eventSlug, referenceId, day);
+        } catch {
+          // ignore local SQLite mirroring error
+        }
+      }
+      return fsResult;
+    }
+  } catch (err) {
+    console.warn("Firestore revokeCheckIn failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return revokeCheckInAttendee(eventSlug, referenceId, day);
+}
+
+export function getSiteSettings(): ChapterSettings {
+  const db = getDatabase();
+  const row = db
+    .prepare("SELECT payload FROM site_settings WHERE id = 'main'")
+    .get() as { payload?: string } | undefined;
+
+  if (!row?.payload) return DEFAULT_CHAPTER_SETTINGS;
+
+  try {
+    const parsed = JSON.parse(row.payload) as Partial<ChapterSettings>;
+    return {
+      ...DEFAULT_CHAPTER_SETTINGS,
+      ...parsed,
+      chapter: {
+        ...DEFAULT_CHAPTER_SETTINGS.chapter,
+        ...(parsed.chapter || {}),
+      },
+      team: Array.isArray(parsed.team) ? parsed.team : DEFAULT_CHAPTER_SETTINGS.team,
+      learningAreas: Array.isArray(parsed.learningAreas)
+        ? parsed.learningAreas
+        : DEFAULT_CHAPTER_SETTINGS.learningAreas,
+      homeFaq: Array.isArray(parsed.homeFaq) ? parsed.homeFaq : DEFAULT_CHAPTER_SETTINGS.homeFaq,
+      joinFaq: Array.isArray(parsed.joinFaq) ? parsed.joinFaq : DEFAULT_CHAPTER_SETTINGS.joinFaq,
+      aboutCards: Array.isArray(parsed.aboutCards)
+        ? parsed.aboutCards
+        : DEFAULT_CHAPTER_SETTINGS.aboutCards,
+    };
+  } catch {
+    return DEFAULT_CHAPTER_SETTINGS;
+  }
+}
+
+export function updateSiteSettings(settings: ChapterSettings): ChapterSettings {
+  const db = getDatabase();
+  const payload: ChapterSettings = {
+    ...settings,
+    updatedAt: new Date().toISOString(),
+  };
+  db.prepare(`
+    INSERT OR REPLACE INTO site_settings (id, payload, updated_at)
+    VALUES ('main', ?, ?)
+  `).run(JSON.stringify(payload), payload.updatedAt!);
+  return payload;
+}
+
+export async function getSiteSettingsAsync(): Promise<ChapterSettings> {
+  try {
+    const fsSettings = await getFirestoreSiteSettings();
+    if (fsSettings) return fsSettings;
+  } catch (err) {
+    console.warn("Firestore getSiteSettings failed, falling back to local SQLite:", (err as Error).message);
+  }
+  return getSiteSettings();
+}
+
+export async function updateSiteSettingsAsync(
+  settings: ChapterSettings
+): Promise<ChapterSettings> {
+  const localSaved = updateSiteSettings(settings);
+  try {
+    const fsSaved = await updateFirestoreSiteSettings(localSaved);
+    if (fsSaved) return fsSaved;
+  } catch (err) {
+    console.warn("Firestore updateSiteSettings failed, saved to SQLite:", (err as Error).message);
+  }
+  revalidateSiteCaches();
+  return localSaved;
 }
 
 export function logEmailRecord(log: EmailLog): void {
@@ -1486,7 +2118,7 @@ export function getEmailLogs(eventSlug: string): EmailLog[] {
     return {
       id: r.id as string,
       eventSlug: r.event_slug as string,
-      type: r.type as "pass" | "announcement",
+      type: r.type as EmailLog["type"],
       subject: r.subject as string,
       recipientCount: r.recipient_count as number,
       recipients,

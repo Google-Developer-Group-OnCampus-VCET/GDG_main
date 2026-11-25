@@ -20,9 +20,12 @@ import {
 } from "./auth";
 import { POST as checkInPost } from "@/app/api/events/[slug]/check-in/route";
 import { POST as loginPost } from "@/app/api/admin/login/route";
-import { PATCH as eventPatch } from "@/app/api/admin/events/[slug]/route";
+import { DELETE as eventDelete, PATCH as eventPatch } from "@/app/api/admin/events/[slug]/route";
 import { POST as eventPost } from "@/app/api/admin/events/route";
 import { POST as emailPost } from "@/app/api/events/[slug]/email/route";
+import { GET as siteSettingsGet, PATCH as siteSettingsPatch } from "@/app/api/admin/site-settings/route";
+import { POST as walkInPost, PATCH as bulkReviewPatch } from "@/app/api/events/[slug]/registrations/route";
+import { DELETE as regDelete, PATCH as regPatch } from "@/app/api/events/[slug]/registrations/[ref]/route";
 import { cleanupTestRegistrations, createRegistration } from "@/lib/db";
 
 describe("Admin Authentication Layer", () => {
@@ -451,6 +454,193 @@ describe("Admin Authentication Layer", () => {
         { params: Promise.resolve({ slug: "dev-to-cloud" }) }
       );
       expect(masterBroadcastRes.status).toBe(200);
+    });
+
+    it("restricts speaker confirmation emails to Master Admin and validates inputs", async () => {
+      const coreToken = await createAdminSessionToken("core");
+      const masterToken = await createAdminSessionToken("admin");
+
+      const coreSpeakerRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({
+            action: "speaker-confirmation",
+            speakerName: "Karan Patel",
+            speakerEmail: "karan@example.com",
+            talkTitle: "Serverless Containers",
+            subject: "Speaker Confirmation",
+            message: "Welcome aboard!",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(coreSpeakerRes.status).toBe(403);
+
+      const invalidEmailRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}`,
+          },
+          body: JSON.stringify({
+            action: "speaker-confirmation",
+            speakerName: "Karan Patel",
+            speakerEmail: "not-an-email",
+            talkTitle: "Serverless Containers",
+            subject: "Speaker Confirmation",
+            message: "Welcome aboard!",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(invalidEmailRes.status).toBe(400);
+
+      const masterSpeakerRes = await emailPost(
+        new Request("http://localhost/api/events/dev-to-cloud/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}`,
+          },
+          body: JSON.stringify({
+            action: "speaker-confirmation",
+            speakerName: "Karan Patel",
+            speakerEmail: "karan@example.com",
+            speakerRole: "GDE Cloud",
+            talkTitle: "Serverless Containers",
+            sessionFormat: "Technical Session",
+            sessionSlot: "Day 2 · 11:00 AM IST",
+            subject: "Confirmed Speaker Invite: Serverless Containers",
+            message: "Thank you for confirming your session with GDG VCET!",
+          }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(masterSpeakerRes.status).toBe(200);
+      const body = await masterSpeakerRes.json();
+      expect(body.success).toBe(true);
+      expect(body.log?.type).toBe("speaker");
+    });
+
+    it("enforces Master Admin RBAC on Site CMS settings, Event deletion, and Roster CRUD", async () => {
+      const coreToken = await createAdminSessionToken("core");
+      const volunteerToken = await createAdminSessionToken("volunteer");
+      const masterToken = await createAdminSessionToken("admin");
+
+      // Unauthenticated GET site-settings -> 401
+      const unauthGetSettings = await siteSettingsGet(
+        new Request("http://localhost/api/admin/site-settings")
+      );
+      expect(unauthGetSettings.status).toBe(401);
+
+      // Authenticated volunteer can GET site-settings -> 200
+      const volGetSettings = await siteSettingsGet(
+        new Request("http://localhost/api/admin/site-settings", {
+          headers: { cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(volunteerToken)}` },
+        })
+      );
+      expect(volGetSettings.status).toBe(200);
+
+      // Core member blocked from PATCH site-settings -> 403
+      const corePatchSettings = await siteSettingsPatch(
+        new Request("http://localhost/api/admin/site-settings", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({}),
+        })
+      );
+      expect(corePatchSettings.status).toBe(403);
+
+      // Master admin invalid site-settings payload -> 400 (validates cleanly without mutating real settings)
+      const masterInvalidSettings = await siteSettingsPatch(
+        new Request("http://localhost/api/admin/site-settings", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}`,
+          },
+          body: JSON.stringify({ chapter: {} }),
+        })
+      );
+      expect(masterInvalidSettings.status).toBe(400);
+
+      // Core member blocked from DELETE event -> 403
+      const coreDeleteEvent = await eventDelete(
+        new Request("http://localhost/api/admin/events/dev-to-cloud", {
+          method: "DELETE",
+          headers: { cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}` },
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(coreDeleteEvent.status).toBe(403);
+
+      // Master admin deleting unknown event -> 404
+      const masterDeleteMissing = await eventDelete(
+        new Request("http://localhost/api/admin/events/nonexistent-event-xyz", {
+          method: "DELETE",
+          headers: { cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(masterToken)}` },
+        }),
+        { params: Promise.resolve({ slug: "nonexistent-event-xyz" }) }
+      );
+      expect(masterDeleteMissing.status).toBe(404);
+
+      // Volunteer & Core blocked from manual walk-in POST and roster PATCH/DELETE -> 403
+      const volWalkIn = await walkInPost(
+        new Request("http://localhost/api/events/dev-to-cloud/registrations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(volunteerToken)}`,
+          },
+          body: JSON.stringify({ fullName: "Test User", email: "test@example.com" }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(volWalkIn.status).toBe(403);
+
+      const corePatchReg = await regPatch(
+        new Request("http://localhost/api/events/dev-to-cloud/registrations/GDG-FAKE", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({ undoCheckInDay: 1 }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud", ref: "GDG-FAKE" }) }
+      );
+      expect(corePatchReg.status).toBe(403);
+
+      const volDeleteReg = await regDelete(
+        new Request("http://localhost/api/events/dev-to-cloud/registrations/GDG-FAKE", {
+          method: "DELETE",
+          headers: { cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(volunteerToken)}` },
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud", ref: "GDG-FAKE" }) }
+      );
+      expect(volDeleteReg.status).toBe(403);
+
+      // Core member blocked from bulk approval review -> 403
+      const coreBulkReview = await bulkReviewPatch(
+        new Request("http://localhost/api/events/dev-to-cloud/registrations", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            cookie: `${ADMIN_COOKIE_NAME}=${encodeURIComponent(coreToken)}`,
+          },
+          body: JSON.stringify({ referenceIds: ["GDG-FAKE"], decision: "approve" }),
+        }),
+        { params: Promise.resolve({ slug: "dev-to-cloud" }) }
+      );
+      expect(coreBulkReview.status).toBe(403);
     });
   });
 });

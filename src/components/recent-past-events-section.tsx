@@ -1,12 +1,21 @@
 import { connection } from "next/server";
 import type { ChapterEvent } from "@/types";
 import { pastEvents } from "@/lib/events";
+import { getCachedAllEvents } from "@/lib/db/cached";
 import { EventCard } from "@/components/event-card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export async function RecentPastEventsSection({ events }: { events: ChapterEvent[] }) {
+export async function RecentPastEventsSection({ events: initialEvents }: { events?: ChapterEvent[] }) {
   await connection();
-  const recent = pastEvents(events, new Date()).slice(0, 3);
+  let sourceEvents = initialEvents;
+  if (!sourceEvents) {
+    try {
+      sourceEvents = await getCachedAllEvents();
+    } catch {
+      sourceEvents = [];
+    }
+  }
+  const recent = pastEvents(sourceEvents, new Date()).slice(0, 3);
 
   if (recent.length === 0) {
     return (

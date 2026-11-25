@@ -66,11 +66,16 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
 
           <div className="flex flex-wrap items-center gap-3">
             {stats ? (
-              <div className="bg-white border border-border px-3.5 py-1.5 rounded-full text-xs font-semibold">
+              <div className="bg-white border border-border px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2">
                 <span>Capacity: </span>
                 <span className="text-primary font-bold">
                   {stats.totalRegistered} / {stats.capacity}
                 </span>
+                {stats.pendingCount && stats.pendingCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold text-[10px]">
+                    {stats.pendingCount} Pending
+                  </span>
+                ) : null}
               </div>
             ) : null}
 

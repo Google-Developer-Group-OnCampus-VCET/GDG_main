@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit";
+  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit" | "settings";
   eventSlug?: string;
   initialRole?: "admin" | "core" | "volunteer" | null;
 }
@@ -163,6 +163,21 @@ export function AdminHeader({
                 Audit Trail
               </Link>
             ) : null}
+
+            {/* Site & Team CMS: Visible ONLY to Master Admin */}
+            {isMaster ? (
+              <Link
+                href="/admin/console/settings"
+                prefetch={false}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  currentTab === "settings"
+                    ? "bg-primary text-on-primary font-bold shadow-xs"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+              >
+                Site &amp; Team CMS
+              </Link>
+            ) : null}
           </nav>
         ) : null}
 
@@ -290,6 +305,19 @@ export function AdminHeader({
               }`}
             >
               Audit Trail
+            </Link>
+          ) : null}
+          {isMaster ? (
+            <Link
+              href="/admin/console/settings"
+              prefetch={false}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                currentTab === "settings"
+                  ? "bg-primary text-on-primary font-bold shadow-xs"
+                  : "text-foreground-muted hover:text-foreground bg-white border border-border/50"
+              }`}
+            >
+              Site CMS
             </Link>
           ) : null}
           <Link

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { chapter } from "@/content/chapter";
+import { chapter as defaultChapter } from "@/content/chapter";
+import type { ChapterConfig } from "@/types";
 import { GdgLogo } from "@/components/gdg-logo";
 
 const copyrightYear = new Date().getFullYear();
 
-export function SiteFooter() {
+export function SiteFooter({ chapterConfig }: { chapterConfig?: ChapterConfig }) {
   const pathname = usePathname();
+  const chapter = chapterConfig ?? defaultChapter;
 
   // Do not render the public chapter footer on admin workspace routes
   if (pathname.startsWith("/admin")) {

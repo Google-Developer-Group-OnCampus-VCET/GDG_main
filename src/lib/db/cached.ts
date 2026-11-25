@@ -3,9 +3,10 @@ import {
   getAllEventsAsync,
   getEventBySlugAsync,
   getPublicEventStatsAsync,
+  getSiteSettingsAsync,
   type EventStats,
 } from "./index";
-import type { ChapterEvent } from "@/types";
+import type { ChapterEvent, ChapterSettings } from "@/types";
 
 /**
  * Shared Next.js 16 remote cache layer (`use cache: remote`) for public pages and stats API.
@@ -36,4 +37,12 @@ export async function getCachedPublicEventStats(slug: string): Promise<EventStat
 
   const event = await getCachedEventBySlug(slug);
   return getPublicEventStatsAsync(slug, event);
+}
+
+export async function getCachedSiteSettings(): Promise<ChapterSettings> {
+  "use cache: remote";
+  cacheTag("site-settings");
+  cacheLife({ revalidate: 300, expire: 3600 });
+
+  return getSiteSettingsAsync();
 }

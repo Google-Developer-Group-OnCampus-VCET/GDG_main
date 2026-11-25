@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import type { RegistrationRecord } from "@/types";
+import type { RegistrationRecord, RegistrationStatus } from "@/types";
 import { downloadForGoogleSheets, copyForGoogleSheets, type ExportColumn } from "@/lib/sheets-export";
 
 interface RegistrationsTableProps {
@@ -30,11 +30,45 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialRegistrations);
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "cancelled">("active");
+  const [statusFilter, setStatusFilter] = useState<"confirmed" | "pending" | "waitlisted" | "removed" | "all">("confirmed");
   const [checkInFilter, setCheckInFilter] = useState("all");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [emailingRef, setEmailingRef] = useState<string | null>(null);
+  const [mutatingRef, setMutatingRef] = useState<string | null>(null);
+  const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
+  const [bulkReviewing, setBulkReviewing] = useState(false);
+  const [notifyOnDecision, setNotifyOnDecision] = useState(true);
+
+  // Add Walk-in Attendee modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    college: "VCET",
+    department: "Computer Engineering",
+    yearOfStudy: "2nd Year (SE)",
+    track: "4-Day All-Access",
+    experienceLevel: "Beginner",
+    notes: "",
+  });
+  const [addingSubmitting, setAddingSubmitting] = useState(false);
+
+  // Edit Attendee modal state
+  const [editingReg, setEditingReg] = useState<RegistrationRecord | null>(null);
+  const [editForm, setEditForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    college: "",
+    department: "",
+    yearOfStudy: "",
+    track: "",
+    status: "confirmed" as RegistrationStatus,
+    notes: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function handleEmailPass(reg: RegistrationRecord) {
     setEmailingRef(reg.referenceId);
@@ -58,8 +92,13 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     }
   }
 
-  const totalActive = registrations.filter((r) => r.status !== "cancelled").length;
-  const totalCancelled = registrations.filter((r) => r.status === "cancelled").length;
+  const totalConfirmed = registrations.filter((r) => !r.status || r.status === "confirmed").length;
+  const totalPending = registrations.filter((r) => r.status === "pending").length;
+  const totalWaitlisted = registrations.filter((r) => r.status === "waitlisted").length;
+  const totalRemoved = registrations.filter(
+    (r) => r.status === "cancelled" || r.status === "declined"
+  ).length;
+  const totalActive = totalConfirmed;
 
   const filtered = registrations.filter((r) => {
     const matchesSearch =
@@ -72,10 +111,14 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     const matchesTrack = trackFilter === "all" || (r.track || "General Admission") === trackFilter;
 
     let matchesStatus = true;
-    if (statusFilter === "active") {
-      matchesStatus = r.status !== "cancelled";
-    } else if (statusFilter === "cancelled") {
-      matchesStatus = r.status === "cancelled";
+    if (statusFilter === "confirmed") {
+      matchesStatus = !r.status || r.status === "confirmed";
+    } else if (statusFilter === "pending") {
+      matchesStatus = r.status === "pending";
+    } else if (statusFilter === "waitlisted") {
+      matchesStatus = r.status === "waitlisted";
+    } else if (statusFilter === "removed") {
+      matchesStatus = r.status === "cancelled" || r.status === "declined";
     }
 
     let matchesCheckIn = true;
@@ -99,11 +142,11 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
   });
 
   const checkedInCount = registrations.filter(
-    (r) => r.status !== "cancelled" && (r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0))
+    (r) => (!r.status || r.status === "confirmed") && (r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0))
   ).length;
   const fourDayCompleters = registrations.filter(
     (r) =>
-      r.status !== "cancelled" &&
+      (!r.status || r.status === "confirmed") &&
       r.checkedInDays?.includes(1) &&
       r.checkedInDays?.includes(2) &&
       r.checkedInDays?.includes(3) &&
@@ -231,6 +274,263 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     }
   }
 
+  async function handleRevokeCheckIn(reg: RegistrationRecord, day: number) {
+    if (sessionRole !== "admin") return;
+    setMutatingRef(reg.referenceId);
+    try {
+      const res = await fetch(
+        `/api/events/${eventSlug}/registrations/${encodeURIComponent(reg.referenceId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ undoCheckInDay: day }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRegistrations((prev) =>
+          prev.map((item) =>
+            item.referenceId === reg.referenceId ? data.registration || item : item
+          )
+        );
+        setActionFeedback(`Revoked Day ${day} check-in for ${reg.fullName}.`);
+      } else {
+        setActionFeedback(data.message || `Failed to undo Day ${day} check-in.`);
+      }
+    } catch {
+      setActionFeedback("Error revoking check-in.");
+    } finally {
+      setMutatingRef(null);
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
+  }
+
+  function openEditModal(reg: RegistrationRecord) {
+    setEditingReg(reg);
+    setEditForm({
+      fullName: reg.fullName,
+      email: reg.email,
+      phone: reg.phone,
+      college: reg.college,
+      department: reg.department,
+      yearOfStudy: reg.yearOfStudy,
+      track: reg.track || "",
+      status: reg.status,
+      notes: reg.notes || "",
+    });
+  }
+
+  async function handleSaveAttendeeEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingReg || sessionRole !== "admin") return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(
+        `/api/events/${eventSlug}/registrations/${encodeURIComponent(editingReg.referenceId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editForm),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data.success && data.registration) {
+        setRegistrations((prev) =>
+          prev.map((item) =>
+            item.referenceId === editingReg.referenceId ? data.registration : item
+          )
+        );
+        setEditingReg(null);
+        setActionFeedback(`Updated attendee details for ${data.registration.fullName}.`);
+      } else {
+        setActionFeedback(data.message || "Failed to update attendee.");
+      }
+    } catch {
+      setActionFeedback("Error updating attendee.");
+    } finally {
+      setSavingEdit(false);
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
+  }
+
+  async function handleAddAttendee(e: React.FormEvent) {
+    e.preventDefault();
+    if (sessionRole !== "admin") return;
+    setAddingSubmitting(true);
+    try {
+      const res = await fetch(`/api/events/${eventSlug}/registrations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addForm),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.registration) {
+        setRegistrations((prev) => [data.registration, ...prev]);
+        setShowAddModal(false);
+        setAddForm({
+          fullName: "",
+          email: "",
+          phone: "",
+          college: "VCET",
+          department: "Computer Engineering",
+          yearOfStudy: "2nd Year (SE)",
+          track: "4-Day All-Access",
+          experienceLevel: "Beginner",
+          notes: "",
+        });
+        setActionFeedback(`Added ${data.registration.fullName} (${data.registration.referenceId})!`);
+      } else {
+        setActionFeedback(data.message || "Failed to add attendee.");
+      }
+    } catch {
+      setActionFeedback("Error adding walk-in attendee.");
+    } finally {
+      setAddingSubmitting(false);
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
+  }
+
+  async function handleReviewDecision(
+    reg: RegistrationRecord,
+    decision: "approve" | "decline" | "waitlist"
+  ) {
+    if (sessionRole !== "admin") return;
+    setMutatingRef(reg.referenceId);
+    try {
+      const res = await fetch(
+        `/api/events/${eventSlug}/registrations/${encodeURIComponent(reg.referenceId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            decision,
+            notify: decision === "approve" ? true : notifyOnDecision,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data.success && data.registration) {
+        setRegistrations((prev) =>
+          prev.map((item) =>
+            item.referenceId === reg.referenceId ? data.registration : item
+          )
+        );
+        setSelectedRefs((prev) => prev.filter((id) => id !== reg.referenceId));
+        setActionFeedback(data.message || `Updated ${reg.fullName}.`);
+      } else {
+        setActionFeedback(data.message || "Failed to update approval status.");
+      }
+    } catch {
+      setActionFeedback("Error processing host decision.");
+    } finally {
+      setMutatingRef(null);
+      setTimeout(() => setActionFeedback(null), 4000);
+    }
+  }
+
+  async function handleBulkReview(decision: "approve" | "decline" | "waitlist") {
+    if (sessionRole !== "admin" || selectedRefs.length === 0) return;
+    setBulkReviewing(true);
+    try {
+      const res = await fetch(`/api/events/${eventSlug}/registrations`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          referenceIds: selectedRefs,
+          decision,
+          notify: decision === "approve" ? true : notifyOnDecision,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.registrations)) {
+        const updatedMap = new Map<string, RegistrationRecord>(
+          (data.registrations as RegistrationRecord[]).map((r) => [r.referenceId, r])
+        );
+        setRegistrations((prev) =>
+          prev.map((item) => updatedMap.get(item.referenceId) ?? item)
+        );
+        setSelectedRefs([]);
+        setActionFeedback(data.message || "Bulk review complete.");
+      } else {
+        setActionFeedback(data.message || "Bulk review failed.");
+      }
+    } catch {
+      setActionFeedback("Error processing bulk review.");
+    } finally {
+      setBulkReviewing(false);
+      setTimeout(() => setActionFeedback(null), 4500);
+    }
+  }
+
+  function toggleSelectRef(referenceId: string) {
+    setSelectedRefs((prev) =>
+      prev.includes(referenceId)
+        ? prev.filter((id) => id !== referenceId)
+        : [...prev, referenceId]
+    );
+  }
+
+  async function handleCancelOrDelete(
+    reg: RegistrationRecord,
+    action: "cancel" | "restore" | "hard"
+  ) {
+    if (sessionRole !== "admin") return;
+    setMutatingRef(reg.referenceId);
+    try {
+      if (action === "restore") {
+        const res = await fetch(
+          `/api/events/${eventSlug}/registrations/${encodeURIComponent(reg.referenceId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "confirmed" }),
+          }
+        );
+        const data = await res.json();
+        if (res.ok && data.success && data.registration) {
+          setRegistrations((prev) =>
+            prev.map((item) =>
+              item.referenceId === reg.referenceId ? data.registration : item
+            )
+          );
+          setActionFeedback(`Restored pass for ${reg.fullName}.`);
+        } else {
+          setActionFeedback(data.message || "Failed to restore pass.");
+        }
+      } else {
+        const res = await fetch(
+          `/api/events/${eventSlug}/registrations/${encodeURIComponent(reg.referenceId)}?mode=${action}`,
+          { method: "DELETE" }
+        );
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (action === "hard") {
+            setRegistrations((prev) =>
+              prev.filter((item) => item.referenceId !== reg.referenceId)
+            );
+            setActionFeedback(`Permanently deleted pass ${reg.referenceId}.`);
+          } else {
+            setRegistrations((prev) =>
+              prev.map((item) =>
+                item.referenceId === reg.referenceId
+                  ? { ...item, status: "cancelled" }
+                  : item
+              )
+            );
+            setActionFeedback(`Cancelled pass for ${reg.fullName}.`);
+          }
+        } else {
+          setActionFeedback(data.message || "Failed to remove pass.");
+        }
+      }
+    } catch {
+      setActionFeedback("Error updating registration status.");
+    } finally {
+      setMutatingRef(null);
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Toast Feedback */}
@@ -244,6 +544,110 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
           >
             ✕
           </button>
+        </div>
+      ) : null}
+
+      {/* Luma-style Queue & Status Tabs + Pending Banner */}
+      {totalPending > 0 && statusFilter !== "pending" ? (
+        <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span>
+              <strong>{totalPending}</strong> registration request{totalPending === 1 ? "" : "s"} waiting in the{" "}
+              <strong>Approval Queue</strong>.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("pending")}
+            className="px-3 py-1.5 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 transition-colors cursor-pointer"
+          >
+            Review Pending Queue →
+          </button>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { id: "confirmed" as const, label: `Confirmed (${totalConfirmed})` },
+            { id: "pending" as const, label: `Pending Approval (${totalPending})`, highlight: totalPending > 0 },
+            { id: "waitlisted" as const, label: `Waitlisted (${totalWaitlisted})` },
+            { id: "removed" as const, label: `Declined / Cancelled (${totalRemoved})` },
+            { id: "all" as const, label: `All (${registrations.length})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setStatusFilter(tab.id);
+                setSelectedRefs([]);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
+                statusFilter === tab.id
+                  ? "bg-primary text-on-primary border-primary shadow-2xs"
+                  : tab.highlight
+                    ? "bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100"
+                    : "bg-white text-foreground-muted border-border hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {sessionRole === "admin" && (statusFilter === "pending" || statusFilter === "waitlisted") ? (
+          <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyOnDecision}
+              onChange={(e) => setNotifyOnDecision(e.target.checked)}
+              className="w-3.5 h-3.5 rounded"
+            />
+            <span>Email waitlist/decline updates (passes always email on approval)</span>
+          </label>
+        ) : null}
+      </div>
+
+      {/* Bulk Review Bar */}
+      {sessionRole === "admin" && selectedRefs.length > 0 ? (
+        <div className="p-3 rounded-2xl bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-3">
+          <span className="font-semibold">
+            {selectedRefs.length} applicant{selectedRefs.length === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={bulkReviewing}
+              onClick={() => handleBulkReview("approve")}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer disabled:opacity-50"
+            >
+              ✓ Approve Selected ({selectedRefs.length})
+            </button>
+            <button
+              type="button"
+              disabled={bulkReviewing}
+              onClick={() => handleBulkReview("waitlist")}
+              className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold cursor-pointer disabled:opacity-50"
+            >
+              Move to Waitlist
+            </button>
+            <button
+              type="button"
+              disabled={bulkReviewing}
+              onClick={() => handleBulkReview("decline")}
+              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold cursor-pointer disabled:opacity-50"
+            >
+              ✕ Decline
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedRefs([])}
+              className="px-2.5 py-1.5 rounded-xl text-slate-300 hover:text-white cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -290,14 +694,14 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "active" | "all" | "cancelled")}
+              onChange={(e) => setStatusFilter(e.target.value as "confirmed" | "pending" | "waitlisted" | "removed" | "all")}
               className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
             >
-              <option value="active">Active Passes ({totalActive})</option>
-              <option value="all">All Registrations ({registrations.length})</option>
-              {totalCancelled > 0 ? (
-                <option value="cancelled">Cancelled / Revoked ({totalCancelled})</option>
-              ) : null}
+              <option value="confirmed">Confirmed ({totalConfirmed})</option>
+              <option value="pending">Pending Approval ({totalPending})</option>
+              <option value="waitlisted">Waitlisted ({totalWaitlisted})</option>
+              <option value="removed">Declined / Cancelled ({totalRemoved})</option>
+              <option value="all">All Guests ({registrations.length})</option>
             </select>
 
             <select
@@ -358,18 +762,27 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
             <span>Camera Check-in Terminal</span>
           </Link>
 
-          {/* Email Hub & Broadcast Shortcut: ONLY for Master Admin */}
+          {/* Add Attendee + Email Hub: ONLY for Master Admin */}
           {sessionRole === "admin" ? (
-            <Link
-              href={`/admin/console/events/${eventSlug}/email`}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 text-xs font-bold transition-all shrink-0"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              <span>Email Hub &amp; Broadcast</span>
-            </Link>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition-all shrink-0 cursor-pointer"
+              >
+                <span>+ Add Attendee</span>
+              </button>
+              <Link
+                href={`/admin/console/events/${eventSlug}/email`}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 text-xs font-bold transition-all shrink-0"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                <span>Email Hub &amp; Broadcast</span>
+              </Link>
+            </>
           ) : null}
         </div>
       </div>
@@ -377,18 +790,11 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       {/* Metrics Counter Strip */}
       <div className="flex flex-wrap items-center justify-between text-xs text-foreground-muted px-1 gap-2">
         <span>
-          Showing <strong className="text-foreground">{filtered.length}</strong> of{" "}
-          <strong className="text-foreground">{statusFilter === "cancelled" ? totalCancelled : totalActive}</strong>{" "}
-          {statusFilter === "cancelled" ? "cancelled passes" : "active attendees"}
-          {totalCancelled > 0 && statusFilter === "all" ? (
-            <span className="text-foreground-muted ml-1.5 font-normal">
-              ({totalActive} active · {totalCancelled} cancelled)
-            </span>
-          ) : totalCancelled > 0 && statusFilter === "active" ? (
-            <span className="text-foreground-muted ml-1.5 font-normal">
-              ({totalCancelled} cancelled hidden)
-            </span>
-          ) : null}
+          Showing <strong className="text-foreground">{filtered.length}</strong> in{" "}
+          <strong className="text-foreground">{statusFilter}</strong> view
+          <span className="text-foreground-muted ml-1.5 font-normal">
+            ({totalActive} confirmed{totalPending > 0 ? ` · ${totalPending} pending` : ""}{totalWaitlisted > 0 ? ` · ${totalWaitlisted} waitlisted` : ""}{totalRemoved > 0 ? ` · ${totalRemoved} closed` : ""})
+          </span>
         </span>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
@@ -443,11 +849,26 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
                           <button
                             key={d}
                             type="button"
-                            onClick={() => sessionRole !== "core" && !isAttended && handleToggleCheckIn(reg, d)}
-                            title={isAttended ? `Day ${d}: ${time || "Present"}` : sessionRole === "core" ? `Day ${d}: Absent` : `Check in for Day ${d}`}
+                            onClick={() => {
+                              if (sessionRole === "core") return;
+                              if (isAttended && sessionRole === "admin") {
+                                void handleRevokeCheckIn(reg, d);
+                              } else if (!isAttended) {
+                                void handleToggleCheckIn(reg, d);
+                              }
+                            }}
+                            title={
+                              isAttended
+                                ? sessionRole === "admin"
+                                  ? `Day ${d}: ${time || "Present"} (Click to undo)`
+                                  : `Day ${d}: ${time || "Present"}`
+                                : sessionRole === "core"
+                                  ? `Day ${d}: Absent`
+                                  : `Check in for Day ${d}`
+                            }
                             className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all ${
                               isAttended
-                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                ? `bg-emerald-50 text-emerald-800 border-emerald-200 ${sessionRole === "admin" ? "hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 cursor-pointer" : ""}`
                                 : sessionRole === "core"
                                 ? "bg-slate-50 text-slate-300 border-slate-200 cursor-default"
                                 : "bg-slate-50 text-slate-400 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer"
@@ -459,36 +880,61 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
                       })}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleEmailPass(reg)}
-                        disabled={emailingRef === reg.referenceId}
-                        title={`Email pass & QR code to ${reg.email}`}
-                        className="px-2.5 py-1.5 rounded-lg border border-border text-foreground-muted hover:text-primary hover:border-primary text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 min-h-[36px]"
-                      >
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                          <polyline points="22,6 12,13 2,6" />
-                        </svg>
-                        <span>{emailingRef === reg.referenceId ? "Sending…" : "Email Pass"}</span>
-                      </button>
-
-                      {nextMissingDay ? (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer min-h-[36px]"
-                        >
-                          Admit D{nextMissingDay}
-                        </button>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {sessionRole === "admin" && reg.status !== "confirmed" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleReviewDecision(reg, "approve")}
+                            disabled={mutatingRef === reg.referenceId}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 cursor-pointer disabled:opacity-50 min-h-[36px]"
+                          >
+                            ✓ Approve
+                          </button>
+                          {reg.status !== "declined" ? (
+                            <button
+                              type="button"
+                              onClick={() => handleReviewDecision(reg, "decline")}
+                              disabled={mutatingRef === reg.referenceId}
+                              className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 cursor-pointer disabled:opacity-50 min-h-[36px]"
+                            >
+                              Decline
+                            </button>
+                          ) : null}
+                        </>
                       ) : (
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-200">
-                          <svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>4/4 Days</span>
-                        </span>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleEmailPass(reg)}
+                            disabled={emailingRef === reg.referenceId}
+                            title={`Email pass & QR code to ${reg.email}`}
+                            className="px-2.5 py-1.5 rounded-lg border border-border text-foreground-muted hover:text-primary hover:border-primary text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 min-h-[36px]"
+                          >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                              <polyline points="22,6 12,13 2,6" />
+                            </svg>
+                            <span>{emailingRef === reg.referenceId ? "Sending…" : "Email Pass"}</span>
+                          </button>
+
+                          {nextMissingDay ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer min-h-[36px]"
+                            >
+                              Admit D{nextMissingDay}
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-200">
+                              <svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>4/4 Days</span>
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -503,19 +949,36 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
           <table className="w-full text-left text-xs">
             <thead className="border-b border-border bg-slate-50 text-slate-600 font-bold text-[11px] uppercase tracking-wider">
               <tr>
+                {sessionRole === "admin" ? (
+                  <th className="py-2.5 pl-3.5 pr-1 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all visible registrations"
+                      checked={filtered.length > 0 && filtered.every((r) => selectedRefs.includes(r.referenceId))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRefs(filtered.map((r) => r.referenceId));
+                        } else {
+                          setSelectedRefs([]);
+                        }
+                      }}
+                      className="w-3.5 h-3.5 rounded"
+                    />
+                  </th>
+                ) : null}
                 <th className="py-2.5 px-3.5">Ref ID</th>
                 <th className="py-2.5 px-3.5">Attendee</th>
                 <th className="py-2.5 px-3.5">Academic</th>
                 <th className="py-2.5 px-3.5">Track</th>
                 <th className="py-2.5 px-3.5 text-center">Status</th>
                 <th className="py-2.5 px-3.5 text-center">4-Day Attendance</th>
-                <th className="py-2.5 px-3.5 text-right">Quick Admit</th>
+                <th className="py-2.5 px-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400">
+                  <td colSpan={sessionRole === "admin" ? 8 : 7} className="py-10 text-center text-slate-400">
                     No attendees match the active filters.
                   </td>
                 </tr>
@@ -526,6 +989,17 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
                   return (
                     <tr key={reg.id} className="hover:bg-slate-50/70 transition-colors">
+                      {sessionRole === "admin" ? (
+                        <td className="py-2.5 pl-3.5 pr-1">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${reg.fullName}`}
+                            checked={selectedRefs.includes(reg.referenceId)}
+                            onChange={() => toggleSelectRef(reg.referenceId)}
+                            className="w-3.5 h-3.5 rounded"
+                          />
+                        </td>
+                      ) : null}
                       <td className="py-2.5 px-3.5 font-mono font-bold text-slate-800 whitespace-nowrap">
                         {reg.referenceId}
                       </td>
@@ -555,7 +1029,17 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
                       </td>
 
                       <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold uppercase">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            reg.status === "pending"
+                              ? "bg-amber-100 text-amber-900"
+                              : reg.status === "waitlisted"
+                                ? "bg-sky-100 text-sky-800"
+                                : reg.status === "declined" || reg.status === "cancelled"
+                                  ? "bg-rose-100 text-rose-800"
+                                  : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
                           {reg.status}
                         </span>
                       </td>
@@ -569,11 +1053,26 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
                               <button
                                 key={d}
                                 type="button"
-                                onClick={() => sessionRole !== "core" && !isAttended && handleToggleCheckIn(reg, d)}
-                                title={isAttended ? `Day ${d}: ${time || "Present"}` : sessionRole === "core" ? `Day ${d}: Absent` : `Click to Check In Day ${d}`}
+                                onClick={() => {
+                                  if (sessionRole === "core") return;
+                                  if (isAttended && sessionRole === "admin") {
+                                    void handleRevokeCheckIn(reg, d);
+                                  } else if (!isAttended) {
+                                    void handleToggleCheckIn(reg, d);
+                                  }
+                                }}
+                                title={
+                                  isAttended
+                                    ? sessionRole === "admin"
+                                      ? `Day ${d}: ${time || "Present"} (Click to undo)`
+                                      : `Day ${d}: ${time || "Present"}`
+                                    : sessionRole === "core"
+                                      ? `Day ${d}: Absent`
+                                      : `Click to Check In Day ${d}`
+                                }
                                 className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all ${
                                   isAttended
-                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    ? `bg-emerald-50 text-emerald-800 border-emerald-200 ${sessionRole === "admin" ? "hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 cursor-pointer" : ""}`
                                     : sessionRole === "core"
                                     ? "bg-slate-50 text-slate-300 border-slate-200 cursor-default"
                                     : "bg-slate-50 text-slate-400 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer"
@@ -591,35 +1090,109 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
                       <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleEmailPass(reg)}
-                            disabled={emailingRef === reg.referenceId}
-                            title={`Email pass & QR code to ${reg.email}`}
-                            className="p-1.5 rounded-lg border border-border bg-slate-50/50 text-foreground-muted hover:text-primary hover:border-primary transition-all cursor-pointer disabled:opacity-50"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                              <polyline points="22,6 12,13 2,6" />
-                            </svg>
-                          </button>
+                          {reg.status === "confirmed" ? (
+                            <button
+                              type="button"
+                              onClick={() => handleEmailPass(reg)}
+                              disabled={emailingRef === reg.referenceId}
+                              title={`Email pass & QR code to ${reg.email}`}
+                              className="p-1.5 rounded-lg border border-border bg-slate-50/50 text-foreground-muted hover:text-primary hover:border-primary transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                <polyline points="22,6 12,13 2,6" />
+                              </svg>
+                            </button>
+                          ) : null}
+                          {sessionRole === "admin" ? (
+                            <>
+                              {reg.status !== "confirmed" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewDecision(reg, "approve")}
+                                    disabled={mutatingRef === reg.referenceId}
+                                    title="Approve & email official QR pass"
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-bold cursor-pointer disabled:opacity-50"
+                                  >
+                                    ✓ Approve
+                                  </button>
+                                  {reg.status !== "waitlisted" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReviewDecision(reg, "waitlist")}
+                                      disabled={mutatingRef === reg.referenceId}
+                                      className="px-2 py-1 rounded-lg border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                                    >
+                                      Waitlist
+                                    </button>
+                                  ) : null}
+                                  {reg.status !== "declined" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReviewDecision(reg, "decline")}
+                                      disabled={mutatingRef === reg.referenceId}
+                                      className="px-2 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                                    >
+                                      Decline
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(reg)}
+                                disabled={mutatingRef === reg.referenceId}
+                                title={`Edit attendee ${reg.fullName}`}
+                                className="px-2 py-1 rounded-lg border border-border bg-white text-slate-600 hover:text-primary hover:border-primary text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                              >
+                                Edit
+                              </button>
+                              {reg.status === "confirmed" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelOrDelete(reg, "cancel")}
+                                  disabled={mutatingRef === reg.referenceId}
+                                  title="Cancel pass"
+                                  className="px-2 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-[11px] font-semibold hover:bg-amber-100 cursor-pointer disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(`Permanently delete ${reg.fullName} (${reg.referenceId})?`)) {
+                                    void handleCancelOrDelete(reg, "hard");
+                                  }
+                                }}
+                                disabled={mutatingRef === reg.referenceId}
+                                title="Delete pass permanently"
+                                className="px-2 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-semibold hover:bg-rose-100 cursor-pointer disabled:opacity-50"
+                              >
+                                Del
+                              </button>
+                            </>
+                          ) : null}
                           {sessionRole === "core" ? (
                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold text-slate-400 bg-slate-100">
                               Read-Only
                             </span>
-                          ) : nextMissingDay ? (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
-                            >
-                              Admit Day {nextMissingDay}
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                              ✓ All 4 Days
-                            </span>
-                          )}
+                          ) : reg.status === "confirmed" ? (
+                            nextMissingDay ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
+                              >
+                                Admit Day {nextMissingDay}
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                ✓ All 4 Days
+                              </span>
+                            )
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -630,6 +1203,82 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
           </table>
         </div>
       </div>
+
+      {/* Walk-in Attendee Add Modal */}
+      {showAddModal ? (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-border shadow-xl max-w-lg w-full p-5 sm:p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-foreground">Add Walk-in / Manual Attendee</h3>
+              <button type="button" onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleAddAttendee} className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input required type="text" placeholder="Full Name *" value={addForm.fullName} onChange={(e) => setAddForm({ ...addForm, fullName: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input required type="email" placeholder="Email *" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Phone" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="College" value={addForm.college} onChange={(e) => setAddForm({ ...addForm, college: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Department" value={addForm.department} onChange={(e) => setAddForm({ ...addForm, department: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Year of Study" value={addForm.yearOfStudy} onChange={(e) => setAddForm({ ...addForm, yearOfStudy: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+              </div>
+              <input type="text" placeholder="Track (e.g. 4-Day All-Access)" value={addForm.track} onChange={(e) => setAddForm({ ...addForm, track: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-xl border border-border text-xs font-semibold cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={addingSubmitting} className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold cursor-pointer disabled:opacity-60">
+                  {addingSubmitting ? "Adding..." : "Add Attendee"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Edit Attendee Modal */}
+      {editingReg ? (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-border shadow-xl max-w-lg w-full p-5 sm:p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-foreground">
+                Edit Attendee · {editingReg.referenceId}
+              </h3>
+              <button type="button" onClick={() => setEditingReg(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer">
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveAttendeeEdit} className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <input required type="text" placeholder="Full Name" value={editForm.fullName} onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input required type="email" placeholder="Email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="College" value={editForm.college} onChange={(e) => setEditForm({ ...editForm, college: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Department" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Year of Study" value={editForm.yearOfStudy} onChange={(e) => setEditForm({ ...editForm, yearOfStudy: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <input type="text" placeholder="Track" value={editForm.track} onChange={(e) => setEditForm({ ...editForm, track: e.target.value })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs" />
+                <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value as RegistrationStatus })} className="h-10 px-3 rounded-xl border border-slate-300 text-xs bg-white">
+                  <option value="confirmed">Confirmed</option>
+                  <option value="pending">Pending Approval</option>
+                  <option value="waitlisted">Waitlisted</option>
+                  <option value="declined">Declined</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <textarea rows={2} placeholder="Admin Notes" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} className="p-3 rounded-xl border border-slate-300 text-xs" />
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditingReg(null)} className="px-4 py-2 rounded-xl border border-border text-xs font-semibold cursor-pointer">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingEdit} className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold cursor-pointer disabled:opacity-60">
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

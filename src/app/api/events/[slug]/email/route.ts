@@ -16,6 +16,7 @@ import {
   sendAttendeePassEmail,
   sendEmail,
   generateAnnouncementEmailHtml,
+  sendSpeakerConfirmationEmail,
 } from "@/lib/email";
 import type { EmailLog } from "@/types";
 
@@ -75,7 +76,7 @@ export async function POST(
     }
 
     let body: {
-      action?: "send-pass" | "self-send" | "broadcast";
+      action?: "send-pass" | "self-send" | "broadcast" | "speaker-confirmation";
       referenceId?: string;
       email?: string;
       subject?: string;
@@ -89,6 +90,14 @@ export async function POST(
       recipientEmail?: string;
       ctaText?: string;
       ctaUrl?: string;
+      speakerName?: string;
+      speakerEmail?: string;
+      speakerRole?: string;
+      ccEmail?: string;
+      talkTitle?: string;
+      sessionFormat?: string;
+      sessionSlot?: string;
+      venue?: string;
     };
 
     try {
@@ -134,6 +143,19 @@ export async function POST(
         );
       }
 
+      if (reg.status && reg.status !== "confirmed") {
+        return NextResponse.json(
+          {
+            error: "NOT_CONFIRMED",
+            message:
+              reg.status === "pending"
+                ? "Your application is still pending host approval. Your pass will be emailed once approved."
+                : `Your registration status is currently ${reg.status}.`,
+          },
+          { status: 403 }
+        );
+      }
+
       const result = await sendAttendeePassEmail({
         eventTitle: event.title,
         registration: reg,
@@ -171,6 +193,16 @@ export async function POST(
         return NextResponse.json(
           { error: "NOT_FOUND", message: "Pass reference not found for this event." },
           { status: 404 }
+        );
+      }
+
+      if (reg.status && reg.status !== "confirmed") {
+        return NextResponse.json(
+          {
+            error: "NOT_CONFIRMED",
+            message: `Cannot email confirmed QR pass while status is "${reg.status}". Approve the registration first.`,
+          },
+          { status: 400 }
         );
       }
 
@@ -373,6 +405,115 @@ export async function POST(
         message: `Successfully broadcasted to ${recipientsList.length} attendees${
           body.revokePasses ? ` (${recipientsList.length} passes cancelled & seats freed)` : ""
         }${isSimulated ? " (Simulated Mode)" : ""}!`,
+      });
+    }
+
+    // 4. Admin: Speaker Talk Confirmation Email
+    if (body.action === "speaker-confirmation") {
+      const role = await getAdminRoleFromRequest(request);
+      if (role !== "admin") {
+        return NextResponse.json(
+          {
+            error: "FORBIDDEN",
+            message: "Speaker confirmation emails can only be dispatched by master admin.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const speakerName = body.speakerName?.trim();
+      const speakerEmail = body.speakerEmail?.trim();
+      const ccEmail = body.ccEmail?.trim();
+      const talkTitle = body.talkTitle?.trim();
+      const subject = body.subject?.trim();
+      const message = body.message?.trim();
+      const ctaUrl = body.ctaUrl?.trim();
+
+      const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+      if (!speakerName || !speakerEmail || !talkTitle || !subject || !message) {
+        return NextResponse.json(
+          {
+            error: "INVALID_REQUEST",
+            message: "Speaker name, email, confirmed talk title, subject, and message are required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!emailRegex.test(speakerEmail)) {
+        return NextResponse.json(
+          { error: "INVALID_REQUEST", message: "Please provide a valid speaker email address." },
+          { status: 400 }
+        );
+      }
+
+      if (ccEmail && !emailRegex.test(ccEmail)) {
+        return NextResponse.json(
+          { error: "INVALID_REQUEST", message: "Please provide a valid CC email address." },
+          { status: 400 }
+        );
+      }
+
+      if (ctaUrl && !/^https?:\/\//i.test(ctaUrl)) {
+        return NextResponse.json(
+          { error: "INVALID_REQUEST", message: "Action URL must start with http:// or https://." },
+          { status: 400 }
+        );
+      }
+
+      const result = await sendSpeakerConfirmationEmail({
+        eventTitle: event.title,
+        eventSlug: slug,
+        speakerName,
+        speakerEmail,
+        speakerRole: body.speakerRole?.trim(),
+        ccEmail,
+        talkTitle,
+        sessionFormat: body.sessionFormat?.trim() || "Technical Session",
+        sessionSlot: body.sessionSlot?.trim() || "Schedule TBD",
+        venue:
+          body.venue?.trim() ||
+          event.location ||
+          "Vidyavardhini's College of Engineering and Technology, Vasai",
+        subject,
+        message,
+        ctaText: body.ctaText?.trim(),
+        ctaUrl,
+        sender: "Speaker Relations (Master Admin)",
+      });
+
+      if (!result.success) {
+        return NextResponse.json(
+          { error: "EMAIL_FAILED", message: result.message },
+          { status: 502 }
+        );
+      }
+
+      await logAuditEventAsync({
+        action: "SPEAKER_CONFIRMATION_SENT",
+        actorRole: role || "admin",
+        actorIdentifier: "Master Admin",
+        ipAddress: getClientIp(request),
+        userAgent: request.headers.get("user-agent") || undefined,
+        eventSlug: slug,
+        details: {
+          speakerName,
+          speakerEmail,
+          ...(ccEmail ? { ccEmail } : {}),
+          talkTitle,
+          sessionFormat: body.sessionFormat?.trim() || "Technical Session",
+          sessionSlot: body.sessionSlot?.trim() || "Schedule TBD",
+          subject,
+          simulated: Boolean(result.simulated),
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        simulated: result.simulated,
+        log: result.log,
+        message: result.message,
       });
     }
 

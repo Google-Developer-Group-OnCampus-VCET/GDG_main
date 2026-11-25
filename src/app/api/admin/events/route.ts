@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
 import { createEventAsync, getAllEventsAsync, logAuditEventAsync } from "@/lib/db";
 import { getClientIp } from "@/lib/rate-limit";
+import { createStarterWorkshopDetails } from "@/lib/site-defaults";
 import type { EventInput } from "@/types";
 
 export async function GET(request: Request) {
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Parse & Validate input
-    const body = (await request.json()) as EventInput;
+    const body = (await request.json()) as EventInput & { enableWorkshop?: boolean };
     if (!body?.title?.trim() || !body?.startsAt?.trim()) {
       return NextResponse.json(
         { error: "INVALID_INPUT", message: "Event title and start date/time are required." },
@@ -56,8 +57,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const eventPayload: EventInput = {
+      ...body,
+      image: typeof body.image === "string" && body.image.trim() ? body.image.trim() : undefined,
+      url: typeof body.url === "string" && body.url.trim() ? body.url.trim() : undefined,
+      cancelled: Boolean(body.cancelled),
+      requireApproval: Boolean(body.requireApproval),
+      workshop:
+        body.workshop ||
+        (body.enableWorkshop
+          ? createStarterWorkshopDetails({
+              title: body.title.trim(),
+              summary: typeof body.summary === "string" ? body.summary.trim() : undefined,
+              venueText: typeof body.location === "string" ? body.location.trim() : undefined,
+              capacity: typeof body.capacity === "number" ? body.capacity : 120,
+              isOpen: body.isRegistrationOpen ?? true,
+            })
+          : undefined),
+    };
+
     // 3. Create event via dual-engine (Firestore primary, SQLite fallback)
-    const result = await createEventAsync(body);
+    const result = await createEventAsync(eventPayload);
 
     if (!result.success) {
       const isDuplicate = result.error?.toLowerCase().includes("already exists");

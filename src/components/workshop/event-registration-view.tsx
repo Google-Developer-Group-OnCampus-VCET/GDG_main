@@ -35,9 +35,19 @@ export function EventRegistrationView({
     event.isRegistrationOpen === false ||
     workshop.registrationConfig?.isOpen === false;
 
+  const requireApproval = Boolean(
+    event.requireApproval ?? workshop.registrationConfig?.requireApproval
+  );
+
   const isFilled = remainingSeats <= 0 || isExplicitlyClosed;
-  const isRegistrationOpen = remainingSeats > 0 && !isExplicitlyClosed;
-  const seatsText = isFilled ? "Seats Are Filled" : "Limited Seats Available";
+  const isRegistrationOpen = !isExplicitlyClosed && (requireApproval || remainingSeats > 0);
+  const seatsText = isFilled
+    ? requireApproval && !isExplicitlyClosed
+      ? "Waitlist / Review Open"
+      : "Seats Are Filled"
+    : requireApproval
+      ? "Host Approval Required"
+      : "Limited Seats Available";
 
   // Form State — Streamlined & Mobile-Native
   const [fullName, setFullName] = useState("");
@@ -116,7 +126,9 @@ export function EventRegistrationView({
       }
 
       setConfirmedRegistration(data.registration);
-      setRemainingSeats((prev) => Math.max(0, prev - 1));
+      if (data.registration?.status === "confirmed") {
+        setRemainingSeats((prev) => Math.max(0, prev - 1));
+      }
       setIsModalOpen(true);
       setSubmitting(false);
     } catch {
@@ -344,10 +356,15 @@ export function EventRegistrationView({
           <div className="flex flex-col gap-5 sm:gap-6">
             {/* Header with live seat counter */}
             <div className="text-center flex flex-col items-center gap-2">
-              {isFilled || remainingSeats <= 0 ? (
+              {!isRegistrationOpen ? (
                 <div className="inline-flex items-center gap-2 bg-rose-50 text-rose-800 border border-rose-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
                   <span className="w-2 h-2 rounded-full bg-rose-600"></span>
                   <span>Seats Are Filled</span>
+                </div>
+              ) : requireApproval ? (
+                <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-900 border border-amber-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Approval Required &bull; Request a Spot</span>
                 </div>
               ) : (
                 <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-3.5 py-1 rounded-full text-xs font-semibold">
@@ -356,10 +373,12 @@ export function EventRegistrationView({
                 </div>
               )}
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                Claim Your Event Pass
+                {requireApproval ? "Request Event Access" : "Claim Your Event Pass"}
               </h2>
               <p className="text-xs sm:text-sm text-foreground-muted max-w-md">
-                Quick 30-second sign-up. Direct QR admission pass generated instantly upon submission.
+                {requireApproval
+                  ? "Submit your details to enter the host review queue. Your QR pass is emailed upon approval."
+                  : "Quick 30-second sign-up. Direct QR admission pass generated instantly upon submission."}
               </p>
             </div>
 
@@ -617,11 +636,11 @@ export function EventRegistrationView({
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                         </svg>
-                        <span>Issuing Pass &amp; QR Code...</span>
+                        <span>{requireApproval ? "Submitting Request..." : "Issuing Pass & QR Code..."}</span>
                       </>
                     ) : (
                       <>
-                        <span>Claim Free Workshop Pass</span>
+                        <span>{requireApproval ? "Request Approval & Register" : "Claim Free Workshop Pass"}</span>
                         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <line x1="5" y1="12" x2="19" y2="12" />
                           <polyline points="12 5 19 12 12 19" />
@@ -631,7 +650,10 @@ export function EventRegistrationView({
                   </button>
 
                   <div className="text-center text-[11px] text-slate-400 pt-1">
-                    {event.priceNote ? `${event.priceNote} • ` : "100% Free • "}Verified GDG Certificate &bull; Instant QR Pass
+                    {event.priceNote ? `${event.priceNote} • ` : "100% Free • "}
+                    {requireApproval
+                      ? "Host-Reviewed Admission • Official QR Pass Sent Upon Approval"
+                      : "Verified GDG Certificate • Instant QR Pass"}
                   </div>
                 </form>
               )}
@@ -661,6 +683,63 @@ export function EventRegistrationView({
             </div>
 
             <div className="p-4 sm:p-7 flex flex-col gap-4 sm:gap-5 overflow-y-auto">
+              {confirmedRegistration.status === "pending" ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Registration Pending Approval
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs sm:text-sm font-medium flex flex-col gap-1.5">
+                    <span className="font-bold">You&apos;re in the approval queue!</span>
+                    <span className="text-xs text-amber-900/90 leading-relaxed">
+                      The chapter hosts review applications before confirming seats. Once approved, we&apos;ll email your official scannable QR entry pass to <strong className="font-semibold">{confirmedRegistration.email}</strong>.
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col gap-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold">Applicant</span>
+                      <span className="font-bold text-slate-900">{confirmedRegistration.fullName}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold">Request ID</span>
+                      <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        #{confirmedRegistration.referenceId}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-semibold">Status</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold uppercase text-[10px]">
+                        Pending Host Review
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="w-full py-3 rounded-xl bg-slate-900 text-white text-xs sm:text-sm font-bold hover:bg-slate-800 cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </>
+              ) : (
+              <>
               {/* Modal Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -833,6 +912,8 @@ export function EventRegistrationView({
                   {emailPassResult}
                 </div>
               ) : null}
+              </>
+              )}
             </div>
           </div>
         </div>

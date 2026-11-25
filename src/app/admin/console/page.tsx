@@ -214,16 +214,26 @@ async function AdminConsoleContent() {
 
           <div className="flex flex-wrap items-center gap-2.5">
             {role === "admin" ? (
-              <Link
-                href="/admin/console/events/new"
-                className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-xl text-xs font-semibold hover:bg-primary-hover shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>Create Event</span>
-              </Link>
+              <>
+                <Link
+                  href="/admin/console/events/new"
+                  className="inline-flex items-center gap-2 bg-primary text-on-primary px-4 py-2 rounded-xl text-xs font-semibold hover:bg-primary-hover shadow-2xs active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Create Event</span>
+                </Link>
+                <Link
+                  href="/admin/console/settings"
+                  prefetch={false}
+                  className="inline-flex items-center gap-1.5 bg-surface-container text-foreground px-3.5 py-2 rounded-xl text-xs font-semibold hover:bg-surface-container-high transition-all border border-border"
+                >
+                  <span className="material-symbols-outlined text-[15px]">tune</span>
+                  <span>Site &amp; Team CMS</span>
+                </Link>
+              </>
             ) : null}
 
             <ConsoleOverviewExport events={allEvents} workshopStats={flagshipStats} />

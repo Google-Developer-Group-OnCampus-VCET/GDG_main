@@ -1,8 +1,7 @@
 import { Suspense } from "react";
-import { chapter } from "@/content/chapter";
-import { events } from "@/content/events";
-import { team } from "@/content/team";
-import { learningAreas } from "@/content/learning-areas";
+import { connection } from "next/server";
+import { DEFAULT_CHAPTER_SETTINGS } from "@/lib/site-defaults";
+import { getCachedAllEvents, getCachedSiteSettings } from "@/lib/db/cached";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -12,42 +11,28 @@ import { UpcomingEventsSection } from "@/components/upcoming-events-section";
 import { RecentPastEventsSection } from "@/components/recent-past-events-section";
 import { EventCardsGridSkeleton } from "@/components/skeletons/event-skeletons";
 
-const faqItems = [
-  {
-    question: "Who can join GDG on Campus VCET?",
-    answer:
-      "Any student at Vidyavardhini's College of Engineering and Technology interested in learning and building with technology is welcome, regardless of branch or year.",
-  },
-  {
-    question: "Do I need prior experience?",
-    answer:
-      "No. Sessions are designed to be approachable for beginners, with more advanced tracks for members who want to go deeper.",
-  },
-  {
-    question: "How do I join?",
-    answer:
-      "Use the official chapter page to join the community — see the Join the community button above or visit the Join page for details.",
-  },
-  {
-    question: "How will I know about upcoming events?",
-    answer:
-      "Announcements are shared through the community's official channels and listed on the Events page as they're confirmed.",
-  },
-  {
-    question: "Are events always free?",
-    answer:
-      "Most community sessions are free, but cost depends on the specific event — check each event's details page before registering.",
-  },
-];
+async function HomeContent() {
+  await connection();
+  let settings = DEFAULT_CHAPTER_SETTINGS;
+  let allEvents;
+  try {
+    [settings, allEvents] = await Promise.all([
+      getCachedSiteSettings(),
+      getCachedAllEvents(),
+    ]);
+  } catch {
+    settings = DEFAULT_CHAPTER_SETTINGS;
+  }
 
-export default function Home() {
+  const { chapter, team, learningAreas, homeFaq } = settings;
+
   return (
     <>
       <section className="border-b border-border bg-white">
         <div className="mx-auto flex max-w-(--container-max) flex-col gap-6 px-5 py-16 sm:px-8 sm:py-24 lg:flex-row lg:items-center lg:gap-12 lg:px-10 lg:py-32">
           <div className="flex flex-1 flex-col gap-6">
             <p className="text-sm font-medium uppercase tracking-wide text-primary">
-              GDG on Campus · VCET
+              {chapter.name}
             </p>
             <h1 className="text-[40px] font-medium leading-[1.1] text-foreground sm:text-[56px]">
               {chapter.tagline}
@@ -90,7 +75,7 @@ export default function Home() {
           </div>
 
           <Suspense fallback={<EventCardsGridSkeleton count={3} />}>
-            <UpcomingEventsSection events={events} />
+            <UpcomingEventsSection events={allEvents} chapterPageUrl={chapter.chapterPageUrl} />
           </Suspense>
         </div>
       </section>
@@ -109,7 +94,7 @@ export default function Home() {
           </div>
 
           <Suspense fallback={<EventCardsGridSkeleton count={3} />}>
-            <RecentPastEventsSection events={events} />
+            <RecentPastEventsSection events={allEvents} />
           </Suspense>
         </div>
       </section>
@@ -164,7 +149,7 @@ export default function Home() {
       <section className="border-b border-border bg-surface-muted">
         <div className="mx-auto flex max-w-(--container-max) flex-col gap-8 px-5 py-16 sm:px-8 sm:py-20 lg:px-10">
           <SectionHeading eyebrow="FAQ" title="Good to know" />
-          <Faq items={faqItems} />
+          <Faq items={homeFaq} />
         </div>
       </section>
 
@@ -180,5 +165,19 @@ export default function Home() {
         </div>
       </section>
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-(--container-max) px-5 py-16 sm:px-8 lg:px-10">
+          <EventCardsGridSkeleton count={3} />
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }

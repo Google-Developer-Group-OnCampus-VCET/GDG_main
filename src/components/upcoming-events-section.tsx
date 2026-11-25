@@ -1,14 +1,29 @@
 import { connection } from "next/server";
 import type { ChapterEvent } from "@/types";
 import { upcomingEvents } from "@/lib/events";
+import { getCachedAllEvents } from "@/lib/db/cached";
 import { EventCard } from "@/components/event-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
-import { chapter } from "@/content/chapter";
+import { chapter as defaultChapter } from "@/content/chapter";
 
-export async function UpcomingEventsSection({ events }: { events: ChapterEvent[] }) {
+export async function UpcomingEventsSection({
+  events: initialEvents,
+  chapterPageUrl,
+}: {
+  events?: ChapterEvent[];
+  chapterPageUrl?: string;
+}) {
   await connection();
-  const nextEvents = upcomingEvents(events, new Date()).slice(0, 3);
+  let sourceEvents = initialEvents;
+  if (!sourceEvents) {
+    try {
+      sourceEvents = await getCachedAllEvents();
+    } catch {
+      sourceEvents = [];
+    }
+  }
+  const nextEvents = upcomingEvents(sourceEvents, new Date()).slice(0, 3);
 
   if (nextEvents.length === 0) {
     return (
@@ -16,7 +31,7 @@ export async function UpcomingEventsSection({ events }: { events: ChapterEvent[]
         title="No upcoming events right now"
         description="Check back soon, or follow the official chapter page for the latest announcements."
         action={
-          <Button href={chapter.chapterPageUrl} variant="secondary">
+          <Button href={chapterPageUrl || defaultChapter.chapterPageUrl} variant="secondary">
             View chapter page
           </Button>
         }

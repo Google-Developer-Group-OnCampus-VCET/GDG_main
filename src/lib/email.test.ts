@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   generatePassEmailHtml,
   generateAnnouncementEmailHtml,
+  generateSpeakerConfirmationEmailHtml,
   sendEmail,
   sendAttendeePassEmail,
+  sendSpeakerConfirmationEmail,
 } from "./email";
 import type { RegistrationRecord } from "@/types";
 
@@ -94,5 +96,56 @@ describe("Email Communication System", () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toContain("successfully emailed");
+  });
+
+  it("generates escaped GDG-branded speaker confirmation HTML & text", () => {
+    const { html, text } = generateSpeakerConfirmationEmailHtml({
+      eventTitle: "Zero to Hero: Dev to Cloud",
+      eventSlug: "dev-to-cloud",
+      speakerName: "Riya Deshmukh",
+      speakerEmail: "riya@example.com",
+      speakerRole: "Staff Cloud Architect · Google",
+      talkTitle: "Cloud Run & AI Agents <v2>",
+      sessionFormat: "Keynote Session",
+      sessionSlot: "Day 3 · Dec 3, 2026 · 10:00 AM IST",
+      venue: "VCET Seminar Hall",
+      subject: "Confirmed Speaker Invite: Cloud Run & AI Agents",
+      message: "Thanks for confirming your keynote session!",
+      ctaText: "View Event Agenda",
+      ctaUrl: "https://gdg-vcet.vercel.app/events/dev-to-cloud/agenda",
+    });
+
+    expect(html).toContain("Speaker Confirmation");
+    expect(html).toContain("Dear Riya Deshmukh");
+    expect(html).toContain("Staff Cloud Architect · Google");
+    expect(html).toContain("Cloud Run &amp; AI Agents &lt;v2&gt;");
+    expect(html).toContain("Keynote Session");
+    expect(html).toContain("Day 3 · Dec 3, 2026 · 10:00 AM IST");
+    expect(html).toContain("View Event Agenda");
+
+    expect(text).toContain("Dear Riya Deshmukh");
+    expect(text).toContain("Cloud Run & AI Agents <v2>");
+    expect(text).toContain("Day 3 · Dec 3, 2026 · 10:00 AM IST");
+  });
+
+  it("dispatches speaker confirmation email and logs type 'speaker'", async () => {
+    const result = await sendSpeakerConfirmationEmail({
+      eventTitle: "Zero to Hero: Dev to Cloud",
+      eventSlug: "dev-to-cloud",
+      speakerName: "Riya Deshmukh",
+      speakerEmail: "riya.speaker@example.com",
+      ccEmail: "faculty.coord@vcet.edu.in",
+      talkTitle: "Building Resilient Agents",
+      sessionFormat: "Hands-on Workshop",
+      sessionSlot: "Day 2 · 11:00 AM IST",
+      subject: "Confirmed Speaker: Building Resilient Agents",
+      message: "Looking forward to your workshop!",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.log.type).toBe("speaker");
+    expect(result.log.recipientCount).toBe(2);
+    expect(result.log.recipients).toEqual(["riya.speaker@example.com", "faculty.coord@vcet.edu.in"]);
+    expect(result.message).toContain("Riya Deshmukh");
   });
 });

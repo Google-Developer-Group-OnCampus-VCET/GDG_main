@@ -34,19 +34,14 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const staticMatch = events.find((event) => event.slug === slug);
-  if (staticMatch?.workshop) {
+  const event = await findEvent(slug);
+  if (event?.workshop) {
     return {
-      title: `Agenda · ${staticMatch.title}`,
-      description: `Complete workshop schedule and timeline for ${staticMatch.title}.`,
+      title: `Agenda · ${event.title}`,
+      description: `Complete workshop schedule and timeline for ${event.title}.`,
     };
   }
-  const event = await findEvent(slug);
-  if (!event || !event.workshop) return { title: "Agenda" };
-  return {
-    title: `Agenda · ${event.title}`,
-    description: `Complete workshop schedule and timeline for ${event.title}.`,
-  };
+  return { title: "Agenda" };
 }
 
 async function EventAgendaContent({

@@ -3,12 +3,14 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { chapter } from "@/content/chapter";
+import { chapter as defaultChapter } from "@/content/chapter";
+import type { ChapterConfig } from "@/types";
 import { MobileNav } from "@/components/mobile-nav";
 import { GdgLogo } from "@/components/gdg-logo";
 
-export function SiteHeader() {
+export function SiteHeader({ chapterConfig }: { chapterConfig?: ChapterConfig }) {
   const pathname = usePathname();
+  const chapter = chapterConfig ?? defaultChapter;
 
   // Do not render the public chapter navigation on admin workspace routes
   if (pathname.startsWith("/admin")) {

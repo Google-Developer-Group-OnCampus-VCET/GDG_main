@@ -27,14 +27,16 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  await connection();
+  const event = await getCachedEventBySlug(slug);
+  if (event) {
+    return { title: event.title, description: event.summary };
+  }
   const staticMatch = staticEvents.find((e) => e.slug === slug);
   if (staticMatch) {
     return { title: staticMatch.title, description: staticMatch.summary };
   }
-  await connection();
-  const event = await getCachedEventBySlug(slug);
-  if (!event) return { title: "Event not found" };
-  return { title: event.title, description: event.summary };
+  return { title: "Event not found" };
 }
 
 const formatLabels: Record<string, string> = {

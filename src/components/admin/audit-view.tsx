@@ -27,6 +27,13 @@ const ACTION_CONFIG: Record<
     text: "text-amber-800",
     border: "border-amber-200",
   },
+  CHECK_IN_REVOKED: {
+    label: "Check-in Undone",
+    icon: "↩️",
+    bg: "bg-amber-50",
+    text: "text-amber-800",
+    border: "border-amber-200",
+  },
   AUTH_LOGIN: {
     label: "Admin Login",
     icon: "🔐",
@@ -55,6 +62,13 @@ const ACTION_CONFIG: Record<
     text: "text-indigo-800",
     border: "border-indigo-200",
   },
+  EVENT_DELETED: {
+    label: "Event Deleted",
+    icon: "🗑️",
+    bg: "bg-rose-50",
+    text: "text-rose-800",
+    border: "border-rose-200",
+  },
   EMAIL_BROADCAST: {
     label: "Email Broadcast",
     icon: "📢",
@@ -62,12 +76,54 @@ const ACTION_CONFIG: Record<
     text: "text-sky-800",
     border: "border-sky-200",
   },
+  SPEAKER_CONFIRMATION_SENT: {
+    label: "Speaker Mail Sent",
+    icon: "🎤",
+    bg: "bg-emerald-50",
+    text: "text-emerald-800",
+    border: "border-emerald-200",
+  },
   REGISTRATION_CANCELLED: {
     label: "Pass Revoked / Cancelled",
     icon: "🚫",
     bg: "bg-rose-50",
     text: "text-rose-800",
     border: "border-rose-200",
+  },
+  REGISTRATION_CREATED: {
+    label: "Walk-in / Admin Pass Added",
+    icon: "🎫",
+    bg: "bg-emerald-50",
+    text: "text-emerald-800",
+    border: "border-emerald-200",
+  },
+  REGISTRATION_APPROVED: {
+    label: "Application Approved",
+    icon: "✅",
+    bg: "bg-emerald-50",
+    text: "text-emerald-800",
+    border: "border-emerald-200",
+  },
+  REGISTRATION_DECLINED: {
+    label: "Application Declined",
+    icon: "❌",
+    bg: "bg-rose-50",
+    text: "text-rose-800",
+    border: "border-rose-200",
+  },
+  REGISTRATION_UPDATED: {
+    label: "Attendee Updated",
+    icon: "✏️",
+    bg: "bg-sky-50",
+    text: "text-sky-800",
+    border: "border-sky-200",
+  },
+  SITE_SETTINGS_UPDATED: {
+    label: "Site CMS Updated",
+    icon: "🌐",
+    bg: "bg-indigo-50",
+    text: "text-indigo-800",
+    border: "border-indigo-200",
   },
 };
 
@@ -298,6 +354,7 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
             { id: "AUTH_LOGIN", label: "Admin Sign-ins" },
             { id: "EVENT_UPDATE", label: "Event Updates" },
             { id: "EMAIL_BROADCAST", label: "Broadcasts" },
+            { id: "SPEAKER_CONFIRMATION_SENT", label: "Speaker Mails" },
           ].map((cat) => (
             <button
               key={cat.id}
