@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import type { RegistrationRecord, RegistrationStatus } from "@/types";
 import { downloadForGoogleSheets, copyForGoogleSheets, type ExportColumn } from "@/lib/sheets-export";
@@ -39,6 +39,8 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
   const [selectedRefs, setSelectedRefs] = useState<string[]>([]);
   const [bulkReviewing, setBulkReviewing] = useState(false);
   const [notifyOnDecision, setNotifyOnDecision] = useState(true);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   // Add Walk-in Attendee modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -140,6 +142,17 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
     return matchesSearch && matchesTrack && matchesStatus && matchesCheckIn;
   });
+
+  // Reset to page 1 whenever filters change
+  const filteredKey = `${search}|${trackFilter}|${statusFilter}|${checkInFilter}`;
+  const prevFilterKeyRef = useRef(filteredKey);
+  if (prevFilterKeyRef.current !== filteredKey) {
+    prevFilterKeyRef.current = filteredKey;
+    if (page !== 1) setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const checkedInCount = registrations.filter(
     (r) => (!r.status || r.status === "confirmed") && (r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0))
@@ -790,7 +803,10 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       {/* Metrics Counter Strip */}
       <div className="flex flex-wrap items-center justify-between text-xs text-foreground-muted px-1 gap-2">
         <span>
-          Showing <strong className="text-foreground">{filtered.length}</strong> in{" "}
+          Showing <strong className="text-foreground">{paginated.length}</strong>
+          {filtered.length > PAGE_SIZE && (
+            <> of <strong className="text-foreground">{filtered.length}</strong></>
+          )}{" "}in{" "}
           <strong className="text-foreground">{statusFilter}</strong> view
           <span className="text-foreground-muted ml-1.5 font-normal">
             ({totalActive} confirmed{totalPending > 0 ? ` · ${totalPending} pending` : ""}{totalWaitlisted > 0 ? ` · ${totalWaitlisted} waitlisted` : ""}{totalRemoved > 0 ? ` · ${totalRemoved} closed` : ""})
@@ -817,7 +833,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
               No attendees match the active filters.
             </div>
           ) : (
-            filtered.map((reg) => {
+            paginated.map((reg) => {
               const attendedDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
               const nextMissingDay = [1, 2, 3, 4].find((d) => !attendedDays.includes(d));
 
@@ -983,7 +999,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
                   </td>
                 </tr>
               ) : (
-                filtered.map((reg) => {
+                paginated.map((reg) => {
                   const attendedDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
                   const nextMissingDay = [1, 2, 3, 4].find((d) => !attendedDays.includes(d));
 
@@ -1203,6 +1219,78 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-3 px-1 mt-1">
+          <span className="text-xs text-foreground-muted">
+            Page <strong className="text-foreground">{page}</strong> of{" "}
+            <strong className="text-foreground">{totalPages}</strong>
+            {" "}·{" "}
+            {filtered.length} total
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              className="px-2.5 py-1.5 rounded-xl border border-border text-xs font-medium text-foreground-muted hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+            >
+              «
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1.5 rounded-xl border border-border text-xs font-medium text-foreground-muted hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+            >
+              ← Prev
+            </button>
+            {/* Page number pills — show up to 5 around current */}
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+                if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("…");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === "…" ? (
+                  <span key={`ellipsis-${idx}`} className="px-1 text-xs text-foreground-muted">…</span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setPage(item as number)}
+                    className={`w-8 h-8 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      page === item
+                        ? "bg-primary text-on-primary shadow-xs"
+                        : "border border-border text-foreground-muted hover:bg-surface-container"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1.5 rounded-xl border border-border text-xs font-medium text-foreground-muted hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+            >
+              Next →
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              className="px-2.5 py-1.5 rounded-xl border border-border text-xs font-medium text-foreground-muted hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+            >
+              »
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Walk-in Attendee Add Modal */}
       {showAddModal ? (
