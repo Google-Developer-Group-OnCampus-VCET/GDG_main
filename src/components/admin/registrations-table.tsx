@@ -1,17 +1,28 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import type { RegistrationRecord, RegistrationStatus } from "@/types";
 import { downloadForGoogleSheets, copyForGoogleSheets, type ExportColumn } from "@/lib/sheets-export";
 
+const PAGE_SIZE = 50;
+
+interface PaginatedResult {
+  registrations: RegistrationRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  counts: { confirmed: number; pending: number; waitlisted: number; removed: number; all: number };
+}
+
 interface RegistrationsTableProps {
-  initialRegistrations: RegistrationRecord[];
   eventSlug: string;
+  initialData?: PaginatedResult;
   role?: "admin" | "core" | "volunteer" | null;
 }
 
-export function RegistrationsTable({ initialRegistrations, eventSlug, role = null }: RegistrationsTableProps) {
+export function RegistrationsTable({ eventSlug, initialData, role = null }: RegistrationsTableProps) {
   const [sessionRole, setSessionRole] = useState<"admin" | "core" | "volunteer" | null>(role);
 
   useEffect(() => {
@@ -27,11 +38,25 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     }
   }, [role]);
 
-  const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialRegistrations);
+  const [registrations, setRegistrations] = useState<RegistrationRecord[]>(initialData?.registrations ?? []);
+  const [paginatedResult, setPaginatedResult] = useState<PaginatedResult>(
+    initialData ?? {
+      registrations: [],
+      total: 0,
+      page: 1,
+      pageSize: PAGE_SIZE,
+      totalPages: 1,
+      counts: { confirmed: 0, pending: 0, waitlisted: 0, removed: 0, all: 0 },
+    }
+  );
+  const [loading, setLoading] = useState(!initialData);
+  const [searchInput, setSearchInput] = useState(""); // raw input, debounced into search
   const [search, setSearch] = useState("");
   const [trackFilter, setTrackFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"confirmed" | "pending" | "waitlisted" | "removed" | "all">("confirmed");
   const [checkInFilter, setCheckInFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
   const [emailingRef, setEmailingRef] = useState<string | null>(null);
@@ -40,7 +65,60 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
   const [bulkReviewing, setBulkReviewing] = useState(false);
   const [notifyOnDecision, setNotifyOnDecision] = useState(true);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 50;
+
+  // ── Debounce search input (500 ms) ────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 500);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // ── API fetch — re-runs whenever any filter or page changes ───────────────
+  const fetchRegistrations = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        status: statusFilter,
+        track: trackFilter,
+        checkedIn: checkInFilter,
+        search,
+        department: departmentFilter,
+        yearOfStudy: yearFilter,
+      });
+      const res = await fetch(`/api/events/${eventSlug}/registrations?${params.toString()}`);
+      if (!res.ok) throw new Error("fetch failed");
+      const data = (await res.json()) as { success: boolean } & PaginatedResult;
+      if (data.success) {
+        setRegistrations(data.registrations);
+        setPaginatedResult(data);
+      }
+    } catch {
+      setActionFeedback("Failed to load registrations.");
+    } finally {
+      setLoading(false);
+    }
+  }, [eventSlug, page, statusFilter, trackFilter, checkInFilter, search, departmentFilter, yearFilter]);
+
+  const initialMountedRef = useRef(false);
+  useEffect(() => {
+    if (!initialMountedRef.current) {
+      initialMountedRef.current = true;
+      if (initialData) return;
+    }
+    void fetchRegistrations();
+  }, [fetchRegistrations, initialData]);
+
+  // Reset to page 1 when any filter except page changes
+  const prevFiltersRef = useRef(`${statusFilter}|${trackFilter}|${checkInFilter}|${search}|${departmentFilter}|${yearFilter}`);
+  useEffect(() => {
+    const key = `${statusFilter}|${trackFilter}|${checkInFilter}|${search}|${departmentFilter}|${yearFilter}`;
+    if (prevFiltersRef.current !== key) {
+      prevFiltersRef.current = key;
+      setPage(1);
+      setSelectedRefs([]);
+    }
+  }, [statusFilter, trackFilter, checkInFilter, search, departmentFilter, yearFilter]);
 
   // Add Walk-in Attendee modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -94,65 +172,17 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     }
   }
 
-  const totalConfirmed = registrations.filter((r) => !r.status || r.status === "confirmed").length;
-  const totalPending = registrations.filter((r) => r.status === "pending").length;
-  const totalWaitlisted = registrations.filter((r) => r.status === "waitlisted").length;
-  const totalRemoved = registrations.filter(
-    (r) => r.status === "cancelled" || r.status === "declined"
-  ).length;
+  const totalConfirmed = paginatedResult.counts.confirmed;
+  const totalPending = paginatedResult.counts.pending;
+  const totalWaitlisted = paginatedResult.counts.waitlisted;
+  const totalRemoved = paginatedResult.counts.removed;
   const totalActive = totalConfirmed;
 
-  const filtered = registrations.filter((r) => {
-    const matchesSearch =
-      search === "" ||
-      r.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      r.email.toLowerCase().includes(search.toLowerCase()) ||
-      r.referenceId.toLowerCase().includes(search.toLowerCase()) ||
-      r.college.toLowerCase().includes(search.toLowerCase());
+  // `filtered` is now the current page slice from the API
+  const filtered = registrations;
+  const paginated = registrations;
 
-    const matchesTrack = trackFilter === "all" || (r.track || "General Admission") === trackFilter;
-
-    let matchesStatus = true;
-    if (statusFilter === "confirmed") {
-      matchesStatus = !r.status || r.status === "confirmed";
-    } else if (statusFilter === "pending") {
-      matchesStatus = r.status === "pending";
-    } else if (statusFilter === "waitlisted") {
-      matchesStatus = r.status === "waitlisted";
-    } else if (statusFilter === "removed") {
-      matchesStatus = r.status === "cancelled" || r.status === "declined";
-    }
-
-    let matchesCheckIn = true;
-    if (checkInFilter === "checked-in") {
-      matchesCheckIn = Boolean(r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0));
-    } else if (checkInFilter === "not-checked-in" || checkInFilter === "absent") {
-      matchesCheckIn = !r.checkedIn && (!r.checkedInDays || r.checkedInDays.length === 0);
-    } else if (checkInFilter.startsWith("day-")) {
-      const dayNum = parseInt(checkInFilter.replace("day-", ""), 10);
-      matchesCheckIn = Boolean(r.checkedInDays?.includes(dayNum) || (dayNum === 1 && r.checkedIn));
-    } else if (checkInFilter === "all-days") {
-      matchesCheckIn = Boolean(
-        r.checkedInDays?.includes(1) &&
-        r.checkedInDays?.includes(2) &&
-        r.checkedInDays?.includes(3) &&
-        r.checkedInDays?.includes(4)
-      );
-    }
-
-    return matchesSearch && matchesTrack && matchesStatus && matchesCheckIn;
-  });
-
-  // Reset to page 1 whenever filters change
-  const filteredKey = `${search}|${trackFilter}|${statusFilter}|${checkInFilter}`;
-  const prevFilterKeyRef = useRef(filteredKey);
-  if (prevFilterKeyRef.current !== filteredKey) {
-    prevFilterKeyRef.current = filteredKey;
-    if (page !== 1) setPage(1);
-  }
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = paginatedResult.totalPages;
 
   const checkedInCount = registrations.filter(
     (r) => (!r.status || r.status === "confirmed") && (r.checkedIn || (r.checkedInDays && r.checkedInDays.length > 0))
@@ -165,10 +195,6 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       r.checkedInDays?.includes(3) &&
       r.checkedInDays?.includes(4)
   ).length;
-
-  const availableTracks = Array.from(
-    new Set(registrations.map((r) => r.track).filter(Boolean))
-  );
 
   const exportColumns: ExportColumn<RegistrationRecord>[] = [
     { key: "referenceId", label: "Pass Reference ID" },
@@ -220,19 +246,64 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
     { key: "createdAt", label: "Registered At" },
   ];
 
-  function handleDownloadSheets() {
-    downloadForGoogleSheets(
-      `gdg_vcet_${eventSlug}_registrations_${new Date().toISOString().slice(0, 10)}`,
-      filtered,
-      exportColumns
-    );
+  async function fetchAllMatchingForExport(): Promise<RegistrationRecord[]> {
+    if (filtered.length >= paginatedResult.total) {
+      return filtered;
+    }
+    const params = new URLSearchParams({
+      page: "1",
+      pageSize: "2000",
+      status: statusFilter,
+      track: trackFilter,
+      checkedIn: checkInFilter,
+      search,
+      department: departmentFilter,
+      yearOfStudy: yearFilter,
+    });
+    const res = await fetch(`/api/events/${eventSlug}/registrations?${params.toString()}`);
+    const data = await res.json();
+    return data?.registrations || filtered;
+  }
+
+  async function handleDownloadSheets() {
+    setActionFeedback("Preparing full export...");
+    try {
+      const recordsToExport = await fetchAllMatchingForExport();
+      downloadForGoogleSheets(
+        `gdg_vcet_${eventSlug}_registrations_${new Date().toISOString().slice(0, 10)}`,
+        recordsToExport,
+        exportColumns
+      );
+      setActionFeedback(`Exported ${recordsToExport.length} registrations to CSV.`);
+    } catch {
+      downloadForGoogleSheets(
+        `gdg_vcet_${eventSlug}_registrations_${new Date().toISOString().slice(0, 10)}`,
+        filtered,
+        exportColumns
+      );
+    } finally {
+      setTimeout(() => setActionFeedback(null), 3500);
+    }
   }
 
   async function handleCopySheets() {
-    const ok = await copyForGoogleSheets(filtered, exportColumns);
-    if (ok) {
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2500);
+    setActionFeedback("Copying table data...");
+    try {
+      const recordsToExport = await fetchAllMatchingForExport();
+      const ok = await copyForGoogleSheets(recordsToExport, exportColumns);
+      if (ok) {
+        setCopySuccess(true);
+        setActionFeedback(`Copied ${recordsToExport.length} rows to clipboard!`);
+        setTimeout(() => setCopySuccess(false), 2500);
+      }
+    } catch {
+      const ok = await copyForGoogleSheets(filtered, exportColumns);
+      if (ok) {
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2500);
+      }
+    } finally {
+      setTimeout(() => setActionFeedback(null), 3500);
     }
   }
 
@@ -670,8 +741,8 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
         <div className="relative flex-1">
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search name, email, pass ID, college..."
             className="w-full h-11 pl-9 pr-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden transition-all"
           />
@@ -689,37 +760,56 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
         {/* Filter Controls & Universal Export to Sheets */}
         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
-            {availableTracks.length > 1 ? (
-              <select
-                value={trackFilter}
-                onChange={(e) => setTrackFilter(e.target.value)}
-                className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
-              >
-                <option value="all">All Tracks</option>
-                {availableTracks.map((trk) => (
-                  <option key={trk} value={trk}>
-                    {trk}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2">
+            {/* Track Filter */}
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "confirmed" | "pending" | "waitlisted" | "removed" | "all")}
+              value={trackFilter}
+              onChange={(e) => setTrackFilter(e.target.value)}
+              aria-label="Filter by Track"
               className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
             >
-              <option value="confirmed">Confirmed ({totalConfirmed})</option>
-              <option value="pending">Pending Approval ({totalPending})</option>
-              <option value="waitlisted">Waitlisted ({totalWaitlisted})</option>
-              <option value="removed">Declined / Cancelled ({totalRemoved})</option>
-              <option value="all">All Guests ({registrations.length})</option>
+              <option value="all">All Tracks</option>
+              <option value="4-Day All-Access">4-Day All-Access</option>
+              <option value="Track A (Web/AI)">Track A (Web/AI)</option>
+              <option value="Track B (Cloud/GCP)">Track B (Cloud/GCP)</option>
+              <option value="General Admission">General Admission</option>
             </select>
 
+            {/* Department Filter */}
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              aria-label="Filter by Department"
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="all">All Depts</option>
+              <option value="Computer Engineering">Computer Eng</option>
+              <option value="Information Technology">IT</option>
+              <option value="Artificial Intelligence and Data Science">AI &amp; DS</option>
+              <option value="Electronics and Telecommunication">EXTC</option>
+              <option value="Mechanical Engineering">Mechanical</option>
+              <option value="Civil Engineering">Civil</option>
+            </select>
+
+            {/* Year of Study Filter */}
+            <select
+              value={yearFilter}
+              onChange={(e) => setYearFilter(e.target.value)}
+              aria-label="Filter by Year"
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="all">All Years</option>
+              <option value="1st Year (FE)">1st Year (FE)</option>
+              <option value="2nd Year (SE)">2nd Year (SE)</option>
+              <option value="3rd Year (TE)">3rd Year (TE)</option>
+              <option value="4th Year (BE)">4th Year (BE)</option>
+            </select>
+
+            {/* Attendance Filter */}
             <select
               value={checkInFilter}
               onChange={(e) => setCheckInFilter(e.target.value)}
+              aria-label="Filter by Attendance"
               className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
             >
               <option value="all">All Attendance</option>
@@ -731,6 +821,39 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
               <option value="all-days">All 4 Days (100% Attendance)</option>
               <option value="not-checked-in">Absent (0 Days)</option>
             </select>
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "confirmed" | "pending" | "waitlisted" | "removed" | "all")}
+              aria-label="Filter by Status"
+              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+            >
+              <option value="confirmed">Confirmed ({totalConfirmed})</option>
+              <option value="pending">Pending Approval ({totalPending})</option>
+              <option value="waitlisted">Waitlisted ({totalWaitlisted})</option>
+              <option value="removed">Declined / Cancelled ({totalRemoved})</option>
+              <option value="all">All Guests ({paginatedResult.total})</option>
+            </select>
+
+            {/* Reset Filters button */}
+            {(trackFilter !== "all" || departmentFilter !== "all" || yearFilter !== "all" || checkInFilter !== "all" || searchInput) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setTrackFilter("all");
+                  setDepartmentFilter("all");
+                  setYearFilter("all");
+                  setCheckInFilter("all");
+                  setSearchInput("");
+                  setSearch("");
+                }}
+                className="h-11 px-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold cursor-pointer whitespace-nowrap transition-all"
+                title="Clear all active column filters"
+              >
+                Reset ✕
+              </button>
+            ) : null}
           </div>
 
           {/* Export to Google Sheets Actions */}
@@ -802,16 +925,24 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
 
       {/* Metrics Counter Strip */}
       <div className="flex flex-wrap items-center justify-between text-xs text-foreground-muted px-1 gap-2">
-        <span>
-          Showing <strong className="text-foreground">{paginated.length}</strong>
-          {filtered.length > PAGE_SIZE && (
-            <> of <strong className="text-foreground">{filtered.length}</strong></>
-          )}{" "}in{" "}
-          <strong className="text-foreground">{statusFilter}</strong> view
-          <span className="text-foreground-muted ml-1.5 font-normal">
-            ({totalActive} confirmed{totalPending > 0 ? ` · ${totalPending} pending` : ""}{totalWaitlisted > 0 ? ` · ${totalWaitlisted} waitlisted` : ""}{totalRemoved > 0 ? ` · ${totalRemoved} closed` : ""})
+        <div className="flex items-center gap-2">
+          <span>
+            Showing <strong className="text-foreground">{paginated.length}</strong>
+            {paginatedResult.total > paginated.length && (
+              <> of <strong className="text-foreground">{paginatedResult.total}</strong></>
+            )}{" "}in{" "}
+            <strong className="text-foreground">{statusFilter}</strong> view
+            <span className="text-foreground-muted ml-1.5 font-normal">
+              ({totalActive} confirmed{totalPending > 0 ? ` · ${totalPending} pending` : ""}{totalWaitlisted > 0 ? ` · ${totalWaitlisted} waitlisted` : ""}{totalRemoved > 0 ? ` · ${totalRemoved} closed` : ""})
+            </span>
           </span>
-        </span>
+          {loading && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-200 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
+              Updating…
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
             <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
@@ -825,7 +956,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
       </div>
 
       {/* High-Density Data Display (Cards on Mobile, Table on Desktop) */}
-      <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
+      <div className={`bg-white rounded-2xl border border-border shadow-xs overflow-hidden transition-opacity duration-200 ${loading ? "opacity-60" : "opacity-100"}`}>
         {/* Mobile Attendee Card View */}
         <div className="md:hidden divide-y divide-border/60">
           {filtered.length === 0 ? (
@@ -1227,7 +1358,7 @@ export function RegistrationsTable({ initialRegistrations, eventSlug, role = nul
             Page <strong className="text-foreground">{page}</strong> of{" "}
             <strong className="text-foreground">{totalPages}</strong>
             {" "}·{" "}
-            {filtered.length} total
+            {paginatedResult.total} total
           </span>
           <div className="flex items-center gap-1.5">
             <button

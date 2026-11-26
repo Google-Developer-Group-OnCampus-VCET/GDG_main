@@ -3,12 +3,60 @@ import { getAdminRoleFromRequest } from "@/lib/auth";
 import {
   createRegistrationAsync,
   getEventBySlugAsync,
+  getRegistrationsPaginatedAsync,
   logAuditEventAsync,
   reviewRegistrationAsync,
 } from "@/lib/db";
 import { sendRegistrationDecisionEmail } from "@/lib/email";
 import { getClientIp } from "@/lib/rate-limit";
 import type { RegistrationInput, RegistrationRecord } from "@/types";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const role = await getAdminRoleFromRequest(request);
+    if (!role) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Admin authorization required." },
+        { status: 401 }
+      );
+    }
+
+    const { slug } = await params;
+    const url = new URL(request.url);
+
+    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
+    const pageSize = Math.min(2000, Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "50", 10)));
+    const status = url.searchParams.get("status") ?? "confirmed";
+    const track = url.searchParams.get("track") ?? "all";
+    const checkedIn = url.searchParams.get("checkedIn") ?? "all";
+    const search = url.searchParams.get("search") ?? "";
+    const department = url.searchParams.get("department") ?? "all";
+    const yearOfStudy = url.searchParams.get("yearOfStudy") ?? "all";
+
+    const result = await getRegistrationsPaginatedAsync(slug, {
+      page,
+      pageSize,
+      status,
+      track,
+      checkedIn,
+      search,
+      department,
+      yearOfStudy,
+    });
+
+    return NextResponse.json({ success: true, ...result });
+  } catch (err) {
+    console.error("GET paginated registrations error:", err);
+    return NextResponse.json(
+      { error: "SERVER_ERROR", message: "Failed to load registrations." },
+      { status: 500 }
+    );
+  }
+}
+
 
 export async function POST(
   request: Request,

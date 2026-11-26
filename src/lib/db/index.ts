@@ -27,6 +27,8 @@ import {
   getFirestoreEventStats,
   getFirestorePublicEventStats,
   getFirestoreRegistrations,
+  getFirestoreRegistrationsPaginated,
+  type PaginatedRegistrationsResult,
   createFirestoreRegistration,
   updateFirestoreRegistration,
   reviewFirestoreRegistration,
@@ -52,6 +54,7 @@ import {
 import { revalidateEventCaches, revalidateSiteCaches } from "./cache";
 
 export { buildEventReferenceId };
+export type { PaginatedRegistrationsResult };
 
 export function resolveWritableDbPath(): string {
   const isReadOnlyServerless =
@@ -1401,6 +1404,47 @@ export async function getRegistrationsAsync(
     console.warn("Firestore registrations query failed, falling back to local SQLite:", (err as Error).message);
   }
   return getRegistrations(eventSlug, options);
+}
+
+export async function getRegistrationsPaginatedAsync(
+  eventSlug: string,
+  options: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    track?: string;
+    checkedIn?: string;
+    search?: string;
+    department?: string;
+    yearOfStudy?: string;
+  } = {}
+): Promise<PaginatedRegistrationsResult> {
+  try {
+    const result = await getFirestoreRegistrationsPaginated(eventSlug, options);
+    if (result !== null) return result;
+  } catch (err) {
+    console.warn("Firestore paginated registrations failed, falling back:", (err as Error).message);
+  }
+  // Fallback: use full list from SQLite and slice manually
+  const all = await getRegistrations(eventSlug, {
+    search: options.search,
+    track: options.track,
+    status: options.status,
+    checkedIn: options.checkedIn,
+  });
+  const page = Math.max(1, options.page ?? 1);
+  const pageSize = Math.min(100, options.pageSize ?? 50);
+  const total = all.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const slice = all.slice((page - 1) * pageSize, page * pageSize);
+  const counts = {
+    confirmed: all.filter((r) => !r.status || r.status === "confirmed").length,
+    pending: all.filter((r) => r.status === "pending").length,
+    waitlisted: all.filter((r) => r.status === "waitlisted").length,
+    removed: all.filter((r) => r.status === "cancelled" || r.status === "declined").length,
+    all: total,
+  };
+  return { registrations: slice, total, page, pageSize, totalPages, counts };
 }
 
 export async function createRegistrationAsync(

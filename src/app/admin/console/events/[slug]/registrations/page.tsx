@@ -2,9 +2,9 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getEventBySlugAsync, getRegistrationsAsync, getEventStatsAsync } from "@/lib/db";
+import { getEventBySlugAsync, getRegistrationsPaginatedAsync, getEventStatsAsync } from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
-import type { RegistrationRecord } from "@/types";
+import type { PaginatedRegistrationsResult } from "@/lib/db";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { EventStatusToggle } from "@/components/admin/event-status-toggle";
@@ -32,11 +32,15 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
 
   const role = await getAdminRoleFromCookies();
 
-  let registrations: RegistrationRecord[] = [];
+  let initialData: PaginatedRegistrationsResult | undefined;
   let stats;
   try {
-    registrations = await getRegistrationsAsync(slug);
-    stats = await getEventStatsAsync(slug);
+    const [paginated, eventStats] = await Promise.all([
+      getRegistrationsPaginatedAsync(slug, { page: 1, pageSize: 50, status: "confirmed" }),
+      getEventStatsAsync(slug),
+    ]);
+    initialData = paginated;
+    stats = eventStats;
   } catch {
     // fallback
   }
@@ -114,8 +118,8 @@ async function AdminRegistrationsContent({ slug }: { slug: string }) {
         </div>
 
         <RegistrationsTable
-          initialRegistrations={registrations}
           eventSlug={slug}
+          initialData={initialData}
           role={role}
         />
       </main>

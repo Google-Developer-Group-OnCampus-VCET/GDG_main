@@ -856,6 +856,146 @@ export async function getFirestoreRegistrations(
   return filtered;
 }
 
+export interface PaginatedRegistrationsResult {
+  registrations: RegistrationRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  counts: {
+    confirmed: number;
+    pending: number;
+    waitlisted: number;
+    removed: number;
+    all: number;
+  };
+}
+
+/**
+ * Paginated registrations query — fetches only the slice needed for the current
+ * admin table page, minimising Firestore document reads to pageSize per request.
+ *
+ * Search is done in-memory across the already-cached full list (search terms
+ * cannot be efficiently indexed in Firestore without a 3rd-party search engine).
+ * Status / track filters are applied before pagination so counts are accurate.
+ */
+export async function getFirestoreRegistrationsPaginated(
+  eventSlug: string,
+  options: {
+    page?: number;
+    pageSize?: number;
+    status?: string;
+    track?: string;
+    checkedIn?: string;
+    search?: string;
+    department?: string;
+    yearOfStudy?: string;
+  } = {}
+): Promise<PaginatedRegistrationsResult | null> {
+  // We still use the in-memory cached list as the base so we don't hammer Firestore
+  // on every keystroke. The cache TTL is 30 s — fresh enough for admin use.
+  const records = await getAllEventRegistrationsFromFirestore(eventSlug);
+  if (records === null) return null;
+
+  const page = Math.max(1, options.page ?? 1);
+  const pageSize = Math.min(2000, Math.max(1, options.pageSize ?? 50));
+
+  // ── Apply all filters ──────────────────────────────────────────────────────
+
+  let filtered = [...records];
+
+  // Status
+  if (options.status && options.status !== "all") {
+    if (options.status === "confirmed") {
+      filtered = filtered.filter((r) => !r.status || r.status === "confirmed");
+    } else if (options.status === "removed") {
+      filtered = filtered.filter((r) => r.status === "cancelled" || r.status === "declined");
+    } else {
+      filtered = filtered.filter((r) => r.status === options.status);
+    }
+  }
+
+  // Track
+  if (options.track && options.track !== "all") {
+    filtered = filtered.filter((r) => r.track === options.track);
+  }
+
+  // Department
+  if (options.department && options.department !== "all") {
+    filtered = filtered.filter((r) =>
+      r.department?.toLowerCase() === options.department!.toLowerCase()
+    );
+  }
+
+  // Year of study
+  if (options.yearOfStudy && options.yearOfStudy !== "all") {
+    filtered = filtered.filter((r) =>
+      r.yearOfStudy?.toLowerCase() === options.yearOfStudy!.toLowerCase()
+    );
+  }
+
+  // Check-in filter
+  if (options.checkedIn && options.checkedIn !== "all") {
+    if (options.checkedIn.startsWith("day-")) {
+      const d = Number(options.checkedIn.replace("day-", ""));
+      filtered = filtered.filter((r) => r.checkedInDays?.includes(d) || (d === 1 && r.checkedIn));
+    } else if (options.checkedIn === "all-days") {
+      filtered = filtered.filter((r) =>
+        [1, 2, 3, 4].every((d) => r.checkedInDays?.includes(d))
+      );
+    } else if (options.checkedIn === "checked-in") {
+      filtered = filtered.filter((r) => r.checkedIn || (r.checkedInDays?.length ?? 0) > 0);
+    } else if (options.checkedIn === "absent" || options.checkedIn === "not-checked-in") {
+      filtered = filtered.filter((r) => !r.checkedIn && (r.checkedInDays?.length ?? 0) === 0);
+    }
+  }
+
+  // Full-text search
+  if (options.search?.trim()) {
+    const term = options.search.trim().toLowerCase();
+    filtered = filtered.filter(
+      (r) =>
+        r.fullName.toLowerCase().includes(term) ||
+        r.email.toLowerCase().includes(term) ||
+        r.referenceId.toLowerCase().includes(term) ||
+        r.college.toLowerCase().includes(term) ||
+        r.department?.toLowerCase().includes(term) ||
+        r.phone?.includes(term)
+    );
+  }
+
+  // Sort newest first
+  filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  // ── Counts for tab badges (across all statuses on the base filtered set before status filter) ─
+  const all = [...records];
+  const applyNonStatusFilters = (arr: RegistrationRecord[]) => {
+    let r = arr;
+    if (options.track && options.track !== "all") r = r.filter((x) => x.track === options.track);
+    if (options.department && options.department !== "all") r = r.filter((x) => x.department?.toLowerCase() === options.department!.toLowerCase());
+    if (options.yearOfStudy && options.yearOfStudy !== "all") r = r.filter((x) => x.yearOfStudy?.toLowerCase() === options.yearOfStudy!.toLowerCase());
+    if (options.search?.trim()) {
+      const term = options.search.trim().toLowerCase();
+      r = r.filter((x) => x.fullName.toLowerCase().includes(term) || x.email.toLowerCase().includes(term) || x.referenceId.toLowerCase().includes(term) || x.college.toLowerCase().includes(term));
+    }
+    return r;
+  };
+  const base = applyNonStatusFilters(all);
+  const counts = {
+    confirmed: base.filter((r) => !r.status || r.status === "confirmed").length,
+    pending: base.filter((r) => r.status === "pending").length,
+    waitlisted: base.filter((r) => r.status === "waitlisted").length,
+    removed: base.filter((r) => r.status === "cancelled" || r.status === "declined").length,
+    all: base.length,
+  };
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  return { registrations: slice, total, page, pageSize, totalPages, counts };
+}
+
 export async function createFirestoreRegistration(
   eventSlug: string,
   input: RegistrationInput,
