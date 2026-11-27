@@ -2001,6 +2001,78 @@ export async function updateFirestoreSiteSettings(
   }
 }
 
+export interface ConfirmedAttendeesMeta {
+  version: number;
+  checkedInCount: number;
+  dailyCheckedInCounts: Record<number, number>;
+  updatedAt: string;
+}
+
+export async function getFirestoreConfirmedAttendeesMeta(
+  eventSlug: string
+): Promise<ConfirmedAttendeesMeta | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const snap = await db.collection("confirmed_attendees_meta").doc(eventSlug).get();
+    if (!snap.exists) return null;
+    const d = snap.data() || {};
+    return {
+      version: Number(d.version || 1),
+      checkedInCount: Number(d.checkedInCount || 0),
+      dailyCheckedInCounts: (d.dailyCheckedInCounts as Record<number, number>) || {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+      },
+      updatedAt: String(d.updatedAt || ""),
+    };
+  } catch (err) {
+    console.warn("Firestore getConfirmedAttendeesMeta failed:", (err as Error).message);
+    return null;
+  }
+}
+
+async function syncFirestoreConfirmedAttendeesMeta(
+  eventSlug: string,
+  attendees?: ConfirmedAttendeeRecord[]
+): Promise<number> {
+  const db = getAdminDb();
+  if (!db) return 1;
+
+  const list = attendees ?? (await getFirestoreConfirmedAttendees(eventSlug)) ?? [];
+  const active = list.filter((a) => (a.status || "confirmed") !== "cancelled");
+  let checkedInCount = 0;
+  const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+
+  for (const a of active) {
+    const days = a.checkedInDays || (a.checkedIn ? [1] : []);
+    if (days.length > 0 || a.checkedIn) checkedInCount += 1;
+    for (const d of days) {
+      if (d >= 1 && d <= 4) {
+        dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
+      }
+    }
+  }
+
+  const nextVersion = Date.now();
+  await db
+    .collection("confirmed_attendees_meta")
+    .doc(eventSlug)
+    .set(
+      {
+        version: nextVersion,
+        checkedInCount,
+        dailyCheckedInCounts,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  return nextVersion;
+}
+
 export async function getFirestoreConfirmedAttendees(
   eventSlug: string
 ): Promise<ConfirmedAttendeeRecord[] | null> {
@@ -2122,6 +2194,7 @@ export async function checkInFirestoreConfirmedAttendee(
 
   invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
   const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
   return updatedList?.find((a) => a.registrationId === registrationId) || null;
 }
 
@@ -2160,6 +2233,7 @@ export async function revokeCheckInFirestoreConfirmedAttendee(
 
   invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
   const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
   return updatedList?.find((a) => a.registrationId === registrationId) || null;
 }
 
@@ -2201,6 +2275,7 @@ export async function updateFirestoreConfirmedAttendee(
 
   invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
   const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
   return updatedList?.find((a) => a.registrationId === registrationId) || null;
 }
 
@@ -2218,6 +2293,7 @@ export async function deleteFirestoreConfirmedAttendee(
 
   await ref.delete();
   invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
+  await syncFirestoreConfirmedAttendeesMeta(eventSlug);
   return true;
 }
 

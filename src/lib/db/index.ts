@@ -51,6 +51,7 @@ import {
   getFirestoreSiteSettings,
   updateFirestoreSiteSettings,
   getFirestoreConfirmedAttendees,
+  getFirestoreConfirmedAttendeesMeta,
   upsertFirestoreConfirmedAttendees,
   checkInFirestoreConfirmedAttendee,
   revokeCheckInFirestoreConfirmedAttendee,
@@ -60,7 +61,7 @@ import {
 } from "./firestore";
 import { revalidateEventCaches, revalidateSiteCaches } from "./cache";
 
-export { buildEventReferenceId };
+export { buildEventReferenceId, getFirestoreConfirmedAttendeesMeta };
 export type { PaginatedRegistrationsResult };
 
 export function resolveWritableDbPath(): string {

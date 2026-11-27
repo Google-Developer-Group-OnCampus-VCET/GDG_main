@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import type { ConfirmedAttendeeRecord } from "@/types";
 import {
   downloadForGoogleSheets,
@@ -83,15 +83,22 @@ export function ConfirmedAttendeesTable({
     }
   }, [eventSlug]);
 
-  const fetchLatestAttendees = useCallback(async () => {
+  const lastVersionRef = useRef<number>(0);
+
+  const fetchLatestAttendees = useCallback(async (force = false) => {
     if (editingAttendee || mutatingId) return;
     try {
-      const res = await fetch(`/api/events/${eventSlug}/confirmed-attendees`, {
+      const qs = !force && lastVersionRef.current > 0 ? `?version=${lastVersionRef.current}` : "";
+      const res = await fetch(`/api/events/${eventSlug}/confirmed-attendees${qs}`, {
         cache: "no-store",
       });
       if (!res.ok) return;
       const data = await res.json();
-      if (data?.success && Array.isArray(data.attendees)) {
+      if (data?.unchanged) return;
+      if (typeof data?.version === "number") {
+        lastVersionRef.current = data.version;
+      }
+      if (data?.success && Array.isArray(data.attendees) && data.attendees.length > 0) {
         setAttendees(data.attendees);
       }
     } catch {
@@ -102,13 +109,13 @@ export function ConfirmedAttendeesTable({
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
-        void fetchLatestAttendees();
+        void fetchLatestAttendees(false);
       }
-    }, 2500);
+    }, 5000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {
-        void fetchLatestAttendees();
+        void fetchLatestAttendees(false);
       }
     };
 
@@ -119,7 +126,7 @@ export function ConfirmedAttendeesTable({
     try {
       channel = new BroadcastChannel(`gdg-confirmed-${eventSlug}`);
       channel.onmessage = () => {
-        void fetchLatestAttendees();
+        void fetchLatestAttendees(true);
       };
     } catch {
       // ignore
