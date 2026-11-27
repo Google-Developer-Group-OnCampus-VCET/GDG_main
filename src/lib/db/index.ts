@@ -21,6 +21,7 @@ import type {
   WorkshopDetails,
 } from "@/types";
 import { events as defaultEvents } from "@/content/events";
+import { DEFAULT_CONFIRMED_ATTENDEES } from "@/content/confirmed-attendees-fallback";
 import { DEFAULT_CHAPTER_SETTINGS } from "@/lib/site-defaults";
 import { validateAndNormalizeRegistrationInput } from "@/lib/registration-validation";
 import {
@@ -2745,7 +2746,9 @@ export async function getConfirmedAttendeesAsync(
       (err as Error).message
     );
   }
-  return getLocalConfirmedAttendees(eventSlug);
+  const local = getLocalConfirmedAttendees(eventSlug);
+  if (local.length > 0) return local;
+  return DEFAULT_CONFIRMED_ATTENDEES.filter((a) => a.eventSlug === eventSlug);
 }
 
 export async function upsertConfirmedAttendeesAsync(
