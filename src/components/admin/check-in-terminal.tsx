@@ -69,7 +69,7 @@ export function CheckInTerminal({
   const lastScannedRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
 
   const resolvedStatusEndpoint =
-    statusEndpoint || `/api/events/${eventSlug}/confirmed-attendees`;
+    statusEndpoint || `/api/checkin-portal/status?slug=${eventSlug}`;
 
   const syncLiveCounts = useCallback(async () => {
     try {
@@ -102,7 +102,7 @@ export function CheckInTerminal({
       if (document.visibilityState === "visible") {
         void syncLiveCounts();
       }
-    }, 2500);
+    }, 5000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {

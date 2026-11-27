@@ -61,13 +61,19 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
 
   useEffect(() => {
     let active = true;
-    const syncStats = async () => {
+    let lastVersion = 0;
+    const syncStats = async (force = false) => {
       try {
-        const res = await fetch(`/api/events/${slug}/confirmed-attendees`, {
+        const qs = !force && lastVersion > 0 ? `?version=${lastVersion}` : "";
+        const res = await fetch(`/api/events/${slug}/confirmed-attendees${qs}`, {
           cache: "no-store",
         });
         if (!res.ok) return;
         const data = await res.json();
+        if (data?.unchanged) return;
+        if (typeof data?.version === "number") {
+          lastVersion = data.version;
+        }
         if (active && data?.success && data.stats && data.stats.totalRegistered > 0) {
           setStats(data.stats);
         }
@@ -78,13 +84,13 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
 
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
-        void syncStats();
+        void syncStats(false);
       }
-    }, 3000);
+    }, 5000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {
-        void syncStats();
+        void syncStats(false);
       }
     };
 
@@ -95,7 +101,7 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
     try {
       channel = new BroadcastChannel(`gdg-confirmed-${slug}`);
       channel.onmessage = () => {
-        void syncStats();
+        void syncStats(true);
       };
     } catch {
       // ignore
