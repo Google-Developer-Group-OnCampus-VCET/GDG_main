@@ -6,7 +6,15 @@ import { useEffect, useRef, useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit" | "settings";
+  currentTab?:
+    | "overview"
+    | "registrations"
+    | "confirmed-attendees"
+    | "check-in"
+    | "analytics"
+    | "email"
+    | "audit"
+    | "settings";
   eventSlug?: string;
   initialRole?: "admin" | "core" | "volunteer" | null;
 }
@@ -66,9 +74,10 @@ export function AdminHeader({
 
   // Centralised nav link definitions — avoids duplication between desktop/mobile
   const navLinks = [
-    { tab: "overview",       label: "Dashboard",      href: "/admin/console",                                          show: !isVolunteer },
-    { tab: "registrations",  label: "Registrations",  href: `/admin/console/events/${eventSlug}/registrations`,        show: true },
-    { tab: "check-in",       label: "Check-in",       href: `/admin/console/events/${eventSlug}/check-in`,             show: true },
+    { tab: "overview",            label: "Dashboard",           href: "/admin/console",                                             show: !isVolunteer },
+    { tab: "registrations",       label: "Registrations",       href: `/admin/console/events/${eventSlug}/registrations`,           show: true },
+    { tab: "confirmed-attendees", label: "Confirmed Attendees", href: `/admin/console/events/${eventSlug}/confirmed-attendees`,     show: true },
+    { tab: "check-in",            label: "Check-in",            href: `/admin/console/events/${eventSlug}/check-in`,                show: true },
     { tab: "analytics",      label: "Analytics",      href: `/admin/console/events/${eventSlug}/analytics`,            show: true },
     { tab: "email",          label: "Email",          href: `/admin/console/events/${eventSlug}/email`,                show: isMaster },
     { tab: "audit",          label: "Audit",          href: `/admin/console/events/${eventSlug}/audit`,                show: isMaster },
