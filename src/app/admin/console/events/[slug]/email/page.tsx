@@ -1,7 +1,13 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
-import { getEventBySlugAsync, getRegistrationsAsync, getEmailLogsAsync } from "@/lib/db";
+import {
+  confirmedAttendeeToRegistrationRecord,
+  getConfirmedAttendeesAsync,
+  getEmailLogsAsync,
+  getEventBySlugAsync,
+  getRegistrationsAsync,
+} from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
 import { formatEventDateRange } from "@/lib/events";
 import { AdminHeader } from "@/components/admin/admin-header";
@@ -38,7 +44,12 @@ async function AdminEmailContent({ slug }: { slug: string }) {
 
   let registrations: RegistrationRecord[] = [];
   try {
-    registrations = await getRegistrationsAsync(slug);
+    const confirmed = await getConfirmedAttendeesAsync(slug);
+    if (confirmed.length > 0) {
+      registrations = confirmed.map(confirmedAttendeeToRegistrationRecord);
+    } else {
+      registrations = await getRegistrationsAsync(slug);
+    }
   } catch {
     registrations = [];
   }

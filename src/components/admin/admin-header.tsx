@@ -6,7 +6,15 @@ import { useEffect, useRef, useState } from "react";
 import { GdgLogo } from "@/components/gdg-logo";
 
 interface AdminHeaderProps {
-  currentTab?: "overview" | "registrations" | "check-in" | "analytics" | "email" | "audit" | "settings";
+  currentTab?:
+    | "overview"
+    | "registrations"
+    | "confirmed-attendees"
+    | "check-in"
+    | "analytics"
+    | "email"
+    | "audit"
+    | "settings";
   eventSlug?: string;
   initialRole?: "admin" | "core" | "volunteer" | null;
 }
@@ -66,9 +74,10 @@ export function AdminHeader({
 
   // Centralised nav link definitions — avoids duplication between desktop/mobile
   const navLinks = [
-    { tab: "overview",       label: "Dashboard",      href: "/admin/console",                                          show: !isVolunteer },
-    { tab: "registrations",  label: "Registrations",  href: `/admin/console/events/${eventSlug}/registrations`,        show: true },
-    { tab: "check-in",       label: "Check-in",       href: `/admin/console/events/${eventSlug}/check-in`,             show: true },
+    { tab: "overview",            label: "Dashboard",           href: "/admin/console",                                             show: !isVolunteer },
+    { tab: "registrations",       label: "Registrations",       href: `/admin/console/events/${eventSlug}/registrations`,           show: true },
+    { tab: "confirmed-attendees", label: "Confirmed Attendees", href: `/admin/console/events/${eventSlug}/confirmed-attendees`,     show: true },
+    { tab: "check-in",            label: "Check-in",            href: `/admin/console/events/${eventSlug}/check-in`,                show: true },
     { tab: "analytics",      label: "Analytics",      href: `/admin/console/events/${eventSlug}/analytics`,            show: true },
     { tab: "email",          label: "Email",          href: `/admin/console/events/${eventSlug}/email`,                show: isMaster },
     { tab: "audit",          label: "Audit",          href: `/admin/console/events/${eventSlug}/audit`,                show: isMaster },
@@ -106,28 +115,8 @@ export function AdminHeader({
           )}
         </Link>
 
-        {/* Desktop nav pill row — md+ — scrollable so it never wraps */}
-        {eventSlug && (
-          <nav className="hidden md:flex flex-1 items-center gap-0.5 overflow-x-auto no-scrollbar bg-surface-container-low px-1.5 py-1 rounded-full border border-border/50 mx-2 max-w-max">
-            {navLinks
-              .filter((l) => l.show)
-              .map(({ tab, label, href }) => (
-                <Link
-                  key={tab}
-                  href={href}
-                  prefetch={false}
-                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                    currentTab === tab ? pillActive : pillInactive
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
-          </nav>
-        )}
-
         {/* Spacer pushes right actions to the edge */}
-        <div className="flex-1 md:hidden" />
+        <div className="flex-1" />
 
         {/* Right actions */}
         <div className="flex items-center gap-1 shrink-0">
@@ -218,6 +207,33 @@ export function AdminHeader({
           </div>
         </div>
       </div>
+
+      {/* ── Desktop nav bar (md+) ── */}
+      {eventSlug && (
+        <div className="hidden md:block border-t border-border/60 bg-surface-container-low/60">
+          <nav
+            aria-label="Admin Console Navigation"
+            className="mx-auto flex max-w-(--container-max) items-center gap-1.5 overflow-x-auto no-scrollbar px-6 py-2"
+          >
+            {navLinks
+              .filter((l) => l.show)
+              .map(({ tab, label, href }) => (
+                <Link
+                  key={tab}
+                  href={href}
+                  prefetch={false}
+                  className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs transition-all whitespace-nowrap ${
+                    currentTab === tab
+                      ? pillActive
+                      : "font-medium text-foreground-muted hover:text-foreground hover:bg-white"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+          </nav>
+        </div>
+      )}
 
       {/* ── Mobile nav scroll strip (below md) ── */}
       {eventSlug && (

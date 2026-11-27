@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { EventStats } from "@/lib/db";
@@ -53,10 +53,62 @@ const EXP_ORDER: Record<string, number> = {
   Advanced: 3,
 };
 
-export function AnalyticsView({ slug, eventTitle, stats, event }: AnalyticsViewProps) {
+export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: AnalyticsViewProps) {
   const router = useRouter();
+  const [stats, setStats] = useState<EventStats>(initialStats);
   const [copySuccess, setCopySuccess] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const syncStats = async () => {
+      try {
+        const res = await fetch(`/api/events/${slug}/confirmed-attendees`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active && data?.success && data.stats && data.stats.totalRegistered > 0) {
+          setStats(data.stats);
+        }
+      } catch {
+        // ignore transient errors
+      }
+    };
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void syncStats();
+      }
+    }, 3000);
+
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        void syncStats();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(`gdg-confirmed-${slug}`);
+      channel.onmessage = () => {
+        void syncStats();
+      };
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      channel?.close();
+    };
+  }, [slug]);
 
   // Dynamic calculations from stats & event - NO STATIC NUMBERS
   const totalRegistered = stats.totalRegistered;

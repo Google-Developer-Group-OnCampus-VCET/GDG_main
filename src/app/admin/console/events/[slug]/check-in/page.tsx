@@ -1,7 +1,12 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import {
+  computeConfirmedAttendeeStats,
+  getConfirmedAttendeesAsync,
+  getEventBySlugAsync,
+  getEventStatsAsync,
+} from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { CheckInTerminal } from "@/components/admin/check-in-terminal";
@@ -30,9 +35,16 @@ async function AdminCheckInContent({ slug }: { slug: string }) {
   let checkedInCount = 0;
   let dailyCheckedInCounts: Record<number, number> | undefined;
   try {
-    const stats = await getEventStatsAsync(slug);
-    checkedInCount = stats.checkedInCount;
-    dailyCheckedInCounts = stats.dailyCheckedInCounts;
+    const confirmed = await getConfirmedAttendeesAsync(slug);
+    if (confirmed.length > 0) {
+      const confirmedStats = computeConfirmedAttendeeStats(confirmed);
+      checkedInCount = confirmedStats.checkedInCount;
+      dailyCheckedInCounts = confirmedStats.dailyCheckedInCounts;
+    } else {
+      const stats = await getEventStatsAsync(slug);
+      checkedInCount = stats.checkedInCount;
+      dailyCheckedInCounts = stats.dailyCheckedInCounts;
+    }
   } catch {
     // fallback
   }

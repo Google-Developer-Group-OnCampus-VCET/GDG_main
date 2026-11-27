@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { ADMIN_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth";
+import {
+  ADMIN_COOKIE_NAME,
+  CHECKIN_PORTAL_COOKIE_NAME,
+  verifyAdminSessionToken,
+  verifyCheckinPortalToken,
+} from "@/lib/auth";
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -29,9 +34,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check admin session token
+  // Check admin session token (or check-in portal token for /api/events/*/check-in)
   const token = request.cookies.get(ADMIN_COOKIE_NAME)?.value;
-  const isAuthenticated = await verifyAdminSessionToken(token);
+  let isAuthenticated = await verifyAdminSessionToken(token);
+
+  if (
+    !isAuthenticated &&
+    pathname.startsWith("/api/events/") &&
+    pathname.endsWith("/check-in")
+  ) {
+    const checkinToken = request.cookies.get(CHECKIN_PORTAL_COOKIE_NAME)?.value;
+    isAuthenticated = await verifyCheckinPortalToken(checkinToken);
+  }
 
   if (!isAuthenticated) {
     // For API requests, return 401 JSON

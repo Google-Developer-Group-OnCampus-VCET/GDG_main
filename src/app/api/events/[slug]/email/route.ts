@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
+import QRCode from "qrcode";
 import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
 import {
+  confirmedAttendeeToRegistrationRecord,
+  getConfirmedAttendeesAsync,
   getEventBySlugAsync,
   getRegistrationByReference,
   getRegistrationsAsync,
@@ -17,7 +20,10 @@ import {
   sendEmail,
   generateAnnouncementEmailHtml,
   sendSpeakerConfirmationEmail,
+  type EmailAttachment,
 } from "@/lib/email";
+import { generatePassPdfBytes } from "@/lib/pass-pdf";
+import { formatEventDateRange } from "@/lib/events";
 import type { EmailLog } from "@/types";
 
 export async function GET(
@@ -84,6 +90,7 @@ export async function POST(
       audience?: string;
       track?: string;
       includePassLink?: boolean;
+      attachPassPdf?: boolean;
       revokePasses?: boolean;
       hardDelete?: boolean;
       recipientRef?: string;
@@ -131,7 +138,14 @@ export async function POST(
         );
       }
 
-      const reg = getRegistrationByReference(body.referenceId.trim().toUpperCase());
+      const targetRefUpper = body.referenceId.trim().toUpperCase();
+      const confirmedListSelf = await getConfirmedAttendeesAsync(slug);
+      const confirmedMatchSelf = confirmedListSelf.find(
+        (a) => a.registrationId.toUpperCase() === targetRefUpper
+      );
+      const reg = confirmedMatchSelf
+        ? confirmedAttendeeToRegistrationRecord(confirmedMatchSelf)
+        : getRegistrationByReference(targetRefUpper);
       if (
         !reg ||
         reg.eventSlug !== slug ||
@@ -188,7 +202,14 @@ export async function POST(
         );
       }
 
-      const reg = getRegistrationByReference(body.referenceId.trim().toUpperCase());
+      const targetRefUpper = body.referenceId.trim().toUpperCase();
+      const confirmedListSelf = await getConfirmedAttendeesAsync(slug);
+      const confirmedMatchSelf = confirmedListSelf.find(
+        (a) => a.registrationId.toUpperCase() === targetRefUpper
+      );
+      const reg = confirmedMatchSelf
+        ? confirmedAttendeeToRegistrationRecord(confirmedMatchSelf)
+        : getRegistrationByReference(targetRefUpper);
       if (!reg || reg.eventSlug !== slug) {
         return NextResponse.json(
           { error: "NOT_FOUND", message: "Pass reference not found for this event." },
@@ -244,7 +265,11 @@ export async function POST(
       }
 
       const audience = body.audience || "all";
-      const allRegistrations = await getRegistrationsAsync(slug);
+      const confirmedListBroadcast = await getConfirmedAttendeesAsync(slug);
+      const allRegistrations =
+        confirmedListBroadcast.length > 0
+          ? confirmedListBroadcast.map(confirmedAttendeeToRegistrationRecord)
+          : await getRegistrationsAsync(slug);
 
       // Filter audience
       let recipientsList = allRegistrations.filter((r) => r.status !== "cancelled");
@@ -333,8 +358,48 @@ export async function POST(
       let sentCount = 0;
       let errorCount = 0;
 
+      const datesText = formatEventDateRange(event);
+      const venueText =
+        event.location ||
+        event.workshop?.venueText ||
+        "Vidyavardhini's College of Engineering and Technology, Vasai";
+
       // Dispatch announcement emails
       for (const recipient of recipientsList) {
+        let attachments: EmailAttachment[] | undefined;
+        if (body.attachPassPdf) {
+          try {
+            const [pdfBytes, qrBuffer] = await Promise.all([
+              generatePassPdfBytes({
+                eventTitle: event.title,
+                datesText,
+                venueText,
+                registration: recipient,
+              }),
+              QRCode.toBuffer(recipient.referenceId, {
+                width: 280,
+                margin: 1,
+                color: { dark: "#1A1B1E", light: "#FFFFFF" },
+              }),
+            ]);
+            attachments = [
+              {
+                filename: "pass-qr.png",
+                content: qrBuffer,
+                contentType: "image/png",
+                cid: "attendee-pass-qr",
+              },
+              {
+                filename: `GDG-VCET-Pass-${recipient.referenceId}.pdf`,
+                content: pdfBytes,
+                contentType: "application/pdf",
+              },
+            ];
+          } catch (attErr) {
+            console.warn("Failed to generate pass attachment for", recipient.referenceId, attErr);
+          }
+        }
+
         const { html, text } = generateAnnouncementEmailHtml({
           eventTitle: event.title,
           subject,
@@ -345,6 +410,16 @@ export async function POST(
           ctaText: body.ctaText?.trim(),
           ctaUrl: body.ctaUrl?.trim(),
           origin,
+          attachPassDetails: body.attachPassPdf
+            ? {
+                fullName: recipient.fullName,
+                referenceId: recipient.referenceId,
+                track: recipient.track,
+                college: recipient.college,
+                datesText,
+                venueText,
+              }
+            : undefined,
         });
 
         const res = await sendEmail({
@@ -352,6 +427,7 @@ export async function POST(
           subject,
           html,
           text,
+          attachments,
         });
 
         if (res.success) {

@@ -805,23 +805,6 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
               <option value="4th Year (BE)">4th Year (BE)</option>
             </select>
 
-            {/* Attendance Filter */}
-            <select
-              value={checkInFilter}
-              onChange={(e) => setCheckInFilter(e.target.value)}
-              aria-label="Filter by Attendance"
-              className="h-11 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
-            >
-              <option value="all">All Attendance</option>
-              <option value="checked-in">Any Day Present</option>
-              <option value="day-1">Day 1 Present (Dec 1)</option>
-              <option value="day-2">Day 2 Present (Dec 2)</option>
-              <option value="day-3">Day 3 Present (Dec 3)</option>
-              <option value="day-4">Day 4 Present (Dec 4)</option>
-              <option value="all-days">All 4 Days (100% Attendance)</option>
-              <option value="not-checked-in">Absent (0 Days)</option>
-            </select>
-
             {/* Status Filter */}
             <select
               value={statusFilter}
@@ -885,41 +868,6 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
               )}
             </button>
           </div>
-
-          {/* Quick Check-in Terminal Shortcut */}
-          <Link
-            href={`/admin/console/events/${eventSlug}/check-in`}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold transition-all shadow-2xs shrink-0"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-            <span>Camera Check-in Terminal</span>
-          </Link>
-
-          {/* Add Attendee + Email Hub: ONLY for Master Admin */}
-          {sessionRole === "admin" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition-all shrink-0 cursor-pointer"
-              >
-                <span>+ Add Attendee</span>
-              </button>
-              <Link
-                href={`/admin/console/events/${eventSlug}/email`}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 text-xs font-bold transition-all shrink-0"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-                <span>Email Hub &amp; Broadcast</span>
-              </Link>
-            </>
-          ) : null}
         </div>
       </div>
 
@@ -943,14 +891,9 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 font-semibold text-emerald-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
-            <span>{checkedInCount} Checked In ({Math.round((checkedInCount / (totalActive || 1)) * 100)}%)</span>
-          </span>
-          <span className="hidden sm:inline text-border">•</span>
-          <span className="font-semibold text-primary">
-            {fourDayCompleters} Completed All 4 Days
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-semibold">
+            Data Backup · Read-Only
           </span>
         </div>
       </div>
@@ -985,106 +928,6 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
                     <span>•</span>
                     <span className="truncate max-w-[200px]">{reg.college}</span>
                   </div>
-
-                  {/* 4-Day Attendance Pills */}
-                  <div className="flex items-center justify-between pt-1 border-t border-border/50">
-                    <div className="flex items-center gap-1.5">
-                      {[1, 2, 3, 4].map((d) => {
-                        const isAttended = attendedDays.includes(d);
-                        const time = reg.checkIns?.[d] || (d === 1 && reg.checkedIn ? reg.checkedInAt : undefined);
-                        return (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => {
-                              if (sessionRole === "core") return;
-                              if (isAttended && sessionRole === "admin") {
-                                void handleRevokeCheckIn(reg, d);
-                              } else if (!isAttended) {
-                                void handleToggleCheckIn(reg, d);
-                              }
-                            }}
-                            title={
-                              isAttended
-                                ? sessionRole === "admin"
-                                  ? `Day ${d}: ${time || "Present"} (Click to undo)`
-                                  : `Day ${d}: ${time || "Present"}`
-                                : sessionRole === "core"
-                                  ? `Day ${d}: Absent`
-                                  : `Check in for Day ${d}`
-                            }
-                            className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all ${
-                              isAttended
-                                ? `bg-emerald-50 text-emerald-800 border-emerald-200 ${sessionRole === "admin" ? "hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 cursor-pointer" : ""}`
-                                : sessionRole === "core"
-                                ? "bg-slate-50 text-slate-300 border-slate-200 cursor-default"
-                                : "bg-slate-50 text-slate-400 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer"
-                            }`}
-                          >
-                            D{d} {isAttended ? "✓" : sessionRole === "core" ? "—" : "+"}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {sessionRole === "admin" && reg.status !== "confirmed" ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleReviewDecision(reg, "approve")}
-                            disabled={mutatingRef === reg.referenceId}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 cursor-pointer disabled:opacity-50 min-h-[36px]"
-                          >
-                            ✓ Approve
-                          </button>
-                          {reg.status !== "declined" ? (
-                            <button
-                              type="button"
-                              onClick={() => handleReviewDecision(reg, "decline")}
-                              disabled={mutatingRef === reg.referenceId}
-                              className="px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 cursor-pointer disabled:opacity-50 min-h-[36px]"
-                            >
-                              Decline
-                            </button>
-                          ) : null}
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleEmailPass(reg)}
-                            disabled={emailingRef === reg.referenceId}
-                            title={`Email pass & QR code to ${reg.email}`}
-                            className="px-2.5 py-1.5 rounded-lg border border-border text-foreground-muted hover:text-primary hover:border-primary text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 min-h-[36px]"
-                          >
-                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                              <polyline points="22,6 12,13 2,6" />
-                            </svg>
-                            <span>{emailingRef === reg.referenceId ? "Sending…" : "Email Pass"}</span>
-                          </button>
-
-                          {nextMissingDay ? (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
-                              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer min-h-[36px]"
-                            >
-                              Admit D{nextMissingDay}
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full border border-emerald-200">
-                              <svg className="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <polyline points="20 6 9 17 4 12" />
-                              </svg>
-                              <span>4/4 Days</span>
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
                 </div>
               );
             })
@@ -1096,57 +939,24 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
           <table className="w-full text-left text-xs">
             <thead className="border-b border-border bg-slate-50 text-slate-600 font-bold text-[11px] uppercase tracking-wider">
               <tr>
-                {sessionRole === "admin" ? (
-                  <th className="py-2.5 pl-3.5 pr-1 w-8">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all visible registrations"
-                      checked={filtered.length > 0 && filtered.every((r) => selectedRefs.includes(r.referenceId))}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedRefs(filtered.map((r) => r.referenceId));
-                        } else {
-                          setSelectedRefs([]);
-                        }
-                      }}
-                      className="w-3.5 h-3.5 rounded"
-                    />
-                  </th>
-                ) : null}
                 <th className="py-2.5 px-3.5">Ref ID</th>
                 <th className="py-2.5 px-3.5">Attendee</th>
                 <th className="py-2.5 px-3.5">Academic</th>
                 <th className="py-2.5 px-3.5">Track</th>
                 <th className="py-2.5 px-3.5 text-center">Status</th>
-                <th className="py-2.5 px-3.5 text-center">4-Day Attendance</th>
-                <th className="py-2.5 px-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={sessionRole === "admin" ? 8 : 7} className="py-10 text-center text-slate-400">
+                  <td colSpan={5} className="py-10 text-center text-slate-400">
                     No attendees match the active filters.
                   </td>
                 </tr>
               ) : (
                 paginated.map((reg) => {
-                  const attendedDays = reg.checkedInDays || (reg.checkedIn ? [1] : []);
-                  const nextMissingDay = [1, 2, 3, 4].find((d) => !attendedDays.includes(d));
-
                   return (
                     <tr key={reg.id} className="hover:bg-slate-50/70 transition-colors">
-                      {sessionRole === "admin" ? (
-                        <td className="py-2.5 pl-3.5 pr-1">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${reg.fullName}`}
-                            checked={selectedRefs.includes(reg.referenceId)}
-                            onChange={() => toggleSelectRef(reg.referenceId)}
-                            className="w-3.5 h-3.5 rounded"
-                          />
-                        </td>
-                      ) : null}
                       <td className="py-2.5 px-3.5 font-mono font-bold text-slate-800 whitespace-nowrap">
                         {reg.referenceId}
                       </td>
@@ -1189,158 +999,6 @@ export function RegistrationsTable({ eventSlug, initialData, role = null }: Regi
                         >
                           {reg.status}
                         </span>
-                      </td>
-
-                      <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
-                          {[1, 2, 3, 4].map((d) => {
-                            const isAttended = attendedDays.includes(d);
-                            const time = reg.checkIns?.[d] || (d === 1 && reg.checkedIn ? reg.checkedInAt : undefined);
-                            return (
-                              <button
-                                key={d}
-                                type="button"
-                                onClick={() => {
-                                  if (sessionRole === "core") return;
-                                  if (isAttended && sessionRole === "admin") {
-                                    void handleRevokeCheckIn(reg, d);
-                                  } else if (!isAttended) {
-                                    void handleToggleCheckIn(reg, d);
-                                  }
-                                }}
-                                title={
-                                  isAttended
-                                    ? sessionRole === "admin"
-                                      ? `Day ${d}: ${time || "Present"} (Click to undo)`
-                                      : `Day ${d}: ${time || "Present"}`
-                                    : sessionRole === "core"
-                                      ? `Day ${d}: Absent`
-                                      : `Click to Check In Day ${d}`
-                                }
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all ${
-                                  isAttended
-                                    ? `bg-emerald-50 text-emerald-800 border-emerald-200 ${sessionRole === "admin" ? "hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 cursor-pointer" : ""}`
-                                    : sessionRole === "core"
-                                    ? "bg-slate-50 text-slate-300 border-slate-200 cursor-default"
-                                    : "bg-slate-50 text-slate-400 border-slate-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer"
-                                }`}
-                              >
-                                D{d} {isAttended ? "✓" : sessionRole === "core" ? "—" : "+"}
-                              </button>
-                            );
-                          })}
-                          <span className="text-[10px] text-foreground-muted ml-1 font-mono">
-                            ({attendedDays.length}/4)
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {reg.status === "confirmed" ? (
-                            <button
-                              type="button"
-                              onClick={() => handleEmailPass(reg)}
-                              disabled={emailingRef === reg.referenceId}
-                              title={`Email pass & QR code to ${reg.email}`}
-                              className="p-1.5 rounded-lg border border-border bg-slate-50/50 text-foreground-muted hover:text-primary hover:border-primary transition-all cursor-pointer disabled:opacity-50"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                                <polyline points="22,6 12,13 2,6" />
-                              </svg>
-                            </button>
-                          ) : null}
-                          {sessionRole === "admin" ? (
-                            <>
-                              {reg.status !== "confirmed" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReviewDecision(reg, "approve")}
-                                    disabled={mutatingRef === reg.referenceId}
-                                    title="Approve & email official QR pass"
-                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-bold cursor-pointer disabled:opacity-50"
-                                  >
-                                    ✓ Approve
-                                  </button>
-                                  {reg.status !== "waitlisted" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleReviewDecision(reg, "waitlist")}
-                                      disabled={mutatingRef === reg.referenceId}
-                                      className="px-2 py-1 rounded-lg border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                                    >
-                                      Waitlist
-                                    </button>
-                                  ) : null}
-                                  {reg.status !== "declined" ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleReviewDecision(reg, "decline")}
-                                      disabled={mutatingRef === reg.referenceId}
-                                      className="px-2 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                                    >
-                                      Decline
-                                    </button>
-                                  ) : null}
-                                </>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(reg)}
-                                disabled={mutatingRef === reg.referenceId}
-                                title={`Edit attendee ${reg.fullName}`}
-                                className="px-2 py-1 rounded-lg border border-border bg-white text-slate-600 hover:text-primary hover:border-primary text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                              >
-                                Edit
-                              </button>
-                              {reg.status === "confirmed" ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCancelOrDelete(reg, "cancel")}
-                                  disabled={mutatingRef === reg.referenceId}
-                                  title="Cancel pass"
-                                  className="px-2 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-[11px] font-semibold hover:bg-amber-100 cursor-pointer disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (window.confirm(`Permanently delete ${reg.fullName} (${reg.referenceId})?`)) {
-                                    void handleCancelOrDelete(reg, "hard");
-                                  }
-                                }}
-                                disabled={mutatingRef === reg.referenceId}
-                                title="Delete pass permanently"
-                                className="px-2 py-1 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-semibold hover:bg-rose-100 cursor-pointer disabled:opacity-50"
-                              >
-                                Del
-                              </button>
-                            </>
-                          ) : null}
-                          {sessionRole === "core" ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-semibold text-slate-400 bg-slate-100">
-                              Read-Only
-                            </span>
-                          ) : reg.status === "confirmed" ? (
-                            nextMissingDay ? (
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCheckIn(reg, nextMissingDay)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer"
-                              >
-                                Admit Day {nextMissingDay}
-                              </button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                ✓ All 4 Days
-                              </span>
-                            )
-                          ) : null}
-                        </div>
                       </td>
                     </tr>
                   );

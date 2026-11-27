@@ -89,7 +89,7 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
   });
 
   // Header
-  page.drawText("GDG ON CAMPUS VCET  |  4-DAY WORKSHOP ALL-ACCESS PASS", {
+  page.drawText("GDG ON CAMPUS VCET  |  CONFIRMED 4-DAY WORKSHOP PASS", {
     x: 34,
     y: height - 48,
     size: 9,
@@ -186,19 +186,20 @@ export async function generatePassPdfBytes(input: PassPdfInput): Promise<Uint8Ar
 
   drawField("Pass Reference ID", `#${registration.referenceId}`, true);
   drawField("Attendee", registration.fullName);
-  page.drawText(
-    toWinAnsiSafe(`${registration.email}  |  ${registration.department} (${registration.yearOfStudy})`).slice(0, 56),
-    {
-      x: 34,
-      y: infoY + 8,
-      size: 8.5,
-      font: fontRegular,
-      color: rgb(0.35, 0.4, 0.48),
-    }
-  );
+  const deptYear = [registration.department, registration.yearOfStudy]
+    .filter(Boolean)
+    .join(" · ");
+  const subLine = [registration.email, deptYear].filter(Boolean).join("  |  ");
+  page.drawText(toWinAnsiSafe(subLine).slice(0, 58), {
+    x: 34,
+    y: infoY + 8,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.35, 0.4, 0.48),
+  });
   infoY -= 12;
-  drawField("College / Institute", registration.college);
-  drawField("Assigned Track", registration.track || "General Admission");
+  drawField("College / Institute", registration.college || "—");
+  drawField("Assigned Track", registration.track || "4-Day All-Access");
 
   return pdfDoc.save();
 }

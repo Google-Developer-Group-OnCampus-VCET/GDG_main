@@ -10,6 +10,7 @@ interface CheckInTerminalProps {
   initialCheckedInCount: number;
   initialDailyCounts?: Record<number, number>;
   totalDays?: number;
+  statusEndpoint?: string;
 }
 
 interface CheckInLogEntry {
@@ -35,6 +36,7 @@ export function CheckInTerminal({
   initialCheckedInCount,
   initialDailyCounts,
   totalDays = 4,
+  statusEndpoint,
 }: CheckInTerminalProps) {
   const [activeDay, setActiveDay] = useState<number>(1);
   const [dailyCounts, setDailyCounts] = useState<Record<number, number>>(() => {
@@ -65,6 +67,69 @@ export function CheckInTerminal({
   const streamRef = useRef<MediaStream | null>(null);
   const submittingRef = useRef(false);
   const lastScannedRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
+
+  const resolvedStatusEndpoint =
+    statusEndpoint || `/api/events/${eventSlug}/confirmed-attendees`;
+
+  const syncLiveCounts = useCallback(async () => {
+    try {
+      const res = await fetch(resolvedStatusEndpoint, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.success && data.stats) {
+        if (typeof data.stats.checkedInCount === "number") {
+          setCheckedCount(data.stats.checkedInCount);
+        }
+        if (data.stats.dailyCheckedInCounts) {
+          setDailyCounts((prev) => {
+            const next = { ...prev };
+            for (let i = 1; i <= totalDays; i++) {
+              next[i] = data.stats.dailyCheckedInCounts[i] ?? 0;
+            }
+            return next;
+          });
+        }
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [resolvedStatusEndpoint, totalDays]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void syncLiveCounts();
+      }
+    }, 2500);
+
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        void syncLiveCounts();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(`gdg-confirmed-${eventSlug}`);
+      channel.onmessage = () => {
+        void syncLiveCounts();
+      };
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+      channel?.close();
+    };
+  }, [eventSlug, syncLiveCounts]);
 
   const submitCheckIn = useCallback(
     async (rawRef: string) => {
@@ -114,6 +179,13 @@ export function CheckInTerminal({
             ...prev,
           ]);
           setRefInput("");
+          try {
+            const ch = new BroadcastChannel(`gdg-confirmed-${eventSlug}`);
+            ch.postMessage({ type: "sync", at: Date.now() });
+            ch.close();
+          } catch {
+            // ignore
+          }
         } else if (res.status === 409) {
           setLastResult({
             status: "duplicate",
@@ -303,8 +375,8 @@ export function CheckInTerminal({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* Scanner & Input Column */}
-      <div className="lg:col-span-7 flex flex-col gap-5">
-        <div className="bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-5">
+      <div className="lg:col-span-7 flex flex-col gap-4 sm:gap-5">
+        <div className="bg-white p-4 sm:p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-4 sm:gap-5">
           <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
             <div>
               <h2 className="text-base font-bold text-foreground">
@@ -337,12 +409,12 @@ export function CheckInTerminal({
 
           {/* 4-Day Workshop Selector Tabs */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-foreground uppercase tracking-wider">
-                Select Active Check-in Day
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] sm:text-xs font-bold text-foreground uppercase tracking-wider">
+                Active Check-in Day
               </span>
-              <span className="text-xs text-foreground-muted">
-                Active: Day {activeDay} of {totalDays}
+              <span className="text-[11px] sm:text-xs text-foreground-muted whitespace-nowrap">
+                Day {activeDay} of {totalDays}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -393,7 +465,7 @@ export function CheckInTerminal({
           ) : null}
 
           {cameraOpen ? (
-            <div className="relative overflow-hidden rounded-2xl border border-border bg-slate-950 aspect-video max-h-72 flex items-center justify-center">
+            <div className="relative overflow-hidden rounded-2xl border border-border bg-slate-950 aspect-[4/3] sm:aspect-video min-h-[250px] sm:min-h-[280px] max-h-80 flex items-center justify-center">
               <video
                 ref={videoRef}
                 playsInline
@@ -401,11 +473,11 @@ export function CheckInTerminal({
                 className="w-full h-full object-cover"
               />
               <canvas ref={canvasRef} className="hidden" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="w-44 h-44 rounded-2xl border-2 border-white/80 shadow-[0_0_0_9999px_rgba(15,23,42,0.45)]" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center pb-7">
+                <div className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl border-2 border-white/85 shadow-[0_0_0_9999px_rgba(15,23,42,0.48)]" />
               </div>
-              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 text-white text-[11px] font-medium">
-                {cameraReady ? `Point camera at attendee pass for Day ${activeDay}` : "Starting camera…"}
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/75 text-white text-[11px] font-medium whitespace-nowrap">
+                {cameraReady ? `Scan Day ${activeDay} Pass QR` : "Starting camera…"}
               </div>
             </div>
           ) : null}
@@ -414,26 +486,26 @@ export function CheckInTerminal({
             <div className="flex flex-col gap-1.5">
               <label
                 htmlFor="ref-input"
-                className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center justify-between"
+                className="text-[11px] sm:text-xs font-bold text-foreground uppercase tracking-wider flex items-center justify-between gap-2"
               >
-                <span>Pass Reference ID / QR Code Payload</span>
-                <span className="text-primary normal-case font-medium">Checking in for Day {activeDay}</span>
+                <span>Pass Reference ID</span>
+                <span className="text-primary normal-case font-medium whitespace-nowrap">Day {activeDay} Check-in</span>
               </label>
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex flex-col sm:flex-row gap-2.5">
                 <input
                   id="ref-input"
                   type="text"
                   value={refInput}
                   onChange={(e) => setRefInput(e.target.value)}
-                  placeholder="GDG-VCET-2026-XXXX"
+                  placeholder="G-2026-ZTH-001 or L-2026-ZTH-001"
                   disabled={submitting}
                   autoFocus
-                  className="flex-1 h-12 px-3.5 rounded-xl border border-border bg-slate-50/50 text-base sm:text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
+                  className="w-full sm:flex-1 min-h-12 h-12 px-3.5 rounded-xl border border-border bg-slate-50/50 text-sm font-mono uppercase tracking-wider text-foreground placeholder:text-foreground-muted/60 focus:bg-white focus:border-primary focus:outline-hidden"
                 />
                 <button
                   type="submit"
                   disabled={submitting || !refInput.trim()}
-                  className="h-12 px-5 rounded-xl bg-primary text-white text-xs sm:text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer w-full sm:w-auto shrink-0"
+                  className="h-12 px-5 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer w-full sm:w-auto shrink-0"
                 >
                   {submitting ? "Checking..." : `Admit for Day ${activeDay}`}
                 </button>
