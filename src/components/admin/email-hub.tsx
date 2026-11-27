@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
+import { generatePassPdfBytes } from "@/lib/pass-pdf";
 import type {
   AgendaSession,
   EmailLog,
@@ -177,7 +179,8 @@ export function EmailHub({
   const [message, setMessage] = useState(EMAIL_TEMPLATES[0].message);
   const [ctaText, setCtaText] = useState(EMAIL_TEMPLATES[0].ctaText);
   const [ctaUrl, setCtaUrl] = useState(EMAIL_TEMPLATES[0].ctaUrl);
-  const [includePassLink, setIncludePassLink] = useState(true);
+  const [includePassLink, setIncludePassLink] = useState(false);
+  const [attachPassPdf, setAttachPassPdf] = useState(false);
   const [revokePasses, setRevokePasses] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState("");
@@ -195,6 +198,48 @@ export function EmailHub({
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [previewPassReg, setPreviewPassReg] = useState<RegistrationRecord | null>(null);
+  const [previewQrDataUrl, setPreviewQrDataUrl] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  async function handleOpenPassPreview(reg: RegistrationRecord) {
+    setPreviewPassReg(reg);
+    setPreviewQrDataUrl(null);
+    try {
+      const url = await QRCode.toDataURL(reg.referenceId, {
+        width: 260,
+        margin: 1,
+        color: { dark: "#1A1B1E", light: "#FFFFFF" },
+      });
+      setPreviewQrDataUrl(url);
+    } catch {
+      setPreviewQrDataUrl(null);
+    }
+  }
+
+  async function handleDownloadPreviewPdf() {
+    if (!previewPassReg) return;
+    setDownloadingPdf(true);
+    try {
+      const bytes = await generatePassPdfBytes({
+        eventTitle,
+        datesText: eventDatesText,
+        venueText: eventLocation,
+        registration: previewPassReg,
+      });
+      const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `GDG-VCET-Pass-${previewPassReg.referenceId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
 
   // Speaker confirmation state
   const [speakerTemplateIdx, setSpeakerTemplateIdx] = useState(0);
@@ -346,6 +391,7 @@ export function EmailHub({
           message: message.trim(),
           audience,
           includePassLink,
+          attachPassPdf,
           revokePasses,
           ctaText: ctaText.trim() || undefined,
           ctaUrl: ctaUrl.trim() || undefined,
@@ -859,16 +905,16 @@ export function EmailHub({
                 </div>
               </div>
 
-              {/* Pass Link Checkbox */}
-              <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50/70 text-xs font-medium cursor-pointer">
+              {/* Attach Attendee Pass (QR + PDF) Checkbox */}
+              <label className="flex items-center gap-2.5 p-3 rounded-xl border border-blue-200 bg-blue-50/60 text-xs font-medium cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={includePassLink}
-                  onChange={(e) => setIncludePassLink(e.target.checked)}
+                  checked={attachPassPdf}
+                  onChange={(e) => setAttachPassPdf(e.target.checked)}
                   className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
                 />
-                <span className="text-foreground">
-                  Include each attendee&apos;s personal <strong>4-day pass link &amp; QR reference ID</strong> at the bottom of the email.
+                <span className="text-blue-950">
+                  <strong>Attach Attendee Pass (QR Code + PDF)</strong> — embeds a scannable check-in QR pass card in the email and attaches the official Pass PDF with their updated Confirmed ID.
                 </span>
               </label>
 
@@ -1589,6 +1635,23 @@ export function EmailHub({
                             </button>
                             <button
                               type="button"
+                              onClick={() => handleOpenPassPreview(reg)}
+                              className="p-1.5 rounded-lg bg-white text-foreground hover:text-primary hover:border-primary text-xs font-semibold border border-border transition-all cursor-pointer inline-flex items-center justify-center shadow-2xs"
+                              title={`Preview QR Pass for ${reg.fullName} (${reg.referenceId})`}
+                              aria-label={`View QR Pass for ${reg.fullName}`}
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="3" width="7" height="7" rx="1" />
+                                <rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" />
+                                <path d="M14 14h3v3h-3z" />
+                                <path d="M17 17h4v4h-4z" />
+                                <path d="M14 20h1" />
+                                <path d="M20 14v1" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleSendSinglePass(reg)}
                               disabled={isSending}
                               className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover active:scale-95 transition-all disabled:opacity-50 cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
@@ -1692,6 +1755,131 @@ export function EmailHub({
               </table>
             </div>
           )}
+        </div>
+      ) : null}
+
+      {/* Pass Preview Modal */}
+      {previewPassReg ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-[1px] flex items-center justify-center p-4"
+          onClick={() => setPreviewPassReg(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-border shadow-2xl max-w-xl w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Google 4-color bar */}
+            <div className="h-2 w-full grid grid-cols-4">
+              <div className="bg-[#4285F4]" />
+              <div className="bg-[#EA4335]" />
+              <div className="bg-[#FBBC04]" />
+              <div className="bg-[#34A853]" />
+            </div>
+
+            <div className="p-6 flex flex-col gap-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-primary">
+                    GDG on Campus VCET · Confirmed 4-Day Workshop Pass
+                  </span>
+                  <h3 className="text-xl font-bold text-foreground mt-1">
+                    {eventTitle}
+                  </h3>
+                  <p className="text-xs text-foreground-muted mt-0.5">
+                    {eventDatesText} · {eventLocation}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPassReg(null)}
+                  className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-surface-container cursor-pointer"
+                  aria-label="Close pass preview"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="border-t border-border pt-5 flex flex-col sm:flex-row items-center sm:items-stretch justify-between gap-5">
+                <div className="flex-1 flex flex-col gap-3 w-full">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                      Confirmed Pass ID
+                    </div>
+                    <div className="mt-1 inline-flex px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 font-mono text-sm font-extrabold text-primary">
+                      #{previewPassReg.referenceId}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                      Attendee
+                    </div>
+                    <div className="text-sm font-bold text-foreground">
+                      {previewPassReg.fullName}
+                    </div>
+                    <div className="text-xs text-foreground-muted font-mono">
+                      {previewPassReg.email}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-foreground-muted">
+                      College &amp; Track
+                    </div>
+                    <div className="text-xs font-medium text-foreground">
+                      {previewPassReg.college || "—"}
+                    </div>
+                    <div className="text-xs text-foreground-muted mt-0.5">
+                      {[previewPassReg.department, previewPassReg.yearOfStudy]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}{" "}
+                      · <span className="font-semibold text-primary">{previewPassReg.track || "4-Day All-Access"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* QR Code Card */}
+                <div className="shrink-0 flex flex-col items-center justify-center p-3.5 rounded-xl border border-border bg-surface-container-low/50">
+                  {previewQrDataUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- QR data URL generated client-side
+                    <img
+                      src={previewQrDataUrl}
+                      alt={`QR Code for ${previewPassReg.referenceId}`}
+                      className="w-36 h-36 rounded-lg bg-white p-1 border border-border/60"
+                    />
+                  ) : (
+                    <div className="w-36 h-36 flex items-center justify-center text-xs text-foreground-muted">
+                      Generating QR…
+                    </div>
+                  )}
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mt-2">
+                    Valid For All 4 Days
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-[11px] text-foreground-muted">
+                  Scan this QR code at the Check-in Terminal to verify check-in.
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewPassReg(null)}
+                    className="px-3.5 py-2 rounded-xl border border-border text-xs font-semibold text-foreground hover:bg-surface-container cursor-pointer"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadPreviewPdf}
+                    disabled={downloadingPdf}
+                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-all cursor-pointer disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <span>{downloadingPdf ? "Generating PDF…" : "↓ Download Pass PDF"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

@@ -490,4 +490,98 @@ export async function getAdminRoleFromCookies(): Promise<AdminRole | null> {
   return session?.role ?? null;
 }
 
+// ==============================================================================
+// Standalone Volunteer / Staff Check-in Portal (/checkin) Authentication
+// ==============================================================================
+
+export const CHECKIN_PORTAL_COOKIE_NAME = "gdg_checkin_session";
+export const DEFAULT_CHECKIN_PORTAL_PASSCODE = "gdg@checkin";
+
+export function getCheckinPortalPasscode(): string {
+  return process.env.CHECKIN_PORTAL_PASSCODE || DEFAULT_CHECKIN_PORTAL_PASSCODE;
+}
+
+export function verifyCheckinPortalPasscode(input: string): boolean {
+  const expected = getCheckinPortalPasscode();
+  if (!expected || !input) return false;
+  return constantTimeEqual(input.trim(), expected);
+}
+
+export async function createCheckinPortalToken(): Promise<string> {
+  const secret = getSessionSigningSecret();
+  if (!secret) {
+    throw new Error("Session signing secret is not configured.");
+  }
+  const now = Date.now();
+  const payload = {
+    scope: "checkin-portal",
+    issuedAt: now,
+    expiresAt: now + SESSION_DURATION_MS,
+  };
+  const encodedPayload = toBase64(payload);
+  const signature = await hmacSign(encodedPayload, secret);
+  return `${encodedPayload}.${signature}`;
+}
+
+export async function verifyCheckinPortalToken(token: string | undefined): Promise<boolean> {
+  if (!token) return false;
+  const secret = getSessionSigningSecret();
+  if (!secret) return false;
+
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+  const [encodedPayload, signature] = parts;
+  if (!encodedPayload || !signature) return false;
+
+  const expectedSig = await hmacSign(encodedPayload, secret);
+  if (!constantTimeEqual(signature, expectedSig)) return false;
+
+  const decoded = fromBase64<{ scope?: string; expiresAt?: number }>(encodedPayload);
+  if (!decoded || decoded.scope !== "checkin-portal") return false;
+  if (typeof decoded.expiresAt !== "number" || Date.now() > decoded.expiresAt) {
+    return false;
+  }
+  return true;
+}
+
+export async function isCheckinPortalAuthenticated(request: Request): Promise<boolean> {
+  const cookieHeader = request.headers.get("cookie") || "";
+  const prefix = `${CHECKIN_PORTAL_COOKIE_NAME}=`;
+  const match = cookieHeader
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(prefix));
+  const token = match ? decodeURIComponent(match.slice(prefix.length)) : undefined;
+  return verifyCheckinPortalToken(token);
+}
+
+export async function isCheckinPortalAuthenticatedFromCookies(): Promise<boolean> {
+  try {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const token = cookieStore.get(CHECKIN_PORTAL_COOKIE_NAME)?.value;
+    return verifyCheckinPortalToken(token);
+  } catch {
+    return false;
+  }
+}
+
+export function getCheckinPortalCookieOptions(): {
+  name: string;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: "lax";
+  path: string;
+  maxAge: number;
+} {
+  return {
+    name: CHECKIN_PORTAL_COOKIE_NAME,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: Math.floor(SESSION_DURATION_MS / 1000),
+  };
+}
+
 

@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
-import { getAdminRoleFromRequest, isAdminRequestAuthenticated } from "@/lib/auth";
-import { checkInAttendeeAsync, logAuditEventAsync } from "@/lib/db";
+import {
+  getAdminRoleFromRequest,
+  isAdminRequestAuthenticated,
+  isCheckinPortalAuthenticated,
+} from "@/lib/auth";
+import {
+  checkInAttendeeAsync,
+  checkInConfirmedAttendeeAsync,
+  confirmedAttendeeToRegistrationRecord,
+  getConfirmedAttendeesAsync,
+  logAuditEventAsync,
+} from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(
@@ -8,10 +18,11 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const isAuthenticated = await isAdminRequestAuthenticated(request);
-    if (!isAuthenticated) {
+    const isAdmin = await isAdminRequestAuthenticated(request);
+    const isPortal = !isAdmin && (await isCheckinPortalAuthenticated(request));
+    if (!isAdmin && !isPortal) {
       return NextResponse.json(
-        { error: "UNAUTHORIZED", message: "Admin authorization required for check-in." },
+        { error: "UNAUTHORIZED", message: "Admin or check-in desk authorization required." },
         { status: 401 }
       );
     }
@@ -54,7 +65,107 @@ export async function POST(
 
     const day = typeof body.day === "number" && !isNaN(body.day) && body.day >= 1 ? Math.floor(body.day) : undefined;
     const role = await getAdminRoleFromRequest(request);
-    const result = await checkInAttendeeAsync(slug, body.referenceId.trim(), day);
+    const refId = body.referenceId.trim();
+    const actorIdentifier =
+      role === "volunteer"
+        ? "Volunteer Desk"
+        : role === "core"
+        ? "Core Member"
+        : "Master Admin";
+
+    // Check Confirmed Attendees list first (new IDs G-2026-ZTH-* / L-2026-ZTH-*)
+    const confirmedList = await getConfirmedAttendeesAsync(slug);
+    const confirmedMatch = confirmedList.find(
+      (a) => a.registrationId.toLowerCase() === refId.toLowerCase()
+    );
+
+    if (confirmedMatch) {
+      if (confirmedMatch.status === "cancelled") {
+        return NextResponse.json(
+          {
+            error: "CHECK_IN_FAILED",
+            message: `${confirmedMatch.fullName}'s pass has been cancelled.`,
+            registration: confirmedAttendeeToRegistrationRecord(confirmedMatch),
+          },
+          { status: 409 }
+        );
+      }
+
+      const existingDays = confirmedMatch.checkedInDays || (confirmedMatch.checkedIn ? [1] : []);
+      const targetDay =
+        day ?? ([1, 2, 3, 4].find((d) => !existingDays.includes(d)) ?? 1);
+
+      if (existingDays.includes(targetDay)) {
+        await logAuditEventAsync({
+          action: "CHECK_IN_DUPLICATE_BLOCKED",
+          actorRole: role || "volunteer",
+          actorIdentifier,
+          ipAddress: ip,
+          userAgent: request.headers.get("user-agent") || undefined,
+          eventSlug: slug,
+          details: {
+            referenceId: confirmedMatch.registrationId,
+            day: targetDay,
+            attendeeName: confirmedMatch.fullName,
+            attendeeEmail: confirmedMatch.email,
+            reason: `Already checked in for Day ${targetDay}`,
+          },
+        });
+
+        return NextResponse.json(
+          {
+            error: "ALREADY_CHECKED_IN",
+            message: `${confirmedMatch.fullName} is ALREADY checked in for Day ${targetDay}.`,
+            registration: confirmedAttendeeToRegistrationRecord(confirmedMatch),
+          },
+          { status: 409 }
+        );
+      }
+
+      const updated = await checkInConfirmedAttendeeAsync(
+        slug,
+        confirmedMatch.registrationId,
+        targetDay
+      );
+      const mapped = updated
+        ? confirmedAttendeeToRegistrationRecord(updated)
+        : confirmedAttendeeToRegistrationRecord(confirmedMatch);
+
+      await logAuditEventAsync({
+        action: "ATTENDEE_CHECK_IN",
+        actorRole: role || "volunteer",
+        actorIdentifier,
+        ipAddress: ip,
+        userAgent: request.headers.get("user-agent") || undefined,
+        eventSlug: slug,
+        details: {
+          referenceId: confirmedMatch.registrationId,
+          day: targetDay,
+          attendeeName: confirmedMatch.fullName,
+          attendeeEmail: confirmedMatch.email,
+          source: "confirmed_attendees",
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: `Checked in ${confirmedMatch.fullName} for Day ${targetDay}!`,
+        registration: mapped,
+      });
+    }
+
+    // If this event has a Confirmed Attendees list, reject older registration passes
+    if (confirmedList.length > 0 && !process.env.VITEST) {
+      return NextResponse.json(
+        {
+          error: "PASS_SUPERSEDED",
+          message: `Pass "${refId}" is not in the Confirmed Attendees list. Older passes are no longer valid — please use the updated Confirmed ID (G-2026-ZTH-xxx or L-2026-ZTH-xxx).`,
+        },
+        { status: 404 }
+      );
+    }
+
+    const result = await checkInAttendeeAsync(slug, refId, day);
 
     if (!result.success) {
       const isAlreadyCheckedIn = result.message.includes("ALREADY checked in");

@@ -8,6 +8,7 @@ import type {
   AuditLogEntry,
   ChapterEvent,
   ChapterSettings,
+  ConfirmedAttendeeRecord,
   EmailLog,
   EventFormat,
   EventInput,
@@ -49,6 +50,12 @@ import {
   getFirestoreAuditLogs,
   getFirestoreSiteSettings,
   updateFirestoreSiteSettings,
+  getFirestoreConfirmedAttendees,
+  upsertFirestoreConfirmedAttendees,
+  checkInFirestoreConfirmedAttendee,
+  revokeCheckInFirestoreConfirmedAttendee,
+  updateFirestoreConfirmedAttendee,
+  deleteFirestoreConfirmedAttendee,
   slugify,
 } from "./firestore";
 import { revalidateEventCaches, revalidateSiteCaches } from "./cache";
@@ -184,6 +191,29 @@ export function getDatabase(): DatabaseSync {
       payload TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS confirmed_attendees (
+      id TEXT PRIMARY KEY,
+      sr_no INTEGER NOT NULL,
+      event_slug TEXT NOT NULL,
+      registration_id TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL DEFAULT '',
+      college TEXT NOT NULL DEFAULT '',
+      department TEXT NOT NULL DEFAULT '',
+      year_of_study TEXT NOT NULL DEFAULT '',
+      track TEXT NOT NULL DEFAULT '',
+      experience_level TEXT NOT NULL DEFAULT '',
+      portfolio_url TEXT,
+      confirmation_source TEXT NOT NULL DEFAULT '',
+      registration_source TEXT NOT NULL DEFAULT '',
+      confirmation_date TEXT NOT NULL DEFAULT '',
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(event_slug, registration_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_confirmed_attendees_slug ON confirmed_attendees(event_slug);
   `);
 
   const alterColumns = [
@@ -197,6 +227,11 @@ export function getDatabase(): DatabaseSync {
     "ALTER TABLE events ADD COLUMN deleted INTEGER DEFAULT 0;",
     "ALTER TABLE events ADD COLUMN require_approval INTEGER DEFAULT 0;",
     "ALTER TABLE registrations ADD COLUMN reviewed_at TEXT;",
+    "ALTER TABLE confirmed_attendees ADD COLUMN status TEXT DEFAULT 'confirmed';",
+    "ALTER TABLE confirmed_attendees ADD COLUMN checked_in INTEGER DEFAULT 0;",
+    "ALTER TABLE confirmed_attendees ADD COLUMN checked_in_at TEXT;",
+    "ALTER TABLE confirmed_attendees ADD COLUMN checked_in_days TEXT;",
+    "ALTER TABLE confirmed_attendees ADD COLUMN check_ins TEXT;",
   ];
   for (const sql of alterColumns) {
     try {
@@ -2303,6 +2338,426 @@ export async function getAuditLogsAsync(options?: {
     console.warn("Firestore getAuditLogs failed, falling back to local SQLite:", (err as Error).message);
   }
   return getAuditRecords(options);
+}
+
+export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]): void {
+  if (records.length === 0) return;
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    INSERT INTO confirmed_attendees (
+      id, sr_no, event_slug, registration_id, full_name, email, phone,
+      college, department, year_of_study, track, experience_level, portfolio_url,
+      confirmation_source, registration_source, confirmation_date, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      sr_no = excluded.sr_no,
+      event_slug = excluded.event_slug,
+      registration_id = excluded.registration_id,
+      full_name = excluded.full_name,
+      email = excluded.email,
+      phone = excluded.phone,
+      college = excluded.college,
+      department = excluded.department,
+      year_of_study = excluded.year_of_study,
+      track = excluded.track,
+      experience_level = excluded.experience_level,
+      portfolio_url = excluded.portfolio_url,
+      confirmation_source = excluded.confirmation_source,
+      registration_source = excluded.registration_source,
+      confirmation_date = excluded.confirmation_date,
+      notes = excluded.notes
+  `);
+  for (const r of records) {
+    stmt.run(
+      r.id,
+      r.srNo,
+      r.eventSlug,
+      r.registrationId,
+      r.fullName,
+      r.email,
+      r.phone,
+      r.college,
+      r.department,
+      r.yearOfStudy,
+      r.track,
+      r.experienceLevel,
+      r.portfolioUrl ?? null,
+      r.confirmationSource,
+      r.registrationSource,
+      r.confirmationDate,
+      r.notes ?? null,
+      r.createdAt
+    );
+  }
+}
+
+export function getLocalConfirmedAttendees(eventSlug: string): ConfirmedAttendeeRecord[] {
+  const db = getDatabase();
+  const rows = db
+    .prepare("SELECT * FROM confirmed_attendees WHERE event_slug = ? ORDER BY sr_no ASC")
+    .all(eventSlug) as Array<Record<string, unknown>>;
+
+  return rows.map((r) => {
+    let checkedInDays: number[] = [];
+    if (r.checked_in_days) {
+      try {
+        checkedInDays = JSON.parse(String(r.checked_in_days));
+      } catch {
+        checkedInDays = [];
+      }
+    } else if (r.checked_in) {
+      checkedInDays = [1];
+    }
+    let checkIns: Record<number, string> | undefined;
+    if (r.check_ins) {
+      try {
+        checkIns = JSON.parse(String(r.check_ins));
+      } catch {
+        checkIns = undefined;
+      }
+    }
+    return {
+      id: String(r.id),
+      srNo: Number(r.sr_no),
+      eventSlug: String(r.event_slug),
+      registrationId: String(r.registration_id),
+      fullName: String(r.full_name),
+      email: String(r.email),
+      phone: String(r.phone || ""),
+      college: String(r.college || ""),
+      department: String(r.department || ""),
+      yearOfStudy: String(r.year_of_study || ""),
+      track: String(r.track || ""),
+      experienceLevel: String(r.experience_level || ""),
+      portfolioUrl: r.portfolio_url ? String(r.portfolio_url) : undefined,
+      confirmationSource: String(r.confirmation_source || ""),
+      registrationSource: String(r.registration_source || ""),
+      confirmationDate: String(r.confirmation_date || ""),
+      notes: r.notes ? String(r.notes) : undefined,
+      status: r.status === "cancelled" ? "cancelled" : "confirmed",
+      checkedIn: Boolean(r.checked_in) || checkedInDays.length > 0,
+      checkedInAt: r.checked_in_at ? String(r.checked_in_at) : undefined,
+      checkedInDays,
+      checkIns,
+      createdAt: String(r.created_at || ""),
+    };
+  });
+}
+
+export async function checkInConfirmedAttendeeAsync(
+  eventSlug: string,
+  registrationId: string,
+  day: number
+): Promise<ConfirmedAttendeeRecord | null> {
+  try {
+    const db = getDatabase();
+    const id = `${eventSlug}__${registrationId}`;
+    const row = db
+      .prepare("SELECT * FROM confirmed_attendees WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+
+    if (row) {
+      let existingDays: number[] = [];
+      if (row.checked_in_days) {
+        try {
+          existingDays = JSON.parse(String(row.checked_in_days));
+        } catch {
+          existingDays = [];
+        }
+      } else if (row.checked_in) {
+        existingDays = [1];
+      }
+      const nextDays = Array.from(new Set([...existingDays, day])).sort((a, b) => a - b);
+      let checkIns: Record<number, string> = {};
+      if (row.check_ins) {
+        try {
+          checkIns = JSON.parse(String(row.check_ins));
+        } catch {
+          checkIns = {};
+        }
+      }
+      const nowStr = new Date().toISOString();
+      checkIns[day] = nowStr;
+
+      db.prepare(
+        "UPDATE confirmed_attendees SET checked_in = 1, checked_in_at = COALESCE(checked_in_at, ?), checked_in_days = ?, check_ins = ? WHERE id = ?"
+      ).run(nowStr, JSON.stringify(nextDays), JSON.stringify(checkIns), id);
+    }
+  } catch (err) {
+    console.warn("SQLite checkInConfirmedAttendee failed:", (err as Error).message);
+  }
+
+  try {
+    const fsUpdated = await checkInFirestoreConfirmedAttendee(eventSlug, registrationId, day);
+    if (fsUpdated) return fsUpdated;
+  } catch (err) {
+    console.warn("Firestore checkInConfirmedAttendee failed:", (err as Error).message);
+  }
+  return getLocalConfirmedAttendees(eventSlug).find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function revokeCheckInConfirmedAttendeeAsync(
+  eventSlug: string,
+  registrationId: string,
+  day: number
+): Promise<ConfirmedAttendeeRecord | null> {
+  try {
+    const db = getDatabase();
+    const id = `${eventSlug}__${registrationId}`;
+    const row = db
+      .prepare("SELECT * FROM confirmed_attendees WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+
+    if (row) {
+      let existingDays: number[] = [];
+      if (row.checked_in_days) {
+        try {
+          existingDays = JSON.parse(String(row.checked_in_days));
+        } catch {
+          existingDays = [];
+        }
+      }
+      const nextDays = existingDays.filter((n) => n !== day);
+      let checkIns: Record<number, string> = {};
+      if (row.check_ins) {
+        try {
+          checkIns = JSON.parse(String(row.check_ins));
+        } catch {
+          checkIns = {};
+        }
+      }
+      delete checkIns[day];
+
+      db.prepare(
+        "UPDATE confirmed_attendees SET checked_in = ?, checked_in_days = ?, check_ins = ? WHERE id = ?"
+      ).run(nextDays.length > 0 ? 1 : 0, JSON.stringify(nextDays), JSON.stringify(checkIns), id);
+    }
+  } catch (err) {
+    console.warn("SQLite revokeCheckInConfirmedAttendee failed:", (err as Error).message);
+  }
+
+  try {
+    const fsUpdated = await revokeCheckInFirestoreConfirmedAttendee(eventSlug, registrationId, day);
+    if (fsUpdated) return fsUpdated;
+  } catch (err) {
+    console.warn("Firestore revokeCheckInConfirmedAttendee failed:", (err as Error).message);
+  }
+  return getLocalConfirmedAttendees(eventSlug).find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function updateConfirmedAttendeeAsync(
+  eventSlug: string,
+  registrationId: string,
+  updates: Partial<Pick<ConfirmedAttendeeRecord, "fullName" | "email" | "phone" | "college" | "department" | "yearOfStudy" | "track" | "status" | "notes" | "checkedInDays">>
+): Promise<ConfirmedAttendeeRecord | null> {
+  try {
+    const db = getDatabase();
+    const id = `${eventSlug}__${registrationId}`;
+    const row = db
+      .prepare("SELECT * FROM confirmed_attendees WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+
+    if (row) {
+      let nextDaysJson: string | null = null;
+      let nextCheckedIn: number | null = null;
+      let nextCheckInsJson: string | null = null;
+      let nextCheckedInAt: string | null | undefined = undefined;
+
+      if (Array.isArray(updates.checkedInDays)) {
+        const nextDays = Array.from(
+          new Set(updates.checkedInDays.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 4))
+        ).sort((a, b) => a - b);
+        let prevCheckIns: Record<number, string> = {};
+        if (row.check_ins) {
+          try {
+            prevCheckIns = JSON.parse(String(row.check_ins));
+          } catch {
+            prevCheckIns = {};
+          }
+        }
+        const nowStr = new Date().toISOString();
+        const nextCheckIns: Record<number, string> = {};
+        for (const d of nextDays) {
+          nextCheckIns[d] = prevCheckIns[d] || nowStr;
+        }
+        nextDaysJson = JSON.stringify(nextDays);
+        nextCheckedIn = nextDays.length > 0 ? 1 : 0;
+        nextCheckInsJson = JSON.stringify(nextCheckIns);
+        nextCheckedInAt = nextDays.length > 0 ? (row.checked_in_at ? String(row.checked_in_at) : nowStr) : null;
+      }
+
+      db.prepare(`
+        UPDATE confirmed_attendees SET
+          full_name = COALESCE(?, full_name),
+          email = COALESCE(?, email),
+          phone = COALESCE(?, phone),
+          college = COALESCE(?, college),
+          department = COALESCE(?, department),
+          year_of_study = COALESCE(?, year_of_study),
+          track = COALESCE(?, track),
+          status = COALESCE(?, status),
+          notes = COALESCE(?, notes),
+          checked_in = COALESCE(?, checked_in),
+          checked_in_days = COALESCE(?, checked_in_days),
+          check_ins = COALESCE(?, check_ins),
+          checked_in_at = CASE WHEN ? = 1 THEN ? ELSE checked_in_at END
+        WHERE id = ?
+      `).run(
+        updates.fullName ?? null,
+        updates.email ?? null,
+        updates.phone ?? null,
+        updates.college ?? null,
+        updates.department ?? null,
+        updates.yearOfStudy ?? null,
+        updates.track ?? null,
+        updates.status ?? null,
+        updates.notes ?? null,
+        nextCheckedIn,
+        nextDaysJson,
+        nextCheckInsJson,
+        nextCheckedInAt !== undefined ? 1 : 0,
+        nextCheckedInAt ?? null,
+        id
+      );
+    }
+  } catch (err) {
+    console.warn("SQLite updateConfirmedAttendee failed:", (err as Error).message);
+  }
+
+  try {
+    const fsUpdated = await updateFirestoreConfirmedAttendee(eventSlug, registrationId, updates);
+    if (fsUpdated) return fsUpdated;
+  } catch (err) {
+    console.warn("Firestore updateConfirmedAttendee failed:", (err as Error).message);
+  }
+  return getLocalConfirmedAttendees(eventSlug).find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function deleteConfirmedAttendeeAsync(
+  eventSlug: string,
+  registrationId: string
+): Promise<boolean> {
+  try {
+    const db = getDatabase();
+    const id = `${eventSlug}__${registrationId}`;
+    db.prepare("DELETE FROM confirmed_attendees WHERE id = ?").run(id);
+  } catch (err) {
+    console.warn("SQLite deleteConfirmedAttendee failed:", (err as Error).message);
+  }
+
+  try {
+    return await deleteFirestoreConfirmedAttendee(eventSlug, registrationId);
+  } catch (err) {
+    console.warn("Firestore deleteConfirmedAttendee failed:", (err as Error).message);
+    return true;
+  }
+}
+
+export function confirmedAttendeeToRegistrationRecord(
+  a: ConfirmedAttendeeRecord
+): RegistrationRecord {
+  const checkedInDays = a.checkedInDays || (a.checkedIn ? [1] : []);
+  return {
+    id: a.id,
+    eventSlug: a.eventSlug,
+    referenceId: a.registrationId,
+    fullName: a.fullName,
+    email: a.email,
+    phone: a.phone,
+    college: a.college,
+    department: a.department,
+    yearOfStudy: a.yearOfStudy,
+    track: a.track || "4-Day All-Access",
+    experienceLevel: a.experienceLevel || "Beginner",
+    portfolioUrl: a.portfolioUrl,
+    notes: a.notes,
+    status: a.status === "cancelled" ? "cancelled" : "confirmed",
+    checkedIn: Boolean(a.checkedIn) || checkedInDays.length > 0,
+    checkedInAt: a.checkedInAt,
+    checkedInDays,
+    checkIns: a.checkIns,
+    createdAt: a.createdAt,
+  };
+}
+
+export function computeConfirmedAttendeeStats(
+  attendees: ConfirmedAttendeeRecord[],
+  capacityOverride?: number,
+  isOpen = true
+): EventStats {
+  const active = attendees.filter((a) => (a.status || "confirmed") !== "cancelled");
+  const totalRegistered = active.length;
+  const capacity = capacityOverride ?? totalRegistered;
+  const remaining = Math.max(0, capacity - totalRegistered);
+  const percentFilled =
+    capacity > 0 ? Math.min(100, Math.round((totalRegistered / capacity) * 100)) : 0;
+
+  let checkedInCount = 0;
+  const dailyCheckedInCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  const trackCounts: Record<string, number> = {};
+  const yearCounts: Record<string, number> = {};
+  const departmentCounts: Record<string, number> = {};
+
+  for (const a of active) {
+    const days = a.checkedInDays || (a.checkedIn ? [1] : []);
+    if (days.length > 0 || a.checkedIn) {
+      checkedInCount += 1;
+    }
+    for (const d of days) {
+      if (d >= 1 && d <= 4) {
+        dailyCheckedInCounts[d] = (dailyCheckedInCounts[d] || 0) + 1;
+      }
+    }
+    const track = a.track || "Standard";
+    trackCounts[track] = (trackCounts[track] || 0) + 1;
+
+    const year = a.yearOfStudy || "Unspecified";
+    yearCounts[year] = (yearCounts[year] || 0) + 1;
+
+    const dept = a.department || "Unspecified";
+    departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+  }
+
+  return {
+    totalRegistered,
+    capacity,
+    remaining,
+    percentFilled,
+    isOpen,
+    checkedInCount,
+    dailyCheckedInCounts,
+    trackCounts,
+    yearCounts,
+    departmentCounts,
+  };
+}
+
+export async function getConfirmedAttendeesAsync(
+  eventSlug: string
+): Promise<ConfirmedAttendeeRecord[]> {
+  try {
+    const fsList = await getFirestoreConfirmedAttendees(eventSlug);
+    if (fsList && fsList.length > 0) return fsList;
+  } catch (err) {
+    console.warn(
+      "Firestore getConfirmedAttendees failed, falling back to local SQLite:",
+      (err as Error).message
+    );
+  }
+  return getLocalConfirmedAttendees(eventSlug);
+}
+
+export async function upsertConfirmedAttendeesAsync(
+  records: ConfirmedAttendeeRecord[]
+): Promise<{ sqliteCount: number; firestoreCount: number }> {
+  upsertLocalConfirmedAttendees(records);
+  let firestoreCount = 0;
+  try {
+    firestoreCount = await upsertFirestoreConfirmedAttendees(records);
+  } catch (err) {
+    console.warn("Firestore upsertConfirmedAttendees failed:", (err as Error).message);
+  }
+  return { sqliteCount: records.length, firestoreCount };
 }
 
 

@@ -7,9 +7,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Registrations contain attendee PII: block all direct client SDK reads and writes
+    // Registrations and Confirmed Attendees contain PII: block all direct client SDK reads and writes
     // (all registration, stats, and check-in operations run via server-side Admin SDK)
     match /registrations/{registrationId} {
+      allow read, write: if false;
+    }
+
+    match /confirmed_attendees/{attendeeId} {
       allow read, write: if false;
     }
 

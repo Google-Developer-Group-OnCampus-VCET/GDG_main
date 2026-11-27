@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { getEventBySlugAsync } from "@/lib/db";
+import { getConfirmedAttendeesAsync, getEventBySlugAsync } from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
+import type { ConfirmedAttendeeRecord } from "@/types";
 import { AdminHeader } from "@/components/admin/admin-header";
+import { ConfirmedAttendeesTable } from "@/components/admin/confirmed-attendees-table";
 import { AdminPageSkeleton } from "@/components/skeletons/admin-skeletons";
 
 export function generateStaticParams() {
@@ -28,6 +30,20 @@ async function AdminConfirmedAttendeesContent({ slug }: { slug: string }) {
 
   const role = await getAdminRoleFromCookies();
 
+  let attendees: ConfirmedAttendeeRecord[] = [];
+  try {
+    attendees = await getConfirmedAttendeesAsync(slug);
+  } catch (err) {
+    console.warn("Failed to load confirmed attendees:", err);
+  }
+
+  const gdgIdCount = attendees.filter((a) =>
+    a.registrationId.startsWith("G-")
+  ).length;
+  const lumaIdCount = attendees.filter((a) =>
+    a.registrationId.startsWith("L-")
+  ).length;
+
   return (
     <div className="min-h-screen bg-surface-container-low flex flex-col">
       <AdminHeader
@@ -48,11 +64,25 @@ async function AdminConfirmedAttendeesContent({ slug }: { slug: string }) {
               Confirmed Attendees
             </h1>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="bg-white border border-border px-3.5 py-1.5 rounded-full text-xs font-semibold">
+              <span>Total Confirmed: </span>
+              <span className="text-primary font-bold">{attendees.length}</span>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-xs font-semibold">
+              G-IDs: {gdgIdCount}
+            </div>
+            <div className="bg-purple-50 border border-purple-200 text-purple-800 px-3 py-1.5 rounded-full text-xs font-semibold">
+              L-IDs: {lumaIdCount}
+            </div>
+          </div>
         </div>
 
-        <section
-          aria-label="Confirmed Attendees"
-          className="flex-1 min-h-[360px] rounded-2xl border border-border bg-white shadow-2xs"
+        <ConfirmedAttendeesTable
+          initialAttendees={attendees}
+          eventSlug={slug}
+          role={role}
         />
       </main>
     </div>

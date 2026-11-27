@@ -8,6 +8,7 @@ import type {
   AuditLogEntry,
   ChapterEvent,
   ChapterSettings,
+  ConfirmedAttendeeRecord,
   EmailLog,
   EventInput,
   EventUpdateInput,
@@ -1998,5 +1999,225 @@ export async function updateFirestoreSiteSettings(
     console.warn("Firestore updateSiteSettings failed:", (err as Error).message);
     return null;
   }
+}
+
+export async function getFirestoreConfirmedAttendees(
+  eventSlug: string
+): Promise<ConfirmedAttendeeRecord[] | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    const snap = await db
+      .collection("confirmed_attendees")
+      .where("eventSlug", "==", eventSlug)
+      .get();
+
+    const list: ConfirmedAttendeeRecord[] = snap.docs
+      .map((doc) => {
+        const d = doc.data();
+        const checkedInDays = Array.isArray(d.checkedInDays)
+          ? d.checkedInDays.map(Number).filter((n) => n >= 1 && n <= 4)
+          : d.checkedIn
+            ? [1]
+            : [];
+        return {
+          id: doc.id,
+          srNo: Number(d.srNo || 0),
+          eventSlug: String(d.eventSlug || eventSlug),
+          registrationId: String(d.registrationId || ""),
+          fullName: String(d.fullName || ""),
+          email: String(d.email || ""),
+          phone: String(d.phone || ""),
+          college: String(d.college || ""),
+          department: String(d.department || ""),
+          yearOfStudy: String(d.yearOfStudy || ""),
+          track: String(d.track || ""),
+          experienceLevel: String(d.experienceLevel || ""),
+          portfolioUrl: d.portfolioUrl ? String(d.portfolioUrl) : undefined,
+          confirmationSource: String(d.confirmationSource || ""),
+          registrationSource: String(d.registrationSource || ""),
+          confirmationDate: String(d.confirmationDate || ""),
+          notes: d.notes ? String(d.notes) : undefined,
+          status: (d.status === "cancelled" ? "cancelled" : "confirmed") as "confirmed" | "cancelled",
+          checkedIn: Boolean(d.checkedIn) || checkedInDays.length > 0,
+          checkedInAt: d.checkedInAt ? String(d.checkedInAt) : undefined,
+          checkedInDays,
+          checkIns: (d.checkIns as Record<number, string>) || undefined,
+          createdAt: String(d.createdAt || ""),
+        };
+      })
+      .sort((a, b) => a.srNo - b.srNo);
+
+    return list;
+  } catch (err) {
+    console.warn("Firestore getConfirmedAttendees failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function upsertFirestoreConfirmedAttendees(
+  records: ConfirmedAttendeeRecord[]
+): Promise<number> {
+  const db = getAdminDb();
+  if (!db || records.length === 0) return 0;
+
+  let written = 0;
+  const BATCH_LIMIT = 450;
+  const slugs = new Set<string>();
+
+  for (let i = 0; i < records.length; i += BATCH_LIMIT) {
+    const chunk = records.slice(i, i + BATCH_LIMIT);
+    const batch = db.batch();
+    for (const rec of chunk) {
+      slugs.add(rec.eventSlug);
+      const ref = db.collection("confirmed_attendees").doc(rec.id);
+      const cleanPayload = Object.fromEntries(
+        Object.entries(rec).filter(([, v]) => v !== undefined)
+      );
+      batch.set(ref, cleanPayload, { merge: true });
+    }
+    await batch.commit();
+    written += chunk.length;
+  }
+
+  for (const slug of slugs) {
+    invalidateCache(`fs:confirmed-attendees:${slug}`);
+  }
+  return written;
+}
+
+export async function checkInFirestoreConfirmedAttendee(
+  eventSlug: string,
+  registrationId: string,
+  day: number
+): Promise<ConfirmedAttendeeRecord | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const docId = `${eventSlug}__${registrationId}`;
+  const ref = db.collection("confirmed_attendees").doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const d = snap.data() || {};
+  const existingDays = Array.isArray(d.checkedInDays)
+    ? d.checkedInDays.map(Number).filter((n) => n >= 1 && n <= 4)
+    : d.checkedIn
+      ? [1]
+      : [];
+  const nextDays = Array.from(new Set([...existingDays, day])).sort((a, b) => a - b);
+  const nowStr = new Date().toISOString();
+  const nextCheckIns = { ...(d.checkIns || {}), [day]: nowStr };
+
+  await ref.set(
+    {
+      checkedIn: true,
+      checkedInAt: d.checkedInAt || nowStr,
+      checkedInDays: nextDays,
+      checkIns: nextCheckIns,
+    },
+    { merge: true }
+  );
+
+  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
+  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function revokeCheckInFirestoreConfirmedAttendee(
+  eventSlug: string,
+  registrationId: string,
+  day: number
+): Promise<ConfirmedAttendeeRecord | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const docId = `${eventSlug}__${registrationId}`;
+  const ref = db.collection("confirmed_attendees").doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const d = snap.data() || {};
+  const existingDays = Array.isArray(d.checkedInDays)
+    ? d.checkedInDays.map(Number).filter((n) => n >= 1 && n <= 4)
+    : d.checkedIn
+      ? [1]
+      : [];
+  const nextDays = existingDays.filter((n) => n !== day);
+  const nextCheckIns = { ...(d.checkIns || {}) };
+  delete nextCheckIns[day];
+
+  await ref.set(
+    {
+      checkedIn: nextDays.length > 0,
+      checkedInAt: nextDays.length > 0 ? d.checkedInAt || null : null,
+      checkedInDays: nextDays,
+      checkIns: nextCheckIns,
+    },
+    { merge: true }
+  );
+
+  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
+  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function updateFirestoreConfirmedAttendee(
+  eventSlug: string,
+  registrationId: string,
+  updates: Partial<Pick<ConfirmedAttendeeRecord, "fullName" | "email" | "phone" | "college" | "department" | "yearOfStudy" | "track" | "status" | "notes" | "checkedInDays">>
+): Promise<ConfirmedAttendeeRecord | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const docId = `${eventSlug}__${registrationId}`;
+  const ref = db.collection("confirmed_attendees").doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const existing = snap.data() || {};
+  const cleanUpdates: Record<string, unknown> = Object.fromEntries(
+    Object.entries(updates).filter(([k, v]) => k !== "checkedInDays" && v !== undefined)
+  );
+
+  if (Array.isArray(updates.checkedInDays)) {
+    const nextDays = Array.from(
+      new Set(updates.checkedInDays.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 4))
+    ).sort((a, b) => a - b);
+    const nowStr = new Date().toISOString();
+    const prevCheckIns = (existing.checkIns as Record<number, string>) || {};
+    const nextCheckIns: Record<number, string> = {};
+    for (const d of nextDays) {
+      nextCheckIns[d] = prevCheckIns[d] || nowStr;
+    }
+    cleanUpdates.checkedInDays = nextDays;
+    cleanUpdates.checkedIn = nextDays.length > 0;
+    cleanUpdates.checkedInAt = nextDays.length > 0 ? existing.checkedInAt || nowStr : null;
+    cleanUpdates.checkIns = nextCheckIns;
+  }
+
+  await ref.set(cleanUpdates, { merge: true });
+
+  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
+  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
+  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+}
+
+export async function deleteFirestoreConfirmedAttendee(
+  eventSlug: string,
+  registrationId: string
+): Promise<boolean> {
+  const db = getAdminDb();
+  if (!db) return false;
+
+  const docId = `${eventSlug}__${registrationId}`;
+  const ref = db.collection("confirmed_attendees").doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return false;
+
+  await ref.delete();
+  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
+  return true;
 }
 

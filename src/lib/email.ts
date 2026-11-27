@@ -1,7 +1,16 @@
 import crypto from "node:crypto";
 import nodemailer from "nodemailer";
+import QRCode from "qrcode";
 import type { RegistrationRecord, EmailLog } from "@/types";
 import { getEventBySlugAsync, logEmailRecordAsync } from "@/lib/db";
+import { generatePassPdfBytes } from "@/lib/pass-pdf";
+
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer | Uint8Array;
+  contentType?: string;
+  cid?: string;
+}
 
 export interface SendEmailPayload {
   to: string | string[];
@@ -10,6 +19,7 @@ export interface SendEmailPayload {
   html: string;
   text: string;
   replyTo?: string;
+  attachments?: EmailAttachment[];
 }
 
 function escapeHtml(value: string): string {
@@ -68,6 +78,16 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
         html: payload.html,
         text: payload.text,
         replyTo,
+        ...(payload.attachments && payload.attachments.length > 0
+          ? {
+              attachments: payload.attachments.map((att) => ({
+                filename: att.filename,
+                content: Buffer.from(att.content),
+                ...(att.contentType ? { contentType: att.contentType } : {}),
+                ...(att.cid ? { cid: att.cid } : {}),
+              })),
+            }
+          : {}),
       });
 
       return { success: true, messageId: info.messageId };
@@ -95,6 +115,16 @@ export async function sendEmail(payload: SendEmailPayload): Promise<SendEmailRes
           html: payload.html,
           text: payload.text,
           reply_to: replyTo,
+          ...(payload.attachments && payload.attachments.length > 0
+            ? {
+                attachments: payload.attachments
+                  .filter((att) => !att.cid)
+                  .map((att) => ({
+                    filename: att.filename,
+                    content: Buffer.from(att.content).toString("base64"),
+                  })),
+              }
+            : {}),
         }),
       });
 
@@ -281,6 +311,14 @@ export function generateAnnouncementEmailHtml(options: {
   ctaText?: string;
   ctaUrl?: string;
   origin?: string;
+  attachPassDetails?: {
+    fullName: string;
+    referenceId: string;
+    track?: string;
+    college?: string;
+    datesText?: string;
+    venueText?: string;
+  };
 }): { html: string; text: string } {
   const {
     eventTitle,
@@ -292,6 +330,7 @@ export function generateAnnouncementEmailHtml(options: {
     ctaText,
     ctaUrl,
     origin = "https://gdg-vcet.edu.in",
+    attachPassDetails,
   } = options;
 
   // Convert plain text newlines to clean HTML paragraphs
@@ -355,6 +394,41 @@ export function generateAnnouncementEmailHtml(options: {
       }
 
       ${
+        attachPassDetails
+          ? `<div style="margin-top: 24px; border: 1px solid #cbd5e1; border-radius: 14px; overflow: hidden; background: #ffffff;">
+              <div style="height: 5px; background: linear-gradient(90deg, #4285F4 25%, #EA4335 25% 50%, #FBBC04 50% 75%, #34A853 75%);"></div>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="padding: 18px 20px;">
+                <tr>
+                  <td style="vertical-align: top; padding-right: 16px;">
+                    <div style="font-size: 10px; font-weight: 800; color: #1a73e8; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px;">
+                      Official Confirmed Workshop Pass
+                    </div>
+                    <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+                      ${escapeHtml(attachPassDetails.fullName)}
+                    </div>
+                    <div style="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; font-weight: 800; color: #1a73e8; background: #eff6ff; border: 1px solid #bfdbfe; display: inline-block; padding: 4px 10px; border-radius: 8px; margin: 4px 0 10px 0;">
+                      #${escapeHtml(attachPassDetails.referenceId)}
+                    </div>
+                    <div style="font-size: 12px; color: #475569; line-height: 1.5;">
+                      ${attachPassDetails.track ? `<strong>Track:</strong> ${escapeHtml(attachPassDetails.track)}<br>` : ""}
+                      ${attachPassDetails.college ? `<strong>College:</strong> ${escapeHtml(attachPassDetails.college)}<br>` : ""}
+                      ${attachPassDetails.datesText ? `<strong>Dates:</strong> ${escapeHtml(attachPassDetails.datesText)}<br>` : ""}
+                      <span style="color: #059669; font-weight: 700;">&#10003; Valid for All 4 Days &middot; PDF Pass Attached</span>
+                    </div>
+                  </td>
+                  <td style="width: 132px; text-align: center; vertical-align: middle; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px;">
+                    <img src="cid:attendee-pass-qr" width="112" height="112" alt="Check-in QR Code" style="display: block; margin: 0 auto;" />
+                    <div style="font-size: 9px; font-weight: 700; color: #475569; margin-top: 6px; letter-spacing: 0.4px;">
+                      SCAN AT CHECK-IN
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </div>`
+          : ""
+      }
+
+      ${
         passUrl && referenceId
           ? `<div class="pass-box">
               <strong>Your Pass Reference ID:</strong> <span style="font-family: monospace; font-weight: 700; color: #0f172a;">#${referenceId}</span><br>
@@ -394,19 +468,59 @@ export async function sendAttendeePassEmail(options: {
   registration: RegistrationRecord;
   origin?: string;
   sender?: string;
+  datesText?: string;
+  venueText?: string;
 }): Promise<{ success: boolean; simulated?: boolean; message: string }> {
-  const { eventTitle, registration, origin, sender } = options;
-  const { subject, html, text } = generatePassEmailHtml({
+  const {
     eventTitle,
     registration,
     origin,
+    sender,
+    datesText = "Dec 1 – Dec 4, 2026",
+    venueText = "Vidyavardhini's College of Engineering and Technology, Vasai",
+  } = options;
+  const { subject, html, text } = generatePassEmailHtml({
+    eventTitle,
+    registration,
+    datesText,
+    venueText,
+    origin,
   });
+
+  const attachments: EmailAttachment[] = [];
+  try {
+    const pdfBytes = await generatePassPdfBytes({
+      eventTitle,
+      datesText,
+      venueText,
+      registration,
+    });
+    attachments.push({
+      filename: `GDG-VCET-Pass-${registration.referenceId}.pdf`,
+      content: pdfBytes,
+      contentType: "application/pdf",
+    });
+    const qrBuffer = await QRCode.toBuffer(registration.referenceId, {
+      width: 280,
+      margin: 1,
+      color: { dark: "#1A1B1E", light: "#FFFFFF" },
+    });
+    attachments.push({
+      filename: `pass-qr-${registration.referenceId}.png`,
+      content: qrBuffer,
+      contentType: "image/png",
+      cid: "attendee-pass-qr",
+    });
+  } catch (attErr) {
+    console.warn("Could not generate pass PDF/QR attachment:", attErr);
+  }
 
   const sendResult = await sendEmail({
     to: registration.email,
     subject,
     html,
     text,
+    attachments,
   });
 
   const logRecord: EmailLog = {

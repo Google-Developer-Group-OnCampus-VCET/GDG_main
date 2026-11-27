@@ -1,7 +1,12 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
-import { getEventBySlugAsync, getEventStatsAsync } from "@/lib/db";
+import {
+  computeConfirmedAttendeeStats,
+  getConfirmedAttendeesAsync,
+  getEventBySlugAsync,
+  getEventStatsAsync,
+} from "@/lib/db";
 import { getAdminRoleFromCookies } from "@/lib/auth";
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AnalyticsView } from "@/components/admin/analytics-view";
@@ -29,7 +34,16 @@ async function AdminAnalyticsContent({ slug }: { slug: string }) {
 
   let stats;
   try {
-    stats = await getEventStatsAsync(slug);
+    const confirmed = await getConfirmedAttendeesAsync(slug);
+    if (confirmed.length > 0) {
+      stats = computeConfirmedAttendeeStats(
+        confirmed,
+        confirmed.length,
+        event.isRegistrationOpen ?? true
+      );
+    } else {
+      stats = await getEventStatsAsync(slug);
+    }
   } catch {
     const fallbackCap = event.capacity ?? event.workshop?.capacity ?? 135;
     stats = {

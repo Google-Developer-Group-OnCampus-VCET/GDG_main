@@ -115,28 +115,8 @@ export function AdminHeader({
           )}
         </Link>
 
-        {/* Desktop nav pill row — md+ — scrollable so it never wraps */}
-        {eventSlug && (
-          <nav className="hidden md:flex flex-1 items-center gap-0.5 overflow-x-auto no-scrollbar bg-surface-container-low px-1.5 py-1 rounded-full border border-border/50 mx-2 max-w-max">
-            {navLinks
-              .filter((l) => l.show)
-              .map(({ tab, label, href }) => (
-                <Link
-                  key={tab}
-                  href={href}
-                  prefetch={false}
-                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap ${
-                    currentTab === tab ? pillActive : pillInactive
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
-          </nav>
-        )}
-
         {/* Spacer pushes right actions to the edge */}
-        <div className="flex-1 md:hidden" />
+        <div className="flex-1" />
 
         {/* Right actions */}
         <div className="flex items-center gap-1 shrink-0">
@@ -227,6 +207,33 @@ export function AdminHeader({
           </div>
         </div>
       </div>
+
+      {/* ── Desktop nav bar (md+) ── */}
+      {eventSlug && (
+        <div className="hidden md:block border-t border-border/60 bg-surface-container-low/60">
+          <nav
+            aria-label="Admin Console Navigation"
+            className="mx-auto flex max-w-(--container-max) items-center gap-1.5 overflow-x-auto no-scrollbar px-6 py-2"
+          >
+            {navLinks
+              .filter((l) => l.show)
+              .map(({ tab, label, href }) => (
+                <Link
+                  key={tab}
+                  href={href}
+                  prefetch={false}
+                  className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs transition-all whitespace-nowrap ${
+                    currentTab === tab
+                      ? pillActive
+                      : "font-medium text-foreground-muted hover:text-foreground hover:bg-white"
+                  }`}
+                >
+                  {label}
+                </Link>
+              ))}
+          </nav>
+        </div>
+      )}
 
       {/* ── Mobile nav scroll strip (below md) ── */}
       {eventSlug && (

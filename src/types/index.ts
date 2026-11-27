@@ -232,6 +232,32 @@ export interface RegistrationUpdateInput {
   status?: RegistrationStatus;
 }
 
+export interface ConfirmedAttendeeRecord {
+  id: string;
+  srNo: number;
+  eventSlug: string;
+  registrationId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  college: string;
+  department: string;
+  yearOfStudy: string;
+  track: string;
+  experienceLevel: string;
+  portfolioUrl?: string;
+  confirmationSource: string;
+  registrationSource: string;
+  confirmationDate: string;
+  notes?: string;
+  status?: "confirmed" | "cancelled";
+  checkedIn?: boolean;
+  checkedInAt?: string;
+  checkedInDays?: number[];
+  checkIns?: Record<number, string>;
+  createdAt: string;
+}
+
 export interface LearningArea {
   id: string;
   title: string;
