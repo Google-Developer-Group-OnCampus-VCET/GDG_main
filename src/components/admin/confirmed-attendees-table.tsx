@@ -44,6 +44,10 @@ export function ConfirmedAttendeesTable({
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [attendanceFilter, setAttendanceFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
+  const [trackFilter, setTrackFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [copySuccess, setCopySuccess] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
@@ -148,20 +152,72 @@ export function ConfirmedAttendeesTable({
   const sources = useMemo(
     () =>
       Array.from(
-        new Set(attendees.map((a) => a.confirmationSource).filter(Boolean))
+        new Set(attendees.map((a) => a.confirmationSource?.trim()).filter(Boolean))
       ).sort(),
     [attendees]
   );
+
+  const departments = useMemo(
+    () =>
+      Array.from(
+        new Set(attendees.map((a) => a.department?.trim()).filter(Boolean))
+      ).sort(),
+    [attendees]
+  );
+
+  const years = useMemo(
+    () =>
+      Array.from(
+        new Set(attendees.map((a) => a.yearOfStudy?.trim()).filter(Boolean))
+      ).sort(),
+    [attendees]
+  );
+
+  const tracks = useMemo(
+    () =>
+      Array.from(
+        new Set(attendees.map((a) => a.track?.trim()).filter(Boolean))
+      ).sort(),
+    [attendees]
+  );
+
+  const isFiltered =
+    search.trim() !== "" ||
+    sourceFilter !== "all" ||
+    attendanceFilter !== "all" ||
+    departmentFilter !== "all" ||
+    yearFilter !== "all" ||
+    trackFilter !== "all" ||
+    statusFilter !== "all";
+
+  const resetFilters = () => {
+    setSearch("");
+    setSourceFilter("all");
+    setAttendanceFilter("all");
+    setDepartmentFilter("all");
+    setYearFilter("all");
+    setTrackFilter("all");
+    setStatusFilter("all");
+    setPage(1);
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return attendees.filter((a) => {
       if (sourceFilter !== "all" && a.confirmationSource !== sourceFilter) return false;
+      if (departmentFilter !== "all" && a.department !== departmentFilter) return false;
+      if (yearFilter !== "all" && a.yearOfStudy !== yearFilter) return false;
+      if (trackFilter !== "all" && a.track !== trackFilter) return false;
+      if (statusFilter !== "all" && (a.status || "confirmed") !== statusFilter) return false;
 
       const attendedDays = a.checkedInDays || (a.checkedIn ? [1] : []);
       if (attendanceFilter === "checked_in" && attendedDays.length === 0) return false;
       if (attendanceFilter === "not_checked_in" && attendedDays.length > 0) return false;
       if (attendanceFilter === "completed_4" && attendedDays.length < 4) return false;
+      if (attendanceFilter === "day_1" && !attendedDays.includes(1)) return false;
+      if (attendanceFilter === "day_2" && !attendedDays.includes(2)) return false;
+      if (attendanceFilter === "day_3" && !attendedDays.includes(3)) return false;
+      if (attendanceFilter === "day_4" && !attendedDays.includes(4)) return false;
 
       if (!q) return true;
       return (
@@ -170,10 +226,20 @@ export function ConfirmedAttendeesTable({
         a.email.toLowerCase().includes(q) ||
         a.phone.toLowerCase().includes(q) ||
         a.college.toLowerCase().includes(q) ||
-        a.department.toLowerCase().includes(q)
+        a.department.toLowerCase().includes(q) ||
+        a.track.toLowerCase().includes(q)
       );
     });
-  }, [attendees, search, sourceFilter, attendanceFilter]);
+  }, [
+    attendees,
+    search,
+    sourceFilter,
+    attendanceFilter,
+    departmentFilter,
+    yearFilter,
+    trackFilter,
+    statusFilter,
+  ]);
 
   const activeAttendees = useMemo(
     () => attendees.filter((a) => (a.status || "confirmed") !== "cancelled"),
@@ -420,6 +486,63 @@ export function ConfirmedAttendeesTable({
             />
           </div>
 
+          {tracks.length > 0 && (
+            <select
+              value={trackFilter}
+              onChange={(e) => {
+                setTrackFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by track"
+              className="px-3 py-2 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none focus:border-primary"
+            >
+              <option value="all">All Tracks</option>
+              {tracks.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {departments.length > 0 && (
+            <select
+              value={departmentFilter}
+              onChange={(e) => {
+                setDepartmentFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by department"
+              className="px-3 py-2 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none focus:border-primary"
+            >
+              <option value="all">All Depts</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {years.length > 0 && (
+            <select
+              value={yearFilter}
+              onChange={(e) => {
+                setYearFilter(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Filter by year"
+              className="px-3 py-2 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none focus:border-primary"
+            >
+              <option value="all">All Years</option>
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          )}
+
           <select
             value={sourceFilter}
             onChange={(e) => {
@@ -449,8 +572,36 @@ export function ConfirmedAttendeesTable({
             <option value="all">All Attendance</option>
             <option value="checked_in">Checked In (1+ Days)</option>
             <option value="not_checked_in">Not Checked In</option>
+            <option value="day_1">Day 1 Attended</option>
+            <option value="day_2">Day 2 Attended</option>
+            <option value="day_3">Day 3 Attended</option>
+            <option value="day_4">Day 4 Attended</option>
             <option value="completed_4">Completed All 4 Days</option>
           </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by status"
+            className="px-3 py-2 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none focus:border-primary"
+          >
+            <option value="all">All Status</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">

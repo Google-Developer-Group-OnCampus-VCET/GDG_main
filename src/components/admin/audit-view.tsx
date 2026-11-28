@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { AuditAction, AuditActorRole, AuditLogEntry } from "@/types";
 
 interface AuditViewProps {
@@ -179,8 +179,30 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
   const [logs, setLogs] = useState<AuditLogEntry[]>(initialLogs);
   const [loading, setLoading] = useState(false);
   const [selectedAction, setSelectedAction] = useState<string>("all");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+
+  const availableRoles = useMemo<AuditActorRole[]>(() => {
+    return Array.from(
+      new Set(
+        logs
+          .map((l) => l.actorRole)
+          .filter((r): r is AuditActorRole => Boolean(r))
+      )
+    ).sort();
+  }, [logs]);
+
+  const isFiltered =
+    searchQuery.trim() !== "" ||
+    selectedAction !== "all" ||
+    selectedRole !== "all";
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setSelectedAction("all");
+    setSelectedRole("all");
+  };
 
   async function refreshLogs() {
     setLoading(true);
@@ -204,9 +226,12 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
     }
   }
 
-  // Filter logs locally by search query and action
+  // Filter logs locally by search query, action, and operator role
   const filteredLogs = logs.filter((log) => {
     if (selectedAction !== "all" && log.action !== selectedAction) {
+      return false;
+    }
+    if (selectedRole !== "all" && log.actorRole !== selectedRole) {
       return false;
     }
     if (!searchQuery.trim()) return true;
@@ -337,6 +362,38 @@ export function AuditView({ slug, eventTitle, initialLogs }: AuditViewProps) {
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              aria-label="Filter by operator role"
+              className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            >
+              <option value="all">All Operator Roles</option>
+              {availableRoles.map((r) => (
+                <option key={r} value={r}>
+                  {r === "admin"
+                    ? "Master Admin"
+                    : r === "core"
+                    ? "Core Member"
+                    : r === "volunteer"
+                    ? "Volunteer Desk"
+                    : r}
+                </option>
+              ))}
+            </select>
+
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Reset Filters
+              </button>
+            )}
           </div>
 
           <div className="text-xs text-slate-500 font-medium whitespace-nowrap self-center">

@@ -184,6 +184,9 @@ export function EmailHub({
   const [revokePasses, setRevokePasses] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState("");
+  const [recipientDeptFilter, setRecipientDeptFilter] = useState("all");
+  const [recipientYearFilter, setRecipientYearFilter] = useState("all");
+  const [recipientStatusFilter, setRecipientStatusFilter] = useState("all");
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [broadcastFeedback, setBroadcastFeedback] = useState<{
     type: "success" | "error";
@@ -192,6 +195,9 @@ export function EmailHub({
 
   // Individual pass sender state
   const [searchTerm, setSearchTerm] = useState("");
+  const [singleTrackFilter, setSingleTrackFilter] = useState("all");
+  const [singleDeptFilter, setSingleDeptFilter] = useState("all");
+  const [singleStatusFilter, setSingleStatusFilter] = useState("all");
   const [sendingSingleRef, setSendingSingleRef] = useState<string | null>(null);
   const [singleFeedback, setSingleFeedback] = useState<{
     ref: string;
@@ -201,6 +207,41 @@ export function EmailHub({
   const [previewPassReg, setPreviewPassReg] = useState<RegistrationRecord | null>(null);
   const [previewQrDataUrl, setPreviewQrDataUrl] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  // Dispatch history filters
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyTypeFilter, setHistoryTypeFilter] = useState("all");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+
+  const availableDepts = useMemo<string[]>(() => {
+    return Array.from(
+      new Set(
+        registrations
+          .map((r) => r.department?.trim())
+          .filter((d): d is string => Boolean(d))
+      )
+    ).sort();
+  }, [registrations]);
+
+  const availableYears = useMemo<string[]>(() => {
+    return Array.from(
+      new Set(
+        registrations
+          .map((r) => r.yearOfStudy?.trim())
+          .filter((y): y is string => Boolean(y))
+      )
+    ).sort();
+  }, [registrations]);
+
+  const availableTracks = useMemo<string[]>(() => {
+    return Array.from(
+      new Set(
+        registrations
+          .map((r) => r.track?.trim())
+          .filter((t): t is string => Boolean(t))
+      )
+    ).sort();
+  }, [registrations]);
 
   async function handleOpenPassPreview(reg: RegistrationRecord) {
     setPreviewPassReg(reg);
@@ -313,17 +354,40 @@ export function EmailHub({
     });
   }, [registrations, audience, selectedIndividual, revokePasses]);
 
+  const isRecipientFiltered =
+    recipientSearchTerm.trim() !== "" ||
+    recipientDeptFilter !== "all" ||
+    recipientYearFilter !== "all" ||
+    recipientStatusFilter !== "all";
+
+  const resetRecipientFilters = () => {
+    setRecipientSearchTerm("");
+    setRecipientDeptFilter("all");
+    setRecipientYearFilter("all");
+    setRecipientStatusFilter("all");
+  };
+
   const filteredRecipients = useMemo(() => {
-    if (!recipientSearchTerm.trim()) return targetRecipients;
     const q = recipientSearchTerm.toLowerCase().trim();
-    return targetRecipients.filter(
-      (r) =>
+    return targetRecipients.filter((r) => {
+      if (recipientDeptFilter !== "all" && r.department !== recipientDeptFilter) return false;
+      if (recipientYearFilter !== "all" && r.yearOfStudy !== recipientYearFilter) return false;
+      if (recipientStatusFilter !== "all" && (r.status || "confirmed") !== recipientStatusFilter) return false;
+      if (!q) return true;
+      return (
         r.fullName.toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
         r.referenceId.toLowerCase().includes(q) ||
         (r.department && r.department.toLowerCase().includes(q))
-    );
-  }, [targetRecipients, recipientSearchTerm]);
+      );
+    });
+  }, [
+    targetRecipients,
+    recipientSearchTerm,
+    recipientDeptFilter,
+    recipientYearFilter,
+    recipientStatusFilter,
+  ]);
 
   const targetCount = targetRecipients.length;
 
@@ -653,16 +717,59 @@ export function EmailHub({
     }
   }
 
-  const filteredRegistrations = registrations.filter((r) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      r.fullName.toLowerCase().includes(term) ||
-      r.email.toLowerCase().includes(term) ||
-      r.referenceId.toLowerCase().includes(term) ||
-      r.college.toLowerCase().includes(term)
-    );
-  });
+  const isSingleFiltered =
+    searchTerm.trim() !== "" ||
+    singleTrackFilter !== "all" ||
+    singleDeptFilter !== "all" ||
+    singleStatusFilter !== "all";
+
+  const resetSingleFilters = () => {
+    setSearchTerm("");
+    setSingleTrackFilter("all");
+    setSingleDeptFilter("all");
+    setSingleStatusFilter("all");
+  };
+
+  const filteredRegistrations = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return registrations.filter((r) => {
+      if (singleTrackFilter !== "all" && r.track !== singleTrackFilter) return false;
+      if (singleDeptFilter !== "all" && r.department !== singleDeptFilter) return false;
+      if (singleStatusFilter !== "all" && (r.status || "confirmed") !== singleStatusFilter) return false;
+      if (!term) return true;
+      return (
+        r.fullName.toLowerCase().includes(term) ||
+        r.email.toLowerCase().includes(term) ||
+        r.referenceId.toLowerCase().includes(term) ||
+        (r.college && r.college.toLowerCase().includes(term))
+      );
+    });
+  }, [registrations, searchTerm, singleTrackFilter, singleDeptFilter, singleStatusFilter]);
+
+  const isHistoryFiltered =
+    historySearch.trim() !== "" ||
+    historyTypeFilter !== "all" ||
+    historyStatusFilter !== "all";
+
+  const resetHistoryFilters = () => {
+    setHistorySearch("");
+    setHistoryTypeFilter("all");
+    setHistoryStatusFilter("all");
+  };
+
+  const filteredLogs = useMemo(() => {
+    const q = historySearch.toLowerCase().trim();
+    return logs.filter((l) => {
+      if (historyTypeFilter !== "all" && l.type !== historyTypeFilter) return false;
+      if (historyStatusFilter !== "all" && l.status !== historyStatusFilter) return false;
+      if (!q) return true;
+      return (
+        l.subject.toLowerCase().includes(q) ||
+        (l.previewText && l.previewText.toLowerCase().includes(q)) ||
+        l.type.toLowerCase().includes(q)
+      );
+    });
+  }, [logs, historySearch, historyTypeFilter, historyStatusFilter]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -1026,15 +1133,68 @@ export function EmailHub({
                 </p>
               </div>
 
-              {/* Quick Filter */}
-              <div className="w-full sm:w-72">
+              {/* Column Filters Bar */}
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   value={recipientSearchTerm}
                   onChange={(e) => setRecipientSearchTerm(e.target.value)}
-                  placeholder="Filter by name, pass ID, or email..."
-                  className="w-full h-9 px-3 rounded-xl border border-border bg-slate-50 text-xs text-foreground focus:bg-white focus:outline-hidden font-medium"
+                  placeholder="Search name, pass ID, or email..."
+                  className="w-full sm:w-52 h-9 px-3 rounded-xl border border-border bg-slate-50 text-xs text-foreground focus:bg-white focus:outline-hidden font-medium"
                 />
+
+                {availableDepts.length > 0 && (
+                  <select
+                    value={recipientDeptFilter}
+                    onChange={(e) => setRecipientDeptFilter(e.target.value)}
+                    aria-label="Filter recipients by department"
+                    className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+                  >
+                    <option value="all">All Depts</option>
+                    {availableDepts.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {availableYears.length > 0 && (
+                  <select
+                    value={recipientYearFilter}
+                    onChange={(e) => setRecipientYearFilter(e.target.value)}
+                    aria-label="Filter recipients by year"
+                    className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+                  >
+                    <option value="all">All Years</option>
+                    {availableYears.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <select
+                  value={recipientStatusFilter}
+                  onChange={(e) => setRecipientStatusFilter(e.target.value)}
+                  aria-label="Filter recipients by status"
+                  className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+                >
+                  <option value="all">All Status</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+
+                {isRecipientFiltered && (
+                  <button
+                    type="button"
+                    onClick={resetRecipientFilters}
+                    className="h-9 px-3 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1564,14 +1724,68 @@ export function EmailHub({
                 Send or resend an attendee their official 4-day pass with QR code and reference ID.
               </p>
             </div>
-            <div className="w-full sm:w-72">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search name, email, or pass ID..."
-                className="w-full h-10 px-3 rounded-xl border border-border bg-slate-50/50 text-base sm:text-xs text-foreground focus:bg-white focus:outline-hidden"
+                className="w-full sm:w-52 h-9 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
               />
+
+              {availableTracks.length > 0 && (
+                <select
+                  value={singleTrackFilter}
+                  onChange={(e) => setSingleTrackFilter(e.target.value)}
+                  aria-label="Filter passes by track"
+                  className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+                >
+                  <option value="all">All Tracks</option>
+                  {availableTracks.map((t) => (
+                    <option key={t} value={t}>
+                      {(t || "").split(":")[0]}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {availableDepts.length > 0 && (
+                <select
+                  value={singleDeptFilter}
+                  onChange={(e) => setSingleDeptFilter(e.target.value)}
+                  aria-label="Filter passes by department"
+                  className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+                >
+                  <option value="all">All Depts</option>
+                  {availableDepts.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <select
+                value={singleStatusFilter}
+                onChange={(e) => setSingleStatusFilter(e.target.value)}
+                aria-label="Filter passes by status"
+                className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+
+              {isSingleFiltered && (
+                <button
+                  type="button"
+                  onClick={resetSingleFilters}
+                  className="h-9 px-3 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
             </div>
           </div>
 
@@ -1677,18 +1891,68 @@ export function EmailHub({
       {/* TAB 3: DISPATCH HISTORY */}
       {activeTab === "history" ? (
         <div className="bg-white p-6 rounded-2xl border border-border shadow-xs flex flex-col gap-4">
-          <div>
-            <h2 className="text-base font-bold text-foreground">
-              Email Dispatch &amp; Broadcast History
-            </h2>
-            <p className="text-xs text-foreground-muted mt-0.5">
-              Review previously sent pass emails and attendee announcements.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                Email Dispatch &amp; Broadcast History
+              </h2>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Review previously sent pass emails and attendee announcements.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="Search subject, preview..."
+                className="w-full sm:w-52 h-9 px-3 rounded-xl border border-border bg-slate-50/50 text-xs text-foreground focus:bg-white focus:outline-hidden"
+              />
+
+              <select
+                value={historyTypeFilter}
+                onChange={(e) => setHistoryTypeFilter(e.target.value)}
+                aria-label="Filter dispatch history by email type"
+                className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+              >
+                <option value="all">All Types</option>
+                <option value="pass">Entry Pass</option>
+                <option value="speaker">Speaker</option>
+                <option value="custom">Broadcast</option>
+              </select>
+
+              <select
+                value={historyStatusFilter}
+                onChange={(e) => setHistoryStatusFilter(e.target.value)}
+                aria-label="Filter dispatch history by delivery status"
+                className="h-9 px-2.5 rounded-xl border border-border bg-white text-xs font-medium text-foreground focus:outline-none"
+              >
+                <option value="all">All Status</option>
+                <option value="sent">Sent (Live)</option>
+                <option value="simulated">Simulated / Logged</option>
+                <option value="failed">Failed</option>
+              </select>
+
+              {isHistoryFiltered && (
+                <button
+                  type="button"
+                  onClick={resetHistoryFilters}
+                  className="h-9 px-3 rounded-xl border border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
           </div>
 
           {logs.length === 0 ? (
             <div className="py-12 text-center text-xs text-foreground-muted">
               No emails have been dispatched for this event yet.
+            </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="py-12 text-center text-xs text-foreground-muted">
+              No email dispatches match your filter.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1703,7 +1967,7 @@ export function EmailHub({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {logs.map((log) => (
+                  {filteredLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
                         {new Date(log.sentAt).toLocaleString("en-IN", {
