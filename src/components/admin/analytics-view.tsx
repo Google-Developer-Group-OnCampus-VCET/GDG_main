@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { EventStats } from "@/lib/db";
@@ -58,13 +58,12 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
   const [stats, setStats] = useState<EventStats>(initialStats);
   const [copySuccess, setCopySuccess] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const lastVersionRef = useRef<number>(0);
 
-  useEffect(() => {
-    let active = true;
-    let lastVersion = 0;
-    const syncStats = async (force = false) => {
+  const syncStats = useCallback(
+    async (force = false) => {
       try {
-        const qs = !force && lastVersion > 0 ? `?version=${lastVersion}` : "";
+        const qs = !force && lastVersionRef.current > 0 ? `?version=${lastVersionRef.current}` : "";
         const res = await fetch(`/api/events/${slug}/confirmed-attendees${qs}`, {
           cache: "no-store",
         });
@@ -72,16 +71,19 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
         const data = await res.json();
         if (data?.unchanged) return;
         if (typeof data?.version === "number") {
-          lastVersion = data.version;
+          lastVersionRef.current = data.version;
         }
-        if (active && data?.success && data.stats && data.stats.totalRegistered > 0) {
+        if (data?.success && data.stats && data.stats.totalRegistered > 0) {
           setStats(data.stats);
         }
       } catch {
         // ignore transient errors
       }
-    };
+    },
+    [slug]
+  );
 
+  useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         void syncStats(false);
@@ -108,13 +110,12 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
     }
 
     return () => {
-      active = false;
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
       channel?.close();
     };
-  }, [slug]);
+  }, [slug, syncStats]);
 
   // Dynamic calculations from stats & event - NO STATIC NUMBERS
   const totalRegistered = stats.totalRegistered;
@@ -125,10 +126,11 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
   const pendingCheckIn = Math.max(0, totalRegistered - checkedInCount);
   const checkInRate = totalRegistered > 0 ? Math.round((checkedInCount / totalRegistered) * 100) : 0;
 
-  function handleRefresh() {
+  async function handleRefresh() {
     setRefreshing(true);
+    await syncStats(true);
     router.refresh();
-    setTimeout(() => setRefreshing(false), 800);
+    setTimeout(() => setRefreshing(false), 600);
   }
 
   // 1. Dynamic Academic Year Distribution
