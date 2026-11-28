@@ -11,12 +11,17 @@ vi.mock("@/lib/firebase/admin", () => ({
 
 import {
   cancelFirestoreRegistration,
+  checkInFirestoreConfirmedAttendee,
   createFirestoreRegistration,
+  getFirestoreConfirmedAttendeeByRef,
+  getFirestoreConfirmedAttendees,
+  getFirestoreConfirmedAttendeesMeta,
   getFirestoreEventStats,
   getFirestorePublicEventStats,
   getFirestoreRegistrations,
   getFirestoreSiteSettings,
   reviewFirestoreRegistration,
+  syncFirestoreConfirmedAttendeesMeta,
   updateFirestoreEvent,
 } from "./firestore";
 
@@ -451,5 +456,189 @@ describe("Firestore Read Reduction & Shared Caching", () => {
       expect.objectContaining({ registeredCount: 11, pendingCount: 1 }),
       { merge: true }
     );
+  });
+
+  it("caches getFirestoreConfirmedAttendees in memory so repeated calls make only 1 Firestore read", async () => {
+    const attendeesGetSpy = vi.fn().mockResolvedValue({
+      docs: [
+        {
+          id: "dev-to-cloud__G-2026-ZTH-001",
+          data: () => ({
+            eventSlug: "dev-to-cloud",
+            registrationId: "G-2026-ZTH-001",
+            fullName: "Student One",
+            email: "student1@vcet.edu.in",
+            status: "confirmed",
+            checkedIn: false,
+            checkedInDays: [],
+            srNo: 1,
+          }),
+        },
+      ],
+    });
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "confirmed_attendees") {
+          return {
+            where: () => ({ get: attendeesGetSpy }),
+          };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    });
+
+    const first = await getFirestoreConfirmedAttendees("dev-to-cloud");
+    const second = await getFirestoreConfirmedAttendees("dev-to-cloud");
+    const third = await getFirestoreConfirmedAttendees("dev-to-cloud");
+
+    expect(first).toHaveLength(1);
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+    // Across 3 calls, only 1 network/Firestore read was executed
+    expect(attendeesGetSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches getFirestoreConfirmedAttendeesMeta in memory so repeated polls make only 1 Firestore read", async () => {
+    const metaDocGetSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      data: () => ({
+        version: 12345678,
+        checkedInCount: 42,
+        dailyCheckedInCounts: { 1: 30, 2: 12, 3: 0, 4: 0 },
+        updatedAt: "2026-11-28T10:00:00Z",
+      }),
+    });
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "confirmed_attendees_meta") {
+          return {
+            doc: () => ({ get: metaDocGetSpy }),
+          };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    });
+
+    const first = await getFirestoreConfirmedAttendeesMeta("dev-to-cloud");
+    const second = await getFirestoreConfirmedAttendeesMeta("dev-to-cloud");
+    const third = await getFirestoreConfirmedAttendeesMeta("dev-to-cloud");
+
+    expect(first?.checkedInCount).toBe(42);
+    expect(second).toEqual(first);
+    expect(third).toEqual(first);
+    expect(metaDocGetSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("getFirestoreConfirmedAttendeeByRef uses single doc ID lookup (1 read) rather than reading all attendees", async () => {
+    const docGetSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "dev-to-cloud__G-2026-ZTH-001",
+      data: () => ({
+        eventSlug: "dev-to-cloud",
+        registrationId: "G-2026-ZTH-001",
+        fullName: "Test Attendee",
+        email: "test@vcet.edu.in",
+        status: "confirmed",
+        checkedIn: false,
+        checkedInDays: [],
+        srNo: 1,
+      }),
+    });
+    const collectionWhereSpy = vi.fn();
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "confirmed_attendees") {
+          return {
+            doc: (docId: string) => {
+              expect(docId).toBe("dev-to-cloud__G-2026-ZTH-001");
+              return { get: docGetSpy };
+            },
+            where: collectionWhereSpy,
+          };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    });
+
+    const attendee = await getFirestoreConfirmedAttendeeByRef(
+      "dev-to-cloud",
+      "G-2026-ZTH-001"
+    );
+
+    expect(attendee).not.toBeNull();
+    expect(attendee?.registrationId).toBe("G-2026-ZTH-001");
+    expect(docGetSpy).toHaveBeenCalledTimes(1);
+    expect(collectionWhereSpy).not.toHaveBeenCalled();
+  });
+
+  it("checkInFirestoreConfirmedAttendee checks in attendee without scanning all confirmed attendees", async () => {
+    const attendeeDocSetSpy = vi.fn().mockResolvedValue({});
+    const attendeeDocGetSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      id: "dev-to-cloud__G-2026-ZTH-001",
+      data: () => ({
+        eventSlug: "dev-to-cloud",
+        registrationId: "G-2026-ZTH-001",
+        fullName: "Test Attendee",
+        email: "test@vcet.edu.in",
+        status: "confirmed",
+        checkedIn: false,
+        checkedInDays: [],
+        srNo: 1,
+      }),
+    });
+
+    const metaDocGetSpy = vi.fn().mockResolvedValue({
+      exists: true,
+      data: () => ({
+        version: 100,
+        checkedInCount: 10,
+        dailyCheckedInCounts: { 1: 10, 2: 0, 3: 0, 4: 0 },
+        updatedAt: "2026-11-28T09:00:00Z",
+      }),
+    });
+    const metaDocSetSpy = vi.fn().mockResolvedValue({});
+    const fullScanSpy = vi.fn();
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "confirmed_attendees") {
+          return {
+            doc: () => ({
+              get: attendeeDocGetSpy,
+              set: attendeeDocSetSpy,
+            }),
+            where: () => ({ get: fullScanSpy }),
+          };
+        }
+        if (name === "confirmed_attendees_meta") {
+          return {
+            doc: () => ({
+              get: metaDocGetSpy,
+              set: metaDocSetSpy,
+            }),
+          };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    });
+
+    const result = await checkInFirestoreConfirmedAttendee(
+      "dev-to-cloud",
+      "G-2026-ZTH-001",
+      2
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.checkedIn).toBe(true);
+    expect(result?.checkedInDays).toContain(2);
+    expect(attendeeDocGetSpy).toHaveBeenCalledTimes(1);
+    expect(attendeeDocSetSpy).toHaveBeenCalledTimes(1);
+    expect(metaDocSetSpy).toHaveBeenCalledTimes(1);
+    // Crucial: no full collection scan performed!
+    expect(fullScanSpy).not.toHaveBeenCalled();
   });
 });

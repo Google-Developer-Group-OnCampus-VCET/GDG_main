@@ -7,6 +7,7 @@ import {
   computeConfirmedAttendeeStats,
   getConfirmedAttendeesAsync,
   getFirestoreConfirmedAttendeesMeta,
+  syncFirestoreConfirmedAttendeesMeta,
 } from "@/lib/db";
 
 export async function GET(request: Request) {
@@ -23,8 +24,15 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const slug = url.searchParams.get("slug")?.trim() || "dev-to-cloud";
 
-  // 1-doc read first — avoids reading all 126 attendee docs on every poll
-  const meta = await getFirestoreConfirmedAttendeesMeta(slug);
+  // 1-doc read first (cached in-memory for 30s) — avoids scanning all 126 attendee docs on every poll
+  let meta = await getFirestoreConfirmedAttendeesMeta(slug);
+  if (!meta) {
+    // Self-heal: persist meta so subsequent polls only do a 1-doc read (or 0-read memory cache hit)
+    const attendees = await getConfirmedAttendeesAsync(slug);
+    await syncFirestoreConfirmedAttendeesMeta(slug, attendees);
+    meta = await getFirestoreConfirmedAttendeesMeta(slug);
+  }
+
   if (meta) {
     return NextResponse.json(
       {
@@ -36,7 +44,7 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Cache-Control": "private, max-age=5, stale-while-revalidate=15",
         },
       }
     );
@@ -55,7 +63,7 @@ export async function GET(request: Request) {
     },
     {
       headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Cache-Control": "private, max-age=5, stale-while-revalidate=15",
       },
     }
   );

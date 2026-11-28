@@ -102,7 +102,7 @@ export function CheckInTerminal({
       if (document.visibilityState === "visible") {
         void syncLiveCounts();
       }
-    }, 5000);
+    }, 45000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {

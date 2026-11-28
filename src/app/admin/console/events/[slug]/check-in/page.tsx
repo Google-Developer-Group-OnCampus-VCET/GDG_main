@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   computeConfirmedAttendeeStats,
   getConfirmedAttendeesAsync,
+  getConfirmedAttendeesMetaAsync,
   getEventBySlugAsync,
   getEventStatsAsync,
 } from "@/lib/db";
@@ -35,15 +36,21 @@ async function AdminCheckInContent({ slug }: { slug: string }) {
   let checkedInCount = 0;
   let dailyCheckedInCounts: Record<number, number> | undefined;
   try {
-    const confirmed = await getConfirmedAttendeesAsync(slug);
-    if (confirmed.length > 0) {
-      const confirmedStats = computeConfirmedAttendeeStats(confirmed);
-      checkedInCount = confirmedStats.checkedInCount;
-      dailyCheckedInCounts = confirmedStats.dailyCheckedInCounts;
+    const meta = await getConfirmedAttendeesMetaAsync(slug);
+    if (meta) {
+      checkedInCount = meta.checkedInCount;
+      dailyCheckedInCounts = meta.dailyCheckedInCounts;
     } else {
-      const stats = await getEventStatsAsync(slug);
-      checkedInCount = stats.checkedInCount;
-      dailyCheckedInCounts = stats.dailyCheckedInCounts;
+      const confirmed = await getConfirmedAttendeesAsync(slug);
+      if (confirmed.length > 0) {
+        const confirmedStats = computeConfirmedAttendeeStats(confirmed);
+        checkedInCount = confirmedStats.checkedInCount;
+        dailyCheckedInCounts = confirmedStats.dailyCheckedInCounts;
+      } else {
+        const stats = await getEventStatsAsync(slug);
+        checkedInCount = stats.checkedInCount;
+        dailyCheckedInCounts = stats.dailyCheckedInCounts;
+      }
     }
   } catch {
     // fallback

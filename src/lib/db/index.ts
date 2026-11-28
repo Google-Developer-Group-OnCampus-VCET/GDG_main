@@ -53,6 +53,9 @@ import {
   updateFirestoreSiteSettings,
   getFirestoreConfirmedAttendees,
   getFirestoreConfirmedAttendeesMeta,
+  getFirestoreConfirmedAttendeeByRef,
+  syncFirestoreConfirmedAttendeesMeta,
+  type ConfirmedAttendeesMeta,
   upsertFirestoreConfirmedAttendees,
   checkInFirestoreConfirmedAttendee,
   revokeCheckInFirestoreConfirmedAttendee,
@@ -62,8 +65,13 @@ import {
 } from "./firestore";
 import { revalidateEventCaches, revalidateSiteCaches } from "./cache";
 
-export { buildEventReferenceId, getFirestoreConfirmedAttendeesMeta };
-export type { PaginatedRegistrationsResult };
+export {
+  buildEventReferenceId,
+  getFirestoreConfirmedAttendeesMeta,
+  getFirestoreConfirmedAttendeeByRef,
+  syncFirestoreConfirmedAttendeesMeta,
+};
+export type { PaginatedRegistrationsResult, ConfirmedAttendeesMeta };
 
 export function resolveWritableDbPath(): string {
   const isReadOnlyServerless =
@@ -2762,6 +2770,50 @@ export async function upsertConfirmedAttendeesAsync(
     console.warn("Firestore upsertConfirmedAttendees failed:", (err as Error).message);
   }
   return { sqliteCount: records.length, firestoreCount };
+}
+
+export async function getConfirmedAttendeeByRefAsync(
+  eventSlug: string,
+  refId: string
+): Promise<ConfirmedAttendeeRecord | null> {
+  const normalized = refId.trim();
+  if (!normalized) return null;
+
+  try {
+    const fsAttendee = await getFirestoreConfirmedAttendeeByRef(eventSlug, normalized);
+    if (fsAttendee) return fsAttendee;
+  } catch (err) {
+    console.warn("Firestore getConfirmedAttendeeByRef failed:", (err as Error).message);
+  }
+
+  // Local SQLite fallback
+  const localList = getLocalConfirmedAttendees(eventSlug);
+  const match = localList.find(
+    (a) =>
+      a.registrationId.toLowerCase() === normalized.toLowerCase() ||
+      a.id.toLowerCase() === normalized.toLowerCase()
+  );
+  if (match) return match;
+
+  const fallback = DEFAULT_CONFIRMED_ATTENDEES.find(
+    (a) =>
+      a.eventSlug === eventSlug &&
+      (a.registrationId.toLowerCase() === normalized.toLowerCase() ||
+        a.id.toLowerCase() === normalized.toLowerCase())
+  );
+  return fallback || null;
+}
+
+export async function getConfirmedAttendeesMetaAsync(
+  eventSlug: string
+): Promise<ConfirmedAttendeesMeta | null> {
+  try {
+    const meta = await getFirestoreConfirmedAttendeesMeta(eventSlug);
+    if (meta) return meta;
+  } catch (err) {
+    console.warn("Firestore getConfirmedAttendeesMeta failed:", (err as Error).message);
+  }
+  return null;
 }
 
 

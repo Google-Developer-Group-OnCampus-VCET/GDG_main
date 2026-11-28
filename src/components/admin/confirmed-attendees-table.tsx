@@ -111,7 +111,7 @@ export function ConfirmedAttendeesTable({
       if (document.visibilityState === "visible") {
         void fetchLatestAttendees(false);
       }
-    }, 10000);
+    }, 60000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {

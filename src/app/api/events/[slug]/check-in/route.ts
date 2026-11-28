@@ -8,7 +8,9 @@ import {
   checkInAttendeeAsync,
   checkInConfirmedAttendeeAsync,
   confirmedAttendeeToRegistrationRecord,
-  getConfirmedAttendeesAsync,
+  getConfirmedAttendeeByRefAsync,
+  getConfirmedAttendeesMetaAsync,
+  getLocalConfirmedAttendees,
   logAuditEventAsync,
 } from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
@@ -73,11 +75,8 @@ export async function POST(
         ? "Core Member"
         : "Master Admin";
 
-    // Check Confirmed Attendees list first (new IDs G-2026-ZTH-* / L-2026-ZTH-*)
-    const confirmedList = await getConfirmedAttendeesAsync(slug);
-    const confirmedMatch = confirmedList.find(
-      (a) => a.registrationId.toLowerCase() === refId.toLowerCase()
-    );
+    // Check Confirmed Attendees list first (single doc lookup - avoids scanning all docs)
+    const confirmedMatch = await getConfirmedAttendeeByRefAsync(slug, refId);
 
     if (confirmedMatch) {
       if (confirmedMatch.status === "cancelled") {
@@ -154,8 +153,13 @@ export async function POST(
       });
     }
 
-    // If this event has a Confirmed Attendees list, reject older registration passes
-    if (confirmedList.length > 0 && !process.env.VITEST) {
+    // If this event has a Confirmed Attendees roster, reject older registration passes in live mode
+    const hasConfirmedRoster =
+      slug === "dev-to-cloud" ||
+      getLocalConfirmedAttendees(slug).length > 0 ||
+      Boolean(await getConfirmedAttendeesMetaAsync(slug));
+
+    if (hasConfirmedRoster && !process.env.VITEST) {
       return NextResponse.json(
         {
           error: "PASS_SUPERSEDED",

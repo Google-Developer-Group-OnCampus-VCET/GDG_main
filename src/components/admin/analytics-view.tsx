@@ -86,7 +86,7 @@ export function AnalyticsView({ slug, eventTitle, stats: initialStats, event }: 
       if (document.visibilityState === "visible") {
         void syncStats(false);
       }
-    }, 10000);
+    }, 60000);
 
     const handleFocus = () => {
       if (document.visibilityState === "visible") {

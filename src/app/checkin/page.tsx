@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import {
   computeConfirmedAttendeeStats,
   getConfirmedAttendeesAsync,
+  getConfirmedAttendeesMetaAsync,
   getEventBySlugAsync,
 } from "@/lib/db";
 import {
@@ -35,11 +36,17 @@ async function CheckInPortalContent() {
   let dailyCheckedInCounts: Record<number, number> | undefined;
   if (initialAuthenticated) {
     try {
-      const confirmed = await getConfirmedAttendeesAsync(DEFAULT_EVENT_SLUG);
-      if (confirmed.length > 0) {
-        const stats = computeConfirmedAttendeeStats(confirmed);
-        checkedInCount = stats.checkedInCount;
-        dailyCheckedInCounts = stats.dailyCheckedInCounts;
+      const meta = await getConfirmedAttendeesMetaAsync(DEFAULT_EVENT_SLUG);
+      if (meta) {
+        checkedInCount = meta.checkedInCount;
+        dailyCheckedInCounts = meta.dailyCheckedInCounts;
+      } else {
+        const confirmed = await getConfirmedAttendeesAsync(DEFAULT_EVENT_SLUG);
+        if (confirmed.length > 0) {
+          const stats = computeConfirmedAttendeeStats(confirmed);
+          checkedInCount = stats.checkedInCount;
+          dailyCheckedInCounts = stats.dailyCheckedInCounts;
+        }
       }
     } catch {
       // fallback

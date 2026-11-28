@@ -2011,6 +2011,10 @@ export interface ConfirmedAttendeesMeta {
 export async function getFirestoreConfirmedAttendeesMeta(
   eventSlug: string
 ): Promise<ConfirmedAttendeesMeta | null> {
+  const cacheKey = `fs:confirmed-meta:${eventSlug}`;
+  const cached = getCached<ConfirmedAttendeesMeta>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
 
@@ -2018,7 +2022,7 @@ export async function getFirestoreConfirmedAttendeesMeta(
     const snap = await db.collection("confirmed_attendees_meta").doc(eventSlug).get();
     if (!snap.exists) return null;
     const d = snap.data() || {};
-    return {
+    const meta: ConfirmedAttendeesMeta = {
       version: Number(d.version || 1),
       checkedInCount: Number(d.checkedInCount || 0),
       dailyCheckedInCounts: (d.dailyCheckedInCounts as Record<number, number>) || {
@@ -2029,13 +2033,15 @@ export async function getFirestoreConfirmedAttendeesMeta(
       },
       updatedAt: String(d.updatedAt || ""),
     };
+    setCached(cacheKey, meta, 30_000);
+    return meta;
   } catch (err) {
     console.warn("Firestore getConfirmedAttendeesMeta failed:", (err as Error).message);
     return null;
   }
 }
 
-async function syncFirestoreConfirmedAttendeesMeta(
+export async function syncFirestoreConfirmedAttendeesMeta(
   eventSlug: string,
   attendees?: ConfirmedAttendeeRecord[]
 ): Promise<number> {
@@ -2058,24 +2064,63 @@ async function syncFirestoreConfirmedAttendeesMeta(
   }
 
   const nextVersion = Date.now();
+  const meta: ConfirmedAttendeesMeta = {
+    version: nextVersion,
+    checkedInCount,
+    dailyCheckedInCounts,
+    updatedAt: new Date().toISOString(),
+  };
+
   await db
     .collection("confirmed_attendees_meta")
     .doc(eventSlug)
-    .set(
-      {
-        version: nextVersion,
-        checkedInCount,
-        dailyCheckedInCounts,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    .set(meta, { merge: true });
+
+  setCached(`fs:confirmed-meta:${eventSlug}`, meta, 30_000);
   return nextVersion;
+}
+
+function updateCachedConfirmedAttendee(
+  eventSlug: string,
+  attendee: ConfirmedAttendeeRecord
+): void {
+  const cacheKey = `fs:confirmed-attendees:${eventSlug}`;
+  const list = getCached<ConfirmedAttendeeRecord[]>(cacheKey);
+  if (!list) return;
+  const index = list.findIndex(
+    (a) => a.registrationId === attendee.registrationId || a.id === attendee.id
+  );
+  if (index >= 0) {
+    list[index] = attendee;
+  } else {
+    list.push(attendee);
+    list.sort((a, b) => a.srNo - b.srNo);
+  }
+  setCached(cacheKey, list, 60_000);
+}
+
+function removeCachedConfirmedAttendee(
+  eventSlug: string,
+  registrationId: string
+): void {
+  const cacheKey = `fs:confirmed-attendees:${eventSlug}`;
+  const list = getCached<ConfirmedAttendeeRecord[]>(cacheKey);
+  if (!list) return;
+  const next = list.filter(
+    (a) =>
+      a.registrationId !== registrationId &&
+      a.id !== `${eventSlug}__${registrationId}`
+  );
+  setCached(cacheKey, next, 60_000);
 }
 
 export async function getFirestoreConfirmedAttendees(
   eventSlug: string
 ): Promise<ConfirmedAttendeeRecord[] | null> {
+  const cacheKey = `fs:confirmed-attendees:${eventSlug}`;
+  const cached = getCached<ConfirmedAttendeeRecord[]>(cacheKey);
+  if (cached) return cached;
+
   const db = getAdminDb();
   if (!db) return null;
 
@@ -2121,9 +2166,120 @@ export async function getFirestoreConfirmedAttendees(
       })
       .sort((a, b) => a.srNo - b.srNo);
 
+    setCached(cacheKey, list, 60_000);
     return list;
   } catch (err) {
     console.warn("Firestore getConfirmedAttendees failed:", (err as Error).message);
+    return null;
+  }
+}
+
+export async function getFirestoreConfirmedAttendeeByRef(
+  eventSlug: string,
+  refId: string
+): Promise<ConfirmedAttendeeRecord | null> {
+  const normalized = refId.trim().toUpperCase();
+  if (!normalized) return null;
+
+  // 1. Check in-memory cached roster first (0 Firestore reads)
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(`fs:confirmed-attendees:${eventSlug}`);
+  if (cachedList) {
+    const match = cachedList.find(
+      (a) =>
+        a.registrationId.toUpperCase() === normalized ||
+        a.id.toUpperCase() === `${eventSlug.toUpperCase()}__${normalized}` ||
+        a.id.toUpperCase() === normalized
+    );
+    if (match) return match;
+  }
+
+  const db = getAdminDb();
+  if (!db) return null;
+
+  try {
+    // 2. Direct document ID lookup (1 Firestore read)
+    const docId = `${eventSlug}__${normalized}`;
+    const snap = await db.collection("confirmed_attendees").doc(docId).get();
+    if (snap.exists) {
+      const d = snap.data() || {};
+      const checkedInDays = Array.isArray(d.checkedInDays)
+        ? d.checkedInDays.map(Number).filter((n) => n >= 1 && n <= 4)
+        : d.checkedIn
+          ? [1]
+          : [];
+      return {
+        id: snap.id,
+        srNo: Number(d.srNo || 0),
+        eventSlug: String(d.eventSlug || eventSlug),
+        registrationId: String(d.registrationId || normalized),
+        fullName: String(d.fullName || ""),
+        email: String(d.email || ""),
+        phone: String(d.phone || ""),
+        college: String(d.college || ""),
+        department: String(d.department || ""),
+        yearOfStudy: String(d.yearOfStudy || ""),
+        track: String(d.track || ""),
+        experienceLevel: String(d.experienceLevel || ""),
+        portfolioUrl: d.portfolioUrl ? String(d.portfolioUrl) : undefined,
+        confirmationSource: String(d.confirmationSource || ""),
+        registrationSource: String(d.registrationSource || ""),
+        confirmationDate: String(d.confirmationDate || ""),
+        notes: d.notes ? String(d.notes) : undefined,
+        status: (d.status === "cancelled" ? "cancelled" : "confirmed") as "confirmed" | "cancelled",
+        checkedIn: Boolean(d.checkedIn) || checkedInDays.length > 0,
+        checkedInAt: d.checkedInAt ? String(d.checkedInAt) : undefined,
+        checkedInDays,
+        checkIns: (d.checkIns as Record<number, string>) || undefined,
+        createdAt: String(d.createdAt || ""),
+      };
+    }
+
+    // 3. Fallback: query by registrationId field if docId casing differed (1 Firestore read)
+    const qSnap = await db
+      .collection("confirmed_attendees")
+      .where("eventSlug", "==", eventSlug)
+      .where("registrationId", "==", normalized)
+      .limit(1)
+      .get();
+
+    if (!qSnap.empty) {
+      const doc = qSnap.docs[0];
+      const d = doc.data();
+      const checkedInDays = Array.isArray(d.checkedInDays)
+        ? d.checkedInDays.map(Number).filter((n) => n >= 1 && n <= 4)
+        : d.checkedIn
+          ? [1]
+          : [];
+      return {
+        id: doc.id,
+        srNo: Number(d.srNo || 0),
+        eventSlug: String(d.eventSlug || eventSlug),
+        registrationId: String(d.registrationId || normalized),
+        fullName: String(d.fullName || ""),
+        email: String(d.email || ""),
+        phone: String(d.phone || ""),
+        college: String(d.college || ""),
+        department: String(d.department || ""),
+        yearOfStudy: String(d.yearOfStudy || ""),
+        track: String(d.track || ""),
+        experienceLevel: String(d.experienceLevel || ""),
+        portfolioUrl: d.portfolioUrl ? String(d.portfolioUrl) : undefined,
+        confirmationSource: String(d.confirmationSource || ""),
+        registrationSource: String(d.registrationSource || ""),
+        confirmationDate: String(d.confirmationDate || ""),
+        notes: d.notes ? String(d.notes) : undefined,
+        status: (d.status === "cancelled" ? "cancelled" : "confirmed") as "confirmed" | "cancelled",
+        checkedIn: Boolean(d.checkedIn) || checkedInDays.length > 0,
+        checkedInAt: d.checkedInAt ? String(d.checkedInAt) : undefined,
+        checkedInDays,
+        checkIns: (d.checkIns as Record<number, string>) || undefined,
+        createdAt: String(d.createdAt || ""),
+      };
+    }
+
+    return null;
+  } catch (err) {
+    console.warn("Firestore getConfirmedAttendeeByRef failed:", (err as Error).message);
     return null;
   }
 }
@@ -2192,10 +2348,59 @@ export async function checkInFirestoreConfirmedAttendee(
     { merge: true }
   );
 
-  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
-  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
-  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
-  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+  const updatedAttendee: ConfirmedAttendeeRecord = {
+    id: snap.id,
+    srNo: Number(d.srNo || 0),
+    eventSlug: String(d.eventSlug || eventSlug),
+    registrationId: String(d.registrationId || registrationId),
+    fullName: String(d.fullName || ""),
+    email: String(d.email || ""),
+    phone: String(d.phone || ""),
+    college: String(d.college || ""),
+    department: String(d.department || ""),
+    yearOfStudy: String(d.yearOfStudy || ""),
+    track: String(d.track || ""),
+    experienceLevel: String(d.experienceLevel || ""),
+    portfolioUrl: d.portfolioUrl ? String(d.portfolioUrl) : undefined,
+    confirmationSource: String(d.confirmationSource || ""),
+    registrationSource: String(d.registrationSource || ""),
+    confirmationDate: String(d.confirmationDate || ""),
+    notes: d.notes ? String(d.notes) : undefined,
+    status: (d.status === "cancelled" ? "cancelled" : "confirmed") as "confirmed" | "cancelled",
+    checkedIn: true,
+    checkedInAt: d.checkedInAt || nowStr,
+    checkedInDays: nextDays,
+    checkIns: nextCheckIns,
+    createdAt: String(d.createdAt || ""),
+  };
+
+  updateCachedConfirmedAttendee(eventSlug, updatedAttendee);
+
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(`fs:confirmed-attendees:${eventSlug}`);
+  if (cachedList) {
+    await syncFirestoreConfirmedAttendeesMeta(eventSlug, cachedList);
+  } else {
+    const currentMeta = await getFirestoreConfirmedAttendeesMeta(eventSlug);
+    const wasAlreadyCheckedIn = existingDays.length > 0 || Boolean(d.checkedIn);
+    const nextCheckedInCount = wasAlreadyCheckedIn
+      ? (currentMeta?.checkedInCount ?? 1)
+      : (currentMeta?.checkedInCount ?? 0) + 1;
+    const nextDailyCounts = { ...(currentMeta?.dailyCheckedInCounts || { 1: 0, 2: 0, 3: 0, 4: 0 }) };
+    if (!existingDays.includes(day)) {
+      nextDailyCounts[day] = (nextDailyCounts[day] || 0) + 1;
+    }
+    const nextVersion = Date.now();
+    const meta: ConfirmedAttendeesMeta = {
+      version: nextVersion,
+      checkedInCount: nextCheckedInCount,
+      dailyCheckedInCounts: nextDailyCounts,
+      updatedAt: nowStr,
+    };
+    await db.collection("confirmed_attendees_meta").doc(eventSlug).set(meta, { merge: true });
+    setCached(`fs:confirmed-meta:${eventSlug}`, meta, 30_000);
+  }
+
+  return updatedAttendee;
 }
 
 export async function revokeCheckInFirestoreConfirmedAttendee(
@@ -2231,10 +2436,61 @@ export async function revokeCheckInFirestoreConfirmedAttendee(
     { merge: true }
   );
 
-  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
-  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
-  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
-  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+  const updatedAttendee: ConfirmedAttendeeRecord = {
+    id: snap.id,
+    srNo: Number(d.srNo || 0),
+    eventSlug: String(d.eventSlug || eventSlug),
+    registrationId: String(d.registrationId || registrationId),
+    fullName: String(d.fullName || ""),
+    email: String(d.email || ""),
+    phone: String(d.phone || ""),
+    college: String(d.college || ""),
+    department: String(d.department || ""),
+    yearOfStudy: String(d.yearOfStudy || ""),
+    track: String(d.track || ""),
+    experienceLevel: String(d.experienceLevel || ""),
+    portfolioUrl: d.portfolioUrl ? String(d.portfolioUrl) : undefined,
+    confirmationSource: String(d.confirmationSource || ""),
+    registrationSource: String(d.registrationSource || ""),
+    confirmationDate: String(d.confirmationDate || ""),
+    notes: d.notes ? String(d.notes) : undefined,
+    status: (d.status === "cancelled" ? "cancelled" : "confirmed") as "confirmed" | "cancelled",
+    checkedIn: nextDays.length > 0,
+    checkedInAt: nextDays.length > 0 ? d.checkedInAt || undefined : undefined,
+    checkedInDays: nextDays,
+    checkIns: nextCheckIns,
+    createdAt: String(d.createdAt || ""),
+  };
+
+  updateCachedConfirmedAttendee(eventSlug, updatedAttendee);
+
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(`fs:confirmed-attendees:${eventSlug}`);
+  if (cachedList) {
+    await syncFirestoreConfirmedAttendeesMeta(eventSlug, cachedList);
+  } else {
+    const currentMeta = await getFirestoreConfirmedAttendeesMeta(eventSlug);
+    const wasCheckedInBefore = existingDays.length > 0 || Boolean(d.checkedIn);
+    const isCheckedInNow = nextDays.length > 0;
+    const nextCheckedInCount =
+      wasCheckedInBefore && !isCheckedInNow
+        ? Math.max(0, (currentMeta?.checkedInCount ?? 1) - 1)
+        : currentMeta?.checkedInCount ?? 0;
+    const nextDailyCounts = { ...(currentMeta?.dailyCheckedInCounts || { 1: 0, 2: 0, 3: 0, 4: 0 }) };
+    if (existingDays.includes(day)) {
+      nextDailyCounts[day] = Math.max(0, (nextDailyCounts[day] || 1) - 1);
+    }
+    const nextVersion = Date.now();
+    const meta: ConfirmedAttendeesMeta = {
+      version: nextVersion,
+      checkedInCount: nextCheckedInCount,
+      dailyCheckedInCounts: nextDailyCounts,
+      updatedAt: new Date().toISOString(),
+    };
+    await db.collection("confirmed_attendees_meta").doc(eventSlug).set(meta, { merge: true });
+    setCached(`fs:confirmed-meta:${eventSlug}`, meta, 30_000);
+  }
+
+  return updatedAttendee;
 }
 
 export async function updateFirestoreConfirmedAttendee(
@@ -2255,13 +2511,20 @@ export async function updateFirestoreConfirmedAttendee(
     Object.entries(updates).filter(([k, v]) => k !== "checkedInDays" && v !== undefined)
   );
 
+  let nextDays = Array.isArray(existing.checkedInDays)
+    ? existing.checkedInDays.map(Number).filter((n: number) => n >= 1 && n <= 4)
+    : existing.checkedIn
+      ? [1]
+      : [];
+  let nextCheckIns = (existing.checkIns as Record<number, string>) || {};
+
   if (Array.isArray(updates.checkedInDays)) {
-    const nextDays = Array.from(
+    nextDays = Array.from(
       new Set(updates.checkedInDays.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 4))
     ).sort((a, b) => a - b);
     const nowStr = new Date().toISOString();
     const prevCheckIns = (existing.checkIns as Record<number, string>) || {};
-    const nextCheckIns: Record<number, string> = {};
+    nextCheckIns = {};
     for (const d of nextDays) {
       nextCheckIns[d] = prevCheckIns[d] || nowStr;
     }
@@ -2273,10 +2536,64 @@ export async function updateFirestoreConfirmedAttendee(
 
   await ref.set(cleanUpdates, { merge: true });
 
-  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
-  const updatedList = await getFirestoreConfirmedAttendees(eventSlug);
-  await syncFirestoreConfirmedAttendeesMeta(eventSlug, updatedList ?? undefined);
-  return updatedList?.find((a) => a.registrationId === registrationId) || null;
+  const updatedAttendee: ConfirmedAttendeeRecord = {
+    id: snap.id,
+    srNo: Number(existing.srNo || 0),
+    eventSlug: String(existing.eventSlug || eventSlug),
+    registrationId: String(existing.registrationId || registrationId),
+    fullName: String(cleanUpdates.fullName ?? existing.fullName ?? ""),
+    email: String(cleanUpdates.email ?? existing.email ?? ""),
+    phone: String(cleanUpdates.phone ?? existing.phone ?? ""),
+    college: String(cleanUpdates.college ?? existing.college ?? ""),
+    department: String(cleanUpdates.department ?? existing.department ?? ""),
+    yearOfStudy: String(cleanUpdates.yearOfStudy ?? existing.yearOfStudy ?? ""),
+    track: String(cleanUpdates.track ?? existing.track ?? ""),
+    experienceLevel: String(cleanUpdates.experienceLevel ?? existing.experienceLevel ?? ""),
+    portfolioUrl:
+      cleanUpdates.portfolioUrl !== undefined
+        ? cleanUpdates.portfolioUrl
+          ? String(cleanUpdates.portfolioUrl)
+          : undefined
+        : existing.portfolioUrl
+          ? String(existing.portfolioUrl)
+          : undefined,
+    confirmationSource: String(existing.confirmationSource || ""),
+    registrationSource: String(existing.registrationSource || ""),
+    confirmationDate: String(existing.confirmationDate || ""),
+    notes:
+      cleanUpdates.notes !== undefined
+        ? cleanUpdates.notes
+          ? String(cleanUpdates.notes)
+          : undefined
+        : existing.notes
+          ? String(existing.notes)
+          : undefined,
+    status: (cleanUpdates.status ?? existing.status ?? "confirmed") as "confirmed" | "cancelled",
+    checkedIn:
+      cleanUpdates.checkedIn !== undefined
+        ? Boolean(cleanUpdates.checkedIn)
+        : Boolean(existing.checkedIn),
+    checkedInAt:
+      cleanUpdates.checkedInAt !== undefined
+        ? cleanUpdates.checkedInAt
+          ? String(cleanUpdates.checkedInAt)
+          : undefined
+        : existing.checkedInAt
+          ? String(existing.checkedInAt)
+          : undefined,
+    checkedInDays: nextDays,
+    checkIns: nextCheckIns,
+    createdAt: String(existing.createdAt || ""),
+  };
+
+  updateCachedConfirmedAttendee(eventSlug, updatedAttendee);
+
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(`fs:confirmed-attendees:${eventSlug}`);
+  if (cachedList) {
+    await syncFirestoreConfirmedAttendeesMeta(eventSlug, cachedList);
+  }
+
+  return updatedAttendee;
 }
 
 export async function deleteFirestoreConfirmedAttendee(
@@ -2292,8 +2609,12 @@ export async function deleteFirestoreConfirmedAttendee(
   if (!snap.exists) return false;
 
   await ref.delete();
-  invalidateCache(`fs:confirmed-attendees:${eventSlug}`);
-  await syncFirestoreConfirmedAttendeesMeta(eventSlug);
+  removeCachedConfirmedAttendee(eventSlug, registrationId);
+
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(`fs:confirmed-attendees:${eventSlug}`);
+  if (cachedList) {
+    await syncFirestoreConfirmedAttendeesMeta(eventSlug, cachedList);
+  }
   return true;
 }
 
