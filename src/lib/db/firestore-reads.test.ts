@@ -12,6 +12,7 @@ vi.mock("@/lib/firebase/admin", () => ({
 import {
   cancelFirestoreRegistration,
   checkInFirestoreConfirmedAttendee,
+  createFirestoreConfirmedAttendee,
   createFirestoreRegistration,
   getFirestoreConfirmedAttendeeByRef,
   getFirestoreConfirmedAttendees,
@@ -640,5 +641,50 @@ describe("Firestore Read Reduction & Shared Caching", () => {
     expect(metaDocSetSpy).toHaveBeenCalledTimes(1);
     // Crucial: no full collection scan performed!
     expect(fullScanSpy).not.toHaveBeenCalled();
+  });
+
+  it("creates a new confirmed attendee with single doc write and updates meta doc", async () => {
+    const attendeeDocSetSpy = vi.fn().mockResolvedValue({});
+    const metaDocSetSpy = vi.fn().mockResolvedValue({});
+    const fullScanSpy = vi.fn().mockResolvedValue({ docs: [] });
+
+    mockGetAdminDb.mockReturnValue({
+      collection: (name: string) => {
+        if (name === "confirmed_attendees") {
+          return {
+            doc: () => ({
+              set: attendeeDocSetSpy,
+            }),
+            where: () => ({ get: fullScanSpy }),
+          };
+        }
+        if (name === "confirmed_attendees_meta") {
+          return {
+            doc: () => ({
+              set: metaDocSetSpy,
+            }),
+          };
+        }
+        throw new Error(`Unexpected collection: ${name}`);
+      },
+    });
+
+    const result = await createFirestoreConfirmedAttendee("dev-to-cloud", {
+      fullName: "Walk-in Participant",
+      email: "walkin@example.com",
+      phone: "+91 9999999999",
+      department: "IT",
+      yearOfStudy: "TE",
+      checkedIn: true,
+      srNo: 127,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.registrationId).toBe("G-2026-ZTH-127");
+    expect(result?.fullName).toBe("Walk-in Participant");
+    expect(result?.checkedIn).toBe(true);
+    expect(result?.checkedInDays).toEqual([1]);
+    expect(attendeeDocSetSpy).toHaveBeenCalledTimes(1);
+    expect(metaDocSetSpy).toHaveBeenCalledTimes(1);
   });
 });

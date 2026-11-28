@@ -2086,7 +2086,10 @@ function updateCachedConfirmedAttendee(
 ): void {
   const cacheKey = `fs:confirmed-attendees:${eventSlug}`;
   const list = getCached<ConfirmedAttendeeRecord[]>(cacheKey);
-  if (!list) return;
+  if (!list) {
+    setCached(cacheKey, [attendee], 60_000);
+    return;
+  }
   const index = list.findIndex(
     (a) => a.registrationId === attendee.registrationId || a.id === attendee.id
   );
@@ -2617,4 +2620,101 @@ export async function deleteFirestoreConfirmedAttendee(
   }
   return true;
 }
+
+export interface CreateConfirmedAttendeeInput {
+  fullName: string;
+  email: string;
+  phone?: string;
+  college?: string;
+  department?: string;
+  yearOfStudy?: string;
+  track?: string;
+  experienceLevel?: string;
+  portfolioUrl?: string;
+  confirmationSource?: string;
+  registrationSource?: string;
+  notes?: string;
+  checkedInDays?: number[];
+  checkedIn?: boolean;
+  registrationId?: string;
+  srNo?: number;
+}
+
+export async function createFirestoreConfirmedAttendee(
+  eventSlug: string,
+  input: CreateConfirmedAttendeeInput
+): Promise<ConfirmedAttendeeRecord | null> {
+  const db = getAdminDb();
+  if (!db) return null;
+
+  const cacheKey = `fs:confirmed-attendees:${eventSlug}`;
+  let list = getCached<ConfirmedAttendeeRecord[]>(cacheKey);
+  if (!list) {
+    list = (await getFirestoreConfirmedAttendees(eventSlug)) || [];
+  }
+
+  const maxSrNo = list.reduce((m, a) => Math.max(m, a.srNo || 0), 0);
+  const nextSrNo = input.srNo || (maxSrNo > 0 ? maxSrNo + 1 : 127);
+
+  const registrationId =
+    (input.registrationId || "").trim().toUpperCase() ||
+    (eventSlug === "dev-to-cloud"
+      ? `G-2026-ZTH-${String(nextSrNo).padStart(3, "0")}`
+      : `ATT-${String(nextSrNo).padStart(3, "0")}`);
+
+  const docId = `${eventSlug}__${registrationId}`;
+
+  const checkedInDays = Array.isArray(input.checkedInDays)
+    ? Array.from(
+        new Set(input.checkedInDays.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 4))
+      ).sort((a, b) => a - b)
+    : input.checkedIn
+      ? [1]
+      : [];
+
+  const nowIso = new Date().toISOString();
+  const checkIns: Record<number, string> = {};
+  for (const d of checkedInDays) {
+    checkIns[d] = nowIso;
+  }
+
+  const attendee: ConfirmedAttendeeRecord = {
+    id: docId,
+    srNo: nextSrNo,
+    eventSlug,
+    registrationId,
+    fullName: input.fullName.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: (input.phone || "").trim(),
+    college: (input.college || "Vidyavardhini's College of Engineering and Technology").trim(),
+    department: (input.department || "").trim(),
+    yearOfStudy: (input.yearOfStudy || "").trim(),
+    track: (input.track || "4-Day All-Access").trim(),
+    experienceLevel: (input.experienceLevel || "Beginner").trim(),
+    portfolioUrl: input.portfolioUrl?.trim() || undefined,
+    confirmationSource: (input.confirmationSource || "Walk-in Desk").trim(),
+    registrationSource: (input.registrationSource || "Desk Registration").trim(),
+    confirmationDate: nowIso.split("T")[0],
+    notes: input.notes?.trim() || undefined,
+    status: "confirmed",
+    checkedIn: checkedInDays.length > 0,
+    checkedInAt: checkedInDays.length > 0 ? nowIso : undefined,
+    checkedInDays,
+    checkIns: Object.keys(checkIns).length > 0 ? checkIns : undefined,
+    createdAt: nowIso,
+  };
+
+  const cleanPayload = Object.fromEntries(
+    Object.entries(attendee).filter(([, v]) => v !== undefined)
+  );
+
+  await db.collection("confirmed_attendees").doc(docId).set(cleanPayload);
+  updateCachedConfirmedAttendee(eventSlug, attendee);
+
+  const cachedList = getCached<ConfirmedAttendeeRecord[]>(cacheKey) || [attendee];
+  await syncFirestoreConfirmedAttendeesMeta(eventSlug, cachedList);
+
+  return attendee;
+}
+
 

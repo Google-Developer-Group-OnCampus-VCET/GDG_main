@@ -56,6 +56,8 @@ import {
   getFirestoreConfirmedAttendeeByRef,
   syncFirestoreConfirmedAttendeesMeta,
   type ConfirmedAttendeesMeta,
+  type CreateConfirmedAttendeeInput,
+  createFirestoreConfirmedAttendee,
   upsertFirestoreConfirmedAttendees,
   checkInFirestoreConfirmedAttendee,
   revokeCheckInFirestoreConfirmedAttendee,
@@ -70,8 +72,9 @@ export {
   getFirestoreConfirmedAttendeesMeta,
   getFirestoreConfirmedAttendeeByRef,
   syncFirestoreConfirmedAttendeesMeta,
+  createFirestoreConfirmedAttendee,
 };
-export type { PaginatedRegistrationsResult, ConfirmedAttendeesMeta };
+export type { PaginatedRegistrationsResult, ConfirmedAttendeesMeta, CreateConfirmedAttendeeInput };
 
 export function resolveWritableDbPath(): string {
   const isReadOnlyServerless =
@@ -2357,8 +2360,9 @@ export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]
     INSERT INTO confirmed_attendees (
       id, sr_no, event_slug, registration_id, full_name, email, phone,
       college, department, year_of_study, track, experience_level, portfolio_url,
-      confirmation_source, registration_source, confirmation_date, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      confirmation_source, registration_source, confirmation_date, notes, created_at,
+      status, checked_in, checked_in_at, checked_in_days, check_ins
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       sr_no = excluded.sr_no,
       event_slug = excluded.event_slug,
@@ -2375,9 +2379,15 @@ export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]
       confirmation_source = excluded.confirmation_source,
       registration_source = excluded.registration_source,
       confirmation_date = excluded.confirmation_date,
-      notes = excluded.notes
+      notes = excluded.notes,
+      status = excluded.status,
+      checked_in = excluded.checked_in,
+      checked_in_at = excluded.checked_in_at,
+      checked_in_days = excluded.checked_in_days,
+      check_ins = excluded.check_ins
   `);
   for (const r of records) {
+    const checkedInDays = r.checkedInDays || (r.checkedIn ? [1] : []);
     stmt.run(
       r.id,
       r.srNo,
@@ -2396,7 +2406,12 @@ export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]
       r.registrationSource,
       r.confirmationDate,
       r.notes ?? null,
-      r.createdAt
+      r.createdAt,
+      r.status || "confirmed",
+      r.checkedIn || checkedInDays.length > 0 ? 1 : 0,
+      r.checkedInAt ?? null,
+      checkedInDays.length > 0 ? JSON.stringify(checkedInDays) : null,
+      r.checkIns ? JSON.stringify(r.checkIns) : null
     );
   }
 }
@@ -2661,6 +2676,85 @@ export async function deleteConfirmedAttendeeAsync(
     console.warn("Firestore deleteConfirmedAttendee failed:", (err as Error).message);
     return true;
   }
+}
+
+export async function createConfirmedAttendeeAsync(
+  eventSlug: string,
+  input: CreateConfirmedAttendeeInput
+): Promise<ConfirmedAttendeeRecord> {
+  let srNo = input.srNo;
+  let registrationId = input.registrationId?.trim().toUpperCase();
+
+  if (!srNo || !registrationId) {
+    const localList = getLocalConfirmedAttendees(eventSlug);
+    const maxSrNo = localList.reduce((m, a) => Math.max(m, a.srNo || 0), 0);
+    srNo = srNo || (maxSrNo > 0 ? maxSrNo + 1 : 127);
+    if (!registrationId) {
+      registrationId =
+        eventSlug === "dev-to-cloud"
+          ? `G-2026-ZTH-${String(srNo).padStart(3, "0")}`
+          : `ATT-${String(srNo).padStart(3, "0")}`;
+    }
+  }
+
+  const checkedInDays = Array.isArray(input.checkedInDays)
+    ? Array.from(
+        new Set(input.checkedInDays.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 4))
+      ).sort((a, b) => a - b)
+    : input.checkedIn
+      ? [1]
+      : [];
+
+  const nowIso = new Date().toISOString();
+  const checkIns: Record<number, string> = {};
+  for (const d of checkedInDays) {
+    checkIns[d] = nowIso;
+  }
+
+  const attendee: ConfirmedAttendeeRecord = {
+    id: `${eventSlug}__${registrationId}`,
+    srNo,
+    eventSlug,
+    registrationId,
+    fullName: input.fullName.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: (input.phone || "").trim(),
+    college: (input.college || "Vidyavardhini's College of Engineering and Technology").trim(),
+    department: (input.department || "").trim(),
+    yearOfStudy: (input.yearOfStudy || "").trim(),
+    track: (input.track || "4-Day All-Access").trim(),
+    experienceLevel: (input.experienceLevel || "Beginner").trim(),
+    portfolioUrl: input.portfolioUrl?.trim() || undefined,
+    confirmationSource: (input.confirmationSource || "Walk-in Desk").trim(),
+    registrationSource: (input.registrationSource || "Desk Registration").trim(),
+    confirmationDate: nowIso.split("T")[0],
+    notes: input.notes?.trim() || undefined,
+    status: "confirmed",
+    checkedIn: checkedInDays.length > 0,
+    checkedInAt: checkedInDays.length > 0 ? nowIso : undefined,
+    checkedInDays,
+    checkIns: Object.keys(checkIns).length > 0 ? checkIns : undefined,
+    createdAt: nowIso,
+  };
+
+  try {
+    upsertLocalConfirmedAttendees([attendee]);
+  } catch (err) {
+    console.warn("SQLite upsertLocalConfirmedAttendees failed:", (err as Error).message);
+  }
+
+  try {
+    const fsAttendee = await createFirestoreConfirmedAttendee(eventSlug, {
+      ...input,
+      srNo,
+      registrationId,
+    });
+    if (fsAttendee) return fsAttendee;
+  } catch (err) {
+    console.warn("Firestore createFirestoreConfirmedAttendee failed:", (err as Error).message);
+  }
+
+  return attendee;
 }
 
 export function confirmedAttendeeToRegistrationRecord(

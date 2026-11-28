@@ -53,6 +53,21 @@ export function ConfirmedAttendeesTable({
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [editingAttendee, setEditingAttendee] = useState<ConfirmedAttendeeRecord | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
+  const [addForm, setAddForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    college: "Vidyavardhini's College of Engineering and Technology",
+    department: "",
+    yearOfStudy: "",
+    track: "4-Day All-Access",
+    confirmationSource: "Walk-in Desk",
+    notes: "",
+    checkedInDay1: false,
+    customRegistrationId: "",
+  });
   const [editForm, setEditForm] = useState({
     fullName: "",
     email: "",
@@ -426,6 +441,68 @@ export function ConfirmedAttendeesTable({
     }
   }
 
+  async function handleAddParticipant(e: React.FormEvent) {
+    e.preventDefault();
+    if (!addForm.fullName.trim()) {
+      showFeedback("Please enter the participant's full name.");
+      return;
+    }
+    if (!addForm.email.trim() || !addForm.email.includes("@")) {
+      showFeedback("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSubmittingAdd(true);
+    try {
+      const res = await fetch(`/api/events/${eventSlug}/confirmed-attendees`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: addForm.fullName.trim(),
+          email: addForm.email.trim().toLowerCase(),
+          phone: addForm.phone.trim(),
+          college: addForm.college.trim(),
+          department: addForm.department.trim(),
+          yearOfStudy: addForm.yearOfStudy.trim(),
+          track: addForm.track.trim(),
+          confirmationSource: addForm.confirmationSource.trim() || "Walk-in Desk",
+          notes: addForm.notes.trim() || undefined,
+          registrationId: addForm.customRegistrationId.trim() || undefined,
+          checkedIn: addForm.checkedInDay1,
+          checkedInDays: addForm.checkedInDay1 ? [1] : [],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.attendee) {
+        setAttendees((prev) => [data.attendee, ...prev]);
+        notifySync();
+        showFeedback(
+          `Added participant ${data.attendee.fullName} (${data.attendee.registrationId})!`
+        );
+        setIsAddModalOpen(false);
+        setAddForm({
+          fullName: "",
+          email: "",
+          phone: "",
+          college: "Vidyavardhini's College of Engineering and Technology",
+          department: "",
+          yearOfStudy: "",
+          track: "4-Day All-Access",
+          confirmationSource: "Walk-in Desk",
+          notes: "",
+          checkedInDay1: false,
+          customRegistrationId: "",
+        });
+      } else {
+        showFeedback(data.message || "Failed to add participant.");
+      }
+    } catch {
+      showFeedback("Network error while adding participant.");
+    } finally {
+      setIsSubmittingAdd(false);
+    }
+  }
+
   function handleExportCsv() {
     downloadForGoogleSheets(
       `gdg_vcet_${eventSlug}_confirmed_attendees_${new Date().toISOString().slice(0, 10)}`,
@@ -605,6 +682,25 @@ export function ConfirmedAttendeesTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-white hover:bg-primary/90 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>+ Add Participant</span>
+          </button>
           <button
             type="button"
             onClick={handleExportCsv}
@@ -1041,6 +1137,220 @@ export function ConfirmedAttendeesTable({
                   className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold cursor-pointer disabled:opacity-50"
                 >
                   Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Add Participant Modal */}
+      {isAddModalOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-border shadow-2xl max-w-lg w-full p-6 text-xs flex flex-col gap-4 my-8 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Add New Participant
+                </h3>
+                <p className="text-[11px] text-foreground-muted">
+                  For walk-in desk registrations, spot entries, or emergency roster additions.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-border hover:bg-surface-container flex items-center justify-center text-foreground-muted hover:text-foreground cursor-pointer text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddParticipant} className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">
+                    Full Name <span className="text-rose-500">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={addForm.fullName}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, fullName: e.target.value }))
+                    }
+                    placeholder="e.g. Rahul Sharma"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">
+                    Email Address <span className="text-rose-500">*</span>
+                  </span>
+                  <input
+                    type="email"
+                    required
+                    value={addForm.email}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, email: e.target.value }))
+                    }
+                    placeholder="rahul@example.com"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">Phone Number</span>
+                  <input
+                    type="text"
+                    value={addForm.phone}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, phone: e.target.value }))
+                    }
+                    placeholder="+91 98765 43210"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">
+                    Custom ID <span className="font-normal text-foreground-muted">(Optional)</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={addForm.customRegistrationId}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, customRegistrationId: e.target.value }))
+                    }
+                    placeholder="Auto: G-2026-ZTH-xxx"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="font-semibold text-foreground">College / Institution</span>
+                <input
+                  type="text"
+                  value={addForm.college}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, college: e.target.value }))
+                  }
+                  className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">Department</span>
+                  <input
+                    type="text"
+                    value={addForm.department}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, department: e.target.value }))
+                    }
+                    placeholder="e.g. IT, Comps, AI&DS"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">Year of Study</span>
+                  <select
+                    value={addForm.yearOfStudy}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, yearOfStudy: e.target.value }))
+                    }
+                    className="px-3 py-2 rounded-xl border border-border bg-white focus:outline-none focus:border-primary text-foreground"
+                  >
+                    <option value="">Select Year</option>
+                    <option value="FE">First Year (FE)</option>
+                    <option value="SE">Second Year (SE)</option>
+                    <option value="TE">Third Year (TE)</option>
+                    <option value="BE">Final Year (BE)</option>
+                    <option value="Alumni">Alumni / Professional</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">Track</span>
+                  <input
+                    type="text"
+                    value={addForm.track}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, track: e.target.value }))
+                    }
+                    placeholder="4-Day All-Access"
+                    className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="font-semibold text-foreground">Entry Source</span>
+                  <select
+                    value={addForm.confirmationSource}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, confirmationSource: e.target.value }))
+                    }
+                    className="px-3 py-2 rounded-xl border border-border bg-white focus:outline-none focus:border-primary text-foreground"
+                  >
+                    <option value="Walk-in Desk">Walk-in Desk</option>
+                    <option value="Spot Entry">Spot Entry</option>
+                    <option value="Faculty / VIP">Faculty / VIP</option>
+                    <option value="Sponsor Guest">Sponsor Guest</option>
+                    <option value="Manual Addition">Manual Addition</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="font-semibold text-foreground">Notes / Remarks</span>
+                <textarea
+                  rows={2}
+                  value={addForm.notes}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                  placeholder="Optional desk notes or reason for manual addition..."
+                  className="px-3 py-2 rounded-xl border border-border focus:outline-none focus:border-primary text-foreground resize-none"
+                />
+              </label>
+
+              {/* Day 1 Immediate Check-in toggle */}
+              <div className="mt-1 p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="font-semibold text-emerald-950">
+                    Check In for Day 1 immediately
+                  </span>
+                  <span className="text-[11px] text-emerald-700">
+                    Mark participant as attended right now at the registration desk.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={addForm.checkedInDay1}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, checkedInDay1: e.target.checked }))
+                  }
+                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 mt-3 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-border text-xs font-semibold hover:bg-surface-container cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAdd}
+                  className="px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 cursor-pointer disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+                >
+                  {isSubmittingAdd ? "Adding..." : "+ Confirm & Add"}
                 </button>
               </div>
             </form>
