@@ -73,6 +73,11 @@ export function EventCard({
           </Link>
         </h3>
         <p className="text-sm text-foreground-muted">{formatEventDateRange(event)}</p>
+        {event.workshop ? (
+          <p className="text-xs font-semibold text-emerald-700">
+            Daily 10:00 AM – 2:00 PM · Registrations start at 9:30 AM
+          </p>
+        ) : null}
         {event.location ? <p className="text-sm text-foreground-muted">{event.location}</p> : null}
       </div>
 

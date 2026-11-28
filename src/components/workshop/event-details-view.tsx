@@ -85,19 +85,39 @@ export function EventDetailsView({ event, workshop, stats }: EventDetailsViewPro
               </p>
             </div>
 
+            {/* High-Visibility Date & Daily Timing Strip */}
+            <div className="flex flex-wrap items-center gap-3.5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 text-xs sm:text-sm shadow-2xs">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[22px]">schedule</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 flex-1 min-w-[220px]">
+                <span className="font-bold text-amber-900 text-sm">
+                  Dec 1–4, 2026 · Daily 10:00 AM – 02:00 PM
+                </span>
+                <span className="hidden sm:inline text-amber-600 font-bold">•</span>
+                <span className="inline-flex items-center gap-1.5 text-emerald-800 font-semibold bg-emerald-100/80 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
+                  Registrations &amp; Check-in Desk open at 09:30 AM
+                </span>
+              </div>
+              <div className="text-[11px] font-semibold text-amber-800/90 bg-amber-100/80 px-3 py-1 rounded-full shrink-0">
+                {workshop.venueText}
+              </div>
+            </div>
+
             {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
               <div className="bg-surface-container-lowest p-4 rounded-xl border border-border flex items-center gap-3 shadow-xs">
                 <div className="w-11 h-11 rounded-xl bg-primary-fixed flex items-center justify-center text-primary shrink-0">
                   <span className="material-symbols-outlined text-[24px]">calendar_month</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-lg font-bold text-foreground">
-                    {workshop.agenda && workshop.agenda.length > 0
-                      ? `${new Set(workshop.agenda.map((a) => a.day)).size} Days`
-                      : "4 Days"}
+                  <span className="text-base sm:text-lg font-bold text-foreground">
+                    10:00 AM – 2:00 PM
                   </span>
-                  <span className="text-xs text-foreground-muted">Hands-on Workshop</span>
+                  <span className="text-xs text-emerald-700 font-semibold">
+                    Registrations: 9:30 AM
+                  </span>
                 </div>
               </div>
               <div className="bg-surface-container-lowest p-4 rounded-xl border border-border flex items-center gap-3 shadow-xs">

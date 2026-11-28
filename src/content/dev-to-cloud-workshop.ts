@@ -4,10 +4,10 @@ export const devToCloudWorkshopData: WorkshopDetails = {
   headline: "Zero to Hero: Dev to Cloud",
   subheading:
     "A four-day intensive, hands-on workshop series organized by Google Developer Groups on Campus VCET. Take your application from local code to a smart, containerized, serverless AI agent deployed on Google Cloud.",
-  datesText: "Dec 1–4, 2026",
+  datesText: "Dec 1–4, 2026 · Daily 10:00 AM – 02:00 PM (Registrations start at 9:30 AM)",
   venueText: "VCET Seminar Hall & Computer Labs, Vasai",
   seatsText: "Limited Seats Available",
-  badgeText: "GDG VCET Flagship Hands-on Series · Dec 1–4, 2026",
+  badgeText: "GDG VCET Flagship Hands-on Series · Dec 1–4, 2026 · Daily 10:00 AM – 02:00 PM (Registrations at 9:30 AM)",
   capacity: 135,
   initialRegisteredCount: 0,
   showSponsors: false,
@@ -190,6 +190,18 @@ export const devToCloudWorkshopData: WorkshopDetails = {
   agenda: [
     // DAY 1
     {
+      id: "d1-s0",
+      day: 1,
+      time: "09:30 AM – 10:00 AM",
+      title: "Attendee Check-in, Badge Collection & Desk Registrations",
+      description:
+        "Registrations start promptly at 9:30 AM. In-person entry verification, badge and developer kit collection, WiFi configuration, and walk-in help desk.",
+      track: "break",
+      trackLabel: "Registrations & Check-in",
+      location: "Seminar Hall Foyer & Registration Desk",
+      tags: ["Registrations at 9:30 AM", "Check-in", "Badge Pickup", "30 min"],
+    },
+    {
       id: "d1-s1",
       day: 1,
       time: "10:00 AM – 10:45 AM",
@@ -258,6 +270,18 @@ export const devToCloudWorkshopData: WorkshopDetails = {
     },
 
     // DAY 2
+    {
+      id: "d2-s0",
+      day: 2,
+      time: "09:30 AM – 10:00 AM",
+      title: "Day 2 Morning Check-in & Lab Workstation Setup",
+      description:
+        "Check-in desk opens at 9:30 AM. Fast attendance scan, lab machine login, and starter branch readiness with student mentors.",
+      track: "break",
+      trackLabel: "Check-in & Lab Setup",
+      location: "Registration Desk & Computer Labs",
+      tags: ["Desk Opens 9:30 AM", "Attendance Scan", "Lab Setup", "30 min"],
+    },
     {
       id: "d2-s1",
       day: 2,
@@ -328,6 +352,18 @@ export const devToCloudWorkshopData: WorkshopDetails = {
 
     // DAY 3
     {
+      id: "d3-s0",
+      day: 3,
+      time: "09:30 AM – 10:00 AM",
+      title: "Day 3 Morning Check-in & Cloud Shell Access Setup",
+      description:
+        "Check-in desk opens at 9:30 AM. Attendance scanning, Google Cloud sandboxed project access, and environment verification.",
+      track: "break",
+      trackLabel: "Check-in & Cloud Setup",
+      location: "Registration Desk & Computer Labs",
+      tags: ["Desk Opens 9:30 AM", "Cloud Setup", "30 min"],
+    },
+    {
       id: "d3-s1",
       day: 3,
       time: "10:00 AM – 10:45 AM",
@@ -396,6 +432,18 @@ export const devToCloudWorkshopData: WorkshopDetails = {
     },
 
     // DAY 4
+    {
+      id: "d4-s0",
+      day: 4,
+      time: "09:30 AM – 10:00 AM",
+      title: "Day 4 Final Day Check-in & Showcase Deployment Sync",
+      description:
+        "Check-in desk opens at 9:30 AM. Attendance scanning, project demo submission checks, and presentation staging.",
+      track: "break",
+      trackLabel: "Check-in & Demo Sync",
+      location: "Seminar Hall & Registration Desk",
+      tags: ["Desk Opens 9:30 AM", "Demo Staging", "30 min"],
+    },
     {
       id: "d4-s1",
       day: 4,

@@ -79,6 +79,8 @@ export function EventAgendaView({ event, workshop, stats }: EventAgendaViewProps
         "Google Developer Groups on Campus VCET",
         `Dates: ${workshop.datesText}`,
         `Venue: ${workshop.venueText}`,
+        "Daily Workshop Timing: 10:00 AM – 02:00 PM",
+        "Registrations & Check-in Desk: Opens at 09:30 AM",
         "",
         "Day 1: Build the Foundation",
         "Day 2: Make It Smart",
@@ -202,6 +204,26 @@ export function EventAgendaView({ event, workshop, stats }: EventAgendaViewProps
             </div>
           </div>
 
+          {/* Daily Timing & Registration Callout Banner */}
+          <div className="flex flex-wrap items-center gap-3.5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 text-xs sm:text-sm shadow-2xs mb-6">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[22px]">schedule</span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 flex-1 min-w-[220px]">
+              <span className="font-bold text-amber-900 text-sm">
+                Daily Timing: 10:00 AM – 02:00 PM
+              </span>
+              <span className="hidden sm:inline text-amber-600 font-bold">•</span>
+              <span className="inline-flex items-center gap-1.5 text-emerald-800 font-semibold bg-emerald-100/80 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block animate-pulse"></span>
+                Registrations &amp; Check-in Desk open at 09:30 AM
+              </span>
+            </div>
+            <div className="text-[11px] font-semibold text-amber-800/90 bg-amber-100/80 px-3 py-1 rounded-full shrink-0">
+              {workshop.venueText}
+            </div>
+          </div>
+
           {/* Controls Bar: Day Tabs & Bookmarked counter */}
           <div className="bg-surface-container-low rounded-2xl p-3 sm:p-5 border border-border flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
             <div className="flex p-1 bg-surface-container rounded-2xl sm:rounded-full gap-1 border border-border/50 overflow-x-auto no-scrollbar max-w-full">
@@ -251,7 +273,7 @@ export function EventAgendaView({ event, workshop, stats }: EventAgendaViewProps
               { id: "tech", label: "Technical & Architecture" },
               { id: "lab", label: "Hands-on Lab" },
               { id: "keynote", label: "Keynote & Discussion" },
-              { id: "break", label: "Break & Networking" },
+              { id: "break", label: "Check-in & Networking" },
             ].map((t) => (
               <button
                 key={t.id}
