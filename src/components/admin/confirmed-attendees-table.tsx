@@ -519,6 +519,20 @@ export function ConfirmedAttendeesTable({
     }
   }
 
+  function handleDownloadJsonBackup() {
+    const jsonStr = JSON.stringify(attendees, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gdg_vcet_${eventSlug}_roster_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showFeedback("Downloaded full attendee roster JSON backup.");
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Feedback Banner */}
@@ -714,6 +728,27 @@ export function ConfirmedAttendeesTable({
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-white hover:bg-surface-container text-foreground text-xs font-semibold transition-colors cursor-pointer"
           >
             <span>{copySuccess ? "✓ Copied TSV" : "Copy TSV"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadJsonBackup}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-sky-200 bg-sky-50/70 hover:bg-sky-100/70 text-sky-800 text-xs font-semibold transition-colors cursor-pointer"
+            title="Download full JSON backup of confirmed attendees roster"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span>Backup JSON</span>
           </button>
         </div>
       </div>

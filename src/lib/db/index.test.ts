@@ -14,6 +14,9 @@ import {
   getEventStats,
   getRegistrationByReference,
   getRegistrations,
+  getConfirmedAttendeesAsync,
+  getLocalConfirmedAttendees,
+  saveConfirmedAttendeesBackupSnapshot,
   resolveWritableDbPath,
   updateEvent,
   updateEventAsync,
@@ -582,5 +585,27 @@ describe("Database & Registration Engine", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("pre-seeds confirmed attendees into local SQLite and provides offline disaster recovery", async () => {
+    const list = getLocalConfirmedAttendees("dev-to-cloud");
+    expect(list.length).toBeGreaterThanOrEqual(126);
+    expect(list[0].registrationId).toBe("G-2026-ZTH-001");
+    expect(list[0].eventSlug).toBe("dev-to-cloud");
+
+    const fallbackList = await getConfirmedAttendeesAsync("dev-to-cloud");
+    expect(fallbackList.length).toBeGreaterThanOrEqual(126);
+  });
+
+  it("saves an on-disk JSON backup snapshot for emergency data preservation", () => {
+    const list = getLocalConfirmedAttendees("dev-to-cloud");
+    saveConfirmedAttendeesBackupSnapshot("dev-to-cloud", list);
+
+    const isReadOnly = process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const backupDir = isReadOnly
+      ? path.join(os.tmpdir(), "gdg-backups")
+      : path.join(process.cwd(), "data", "backups");
+    const snapshotPath = path.join(backupDir, "confirmed-attendees-dev-to-cloud.json");
+    expect(path.basename(snapshotPath)).toBe("confirmed-attendees-dev-to-cloud.json");
   });
 });

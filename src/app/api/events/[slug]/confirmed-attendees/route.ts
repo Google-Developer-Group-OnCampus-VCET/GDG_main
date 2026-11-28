@@ -24,6 +24,21 @@ export async function GET(
 
   const { slug } = await params;
   const url = new URL(request.url);
+
+  // Instant downloadable offline JSON backup endpoint (?backup=true)
+  if (url.searchParams.get("backup") === "true") {
+    const attendees = await getConfirmedAttendeesAsync(slug);
+    const dateStr = new Date().toISOString().split("T")[0];
+    return new NextResponse(JSON.stringify(attendees, null, 2), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": `attachment; filename="gdg_vcet_${slug}_attendees_backup_${dateStr}.json"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   const clientVersion = Number(url.searchParams.get("version") || 0);
 
   // 1-doc version check (cached 30s): avoids reading all 126 docs on idle polls

@@ -408,6 +408,18 @@ export function getDatabase(): DatabaseSync {
     }
   }
 
+  // Pre-seed local SQLite backup of Confirmed Attendees if empty
+  try {
+    const confirmedCount = _db
+      .prepare("SELECT count(*) as count FROM confirmed_attendees")
+      .get() as { count: number } | undefined;
+    if (!confirmedCount || confirmedCount.count === 0) {
+      upsertLocalConfirmedAttendees(DEFAULT_CONFIRMED_ATTENDEES);
+    }
+  } catch {
+    // Non-blocking initialization
+  }
+
   return _db;
 }
 
@@ -2353,6 +2365,26 @@ export async function getAuditLogsAsync(options?: {
   return getAuditRecords(options);
 }
 
+export function saveConfirmedAttendeesBackupSnapshot(
+  eventSlug: string,
+  records: ConfirmedAttendeeRecord[]
+): void {
+  try {
+    const isReadOnlyServerless =
+      process.env.VERCEL === "1" || Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const backupDir = isReadOnlyServerless
+      ? path.join(os.tmpdir(), "gdg-backups")
+      : path.join(process.cwd(), "data", "backups");
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    const filePath = path.join(backupDir, `confirmed-attendees-${eventSlug}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(records, null, 2), "utf8");
+  } catch {
+    // Non-blocking snapshot fallback
+  }
+}
+
 export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]): void {
   if (records.length === 0) return;
   const db = getDatabase();
@@ -2386,7 +2418,9 @@ export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]
       checked_in_days = excluded.checked_in_days,
       check_ins = excluded.check_ins
   `);
+  const slugs = new Set<string>();
   for (const r of records) {
+    slugs.add(r.eventSlug);
     const checkedInDays = r.checkedInDays || (r.checkedIn ? [1] : []);
     stmt.run(
       r.id,
@@ -2413,6 +2447,16 @@ export function upsertLocalConfirmedAttendees(records: ConfirmedAttendeeRecord[]
       checkedInDays.length > 0 ? JSON.stringify(checkedInDays) : null,
       r.checkIns ? JSON.stringify(r.checkIns) : null
     );
+  }
+
+  // Persist disk JSON backup snapshot for emergency recovery
+  for (const slug of slugs) {
+    try {
+      const allForSlug = getLocalConfirmedAttendees(slug);
+      saveConfirmedAttendeesBackupSnapshot(slug, allForSlug);
+    } catch {
+      // Non-blocking
+    }
   }
 }
 
@@ -2841,7 +2885,14 @@ export async function getConfirmedAttendeesAsync(
 ): Promise<ConfirmedAttendeeRecord[]> {
   try {
     const fsList = await getFirestoreConfirmedAttendees(eventSlug);
-    if (fsList && fsList.length > 0) return fsList;
+    if (fsList && fsList.length > 0) {
+      try {
+        upsertLocalConfirmedAttendees(fsList);
+      } catch {
+        // Non-blocking local backup
+      }
+      return fsList;
+    }
   } catch (err) {
     console.warn(
       "Firestore getConfirmedAttendees failed, falling back to local SQLite:",
@@ -2850,7 +2901,15 @@ export async function getConfirmedAttendeesAsync(
   }
   const local = getLocalConfirmedAttendees(eventSlug);
   if (local.length > 0) return local;
-  return DEFAULT_CONFIRMED_ATTENDEES.filter((a) => a.eventSlug === eventSlug);
+  const fallback = DEFAULT_CONFIRMED_ATTENDEES.filter((a) => a.eventSlug === eventSlug);
+  if (fallback.length > 0) {
+    try {
+      upsertLocalConfirmedAttendees(fallback);
+    } catch {
+      // Non-blocking
+    }
+  }
+  return fallback;
 }
 
 export async function upsertConfirmedAttendeesAsync(
